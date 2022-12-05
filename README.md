@@ -11,14 +11,14 @@ After development, designer-v2 will be uploaded to pip. Until then, here are ins
 - Note, designer still depends on FSL for topup and eddy, and mrtix3 for image-wise operations. Make note of the location where mrtrix3 binaries are installed before installing designer (in mac, it is often /usr/local/mrtrix3/bin).
 
 - Clone this repository into a local directory:
-`cd /my/path`
+`cd /my/path`\
 `git clone https://github.com/badesar1/designer_v2_dev.git`
 
-- Install python dependancies:
+- Install python dependancies:\
 `pip install -r designer_v2_dev/requirements.txt`
 
-- Set up environemnt, either run these commands directly in the terminal or in your ~/.bashrc file:
-`export PATH=/my/path/designer_v2_dev/bin:${PATH}`
+- Set up environemnt, either run these commands directly in the terminal or in your ~/.bashrc file:\
+`export PATH=/my/path/designer_v2_dev/bin:${PATH}`\
 `export PYTHONPATH=/path/to/mrtrix3/bin`
 
 ## Example usage for meso data
