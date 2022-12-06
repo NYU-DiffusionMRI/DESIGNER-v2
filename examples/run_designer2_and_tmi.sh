@@ -15,7 +15,7 @@ cd $datapath
 # -scratch designer2_processing_test -nocleanup \
 # $meso1,$meso2 designer2_test.mif
 
-python /cbi05data/data1/Hamster/Ben/designer2/bin/tmi \
+python /cbi05data/data1/Hamster/Ben/designer_v2_dev/bin/tmi \
 -DTIparams -DKIparams -WDKI -SMIparams \
 -mask designer2_processing_test/brain_mask.nii \
 -sigma designer2_processing_test/sigma.nii \

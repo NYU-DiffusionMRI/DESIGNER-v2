@@ -12,20 +12,13 @@ from designer_fit_wrappers import refit_or_smooth, save_params
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
     cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
-    cmdline.set_synopsis("""1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations 
+    cmdline.set_synopsis("""1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations \n 
  						
-                        2. denoise the complete dataset\n
-						
-                        3. gibbs ringing correction on complete dataset\n
- 						 						
-                        4. topup + eddy\n
- 						
-                        5. b0 normalization\n
- 						                        
-                        6. Rician bias correction\n
-                         						
-                        7. Fitting and or outlier correction\n
- 						
+                        2. Run fitting: Available options include DTI (TMI will look for b0 and b1000 images by default.\n
+                            DKI (constrained fitting is available using the -fit_constraints option).\n
+                            W-DKI (DKI parameters using the W definition instead of K).\n
+                            WMTI (using dipy implimentation from Rafael Henriques).\n
+                            SMI (From Santiago Coelho).\n
                         """)
 
     cmdline.add_citation('Veraart, J.; Novikov, D.S.; Christiaens, D.; Ades-aron, B.; Sijbers, J. & Fieremans, E. Denoising of diffusion MRI using random matrix theory. NeuroImage, 2016, 142, 394-406, doi: 10.1016/j.neuroimage.2016.08.016',is_external=True)
@@ -58,7 +51,7 @@ def usage(cmdline): #pylint: disable=unused-variable
 
 
 def execute(): #pylint: disable=unused-variable
-    from mrtrix3 import app, path, run #pylint: disable=no-name-in-module, import-outside-toplevel
+    from mrtrix3 import app, path, run, MRtrixError #pylint: disable=no-name-in-module, import-outside-toplevel
     import tensor
     import numpy as np
     from ants import image_read
@@ -101,7 +94,18 @@ def execute(): #pylint: disable=unused-variable
         mask = np.ones(dwi.shape[:-1])
     mask = mask.astype(bool)
 
+    if app.ARGS.fit_constraints:
+        constraints = app.ARGS.fit_constraints
+        if type(constraints) == str:
+                constraints = constraints.split(",")
+                constraints = [int(i) for i in constraints]
+        else:
+            raise MRtrixError("Constraints must be a 3 element comma separated string (i.e. 0,1,0)")
+    else:
+        constraints = [0,0,0]
+
     if app.ARGS.DTIparams and not app.ARGS.DKIparams:
+        print('...DTI fit...')
         dtishell = bval == 0 | (bval > .5 & bval < 1.5)
         dwi_dti = dwi[:,:,:,dtishell]
         bval_dti = bval[dtishell]
@@ -110,9 +114,10 @@ def execute(): #pylint: disable=unused-variable
         dti = tensor.TensorFitting(grad_dti)
         dt, s0, b = dti.dti_fit(dwi_dti, mask)
     elif app.ARGS.DKIparams:
+        print('...DKI fit with constraints = ' + str(constraints) + '...')
         grad = np.hstack((bvec.T, bval[None,...].T))
         dti = tensor.TensorFitting(grad)
-        dt, s0, b = dti.dki_fit(dwi, mask, constraints=[1,1,1])
+        dt, s0, b = dti.dki_fit(dwi, mask, constraints=constraints)
 
     if app.ARGS.akc_outliers:
         from mpunits import vectorize
@@ -122,6 +127,7 @@ def execute(): #pylint: disable=unused-variable
         mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
         dir = mat['dir']
 
+        print('...Outlier detection...')
         akc_mask = dti.outlierdetection(dt, mask, dir)
         akc_mask = vectorize(akc_mask, mask).astype(bool)
         print('N outliers = %s' % (np.sum(akc_mask)))
@@ -143,6 +149,7 @@ def execute(): #pylint: disable=unused-variable
         akc_mask = np.zeros_like(mask)
 
     if app.ARGS.fit_smoothing:
+        print('...Nonlocal smoothing...')
         dwi = refit_or_smooth(akc_mask, dwi, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
         if app.ARGS.DTIparams and not app.ARGS.DKIparams:
             dt_new,_,_ = dti.dti_fit(dwi_new, mask)
@@ -173,7 +180,7 @@ def execute(): #pylint: disable=unused-variable
         import dipy.reconst.dki_micro as dki_micro
         from dipy.core.gradients import gradient_table
 
-        print('...extracting WMTI parameters...')
+        print('...WMTI fit...')
         gtab = gradient_table(bval*1000, bvec)
         dki_micro_model = dki_micro.KurtosisMicrostructureModel(gtab)
         dki_micro_fit = dki_micro_model.fit(dwi, mask=mask)
@@ -195,10 +202,12 @@ def execute(): #pylint: disable=unused-variable
             if type(compartments) == str:
                 compartments = compartments.split(",")
                 compartments = [str(i) for i in compartments]
+            else:
+                raise MRtrixError(" Compartments must be a comma sepearated string (i.e. IAS,EAS)")
         else: 
             compartments = ['IAS', 'EAS']
 
-        print('...extracting SMI parameters...')
+        print('...SMI fit...')
         smi = SMI()
         smi.set_compartments(compartments)
         params_smi = smi.fit(dwi, bval=bval, bvec=bvec, mask=mask, sigma=sigma)
