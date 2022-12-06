@@ -112,7 +112,6 @@ class TensorFitting(object):
             if C is None:
                 dt = np.linalg.pinv(w @ b) @ (w @ np.log(dwi))
             else:
-                
                 x = cp.Variable((22,1))
                 A = w@b
                 B = w@np.log(dwi[...,None])
@@ -124,7 +123,6 @@ class TensorFitting(object):
                 # dt,_ = opt.nnls(w @ b, w @ np.log(dwi))
                 # res = opt.lsq_linear(w @ b, w @ np.log(dwi), (-5, 1), method='trf', tol=1e-12, max_iter=220000)
                 # dt = res.x
-                
         except:
             dt = np.zeros((22))
 
