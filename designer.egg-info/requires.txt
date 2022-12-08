@@ -1,9 +1,0 @@
-numpy>=1.23
-scipy>=1.8
-numpy_groupies>=0.9
-antspyx>=0.3
-scikit-image>=0.19
-dipy>=1.5
-tqdm>=4.64
-joblib>=1.1
-cvxpy>=1.2
