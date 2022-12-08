@@ -132,6 +132,10 @@ def execute(): #pylint: disable=unused-variable
     shutil.copyfile(path.to_scratch('dwi_designer.bvec',True), outfname + '.bvec')
     shutil.copyfile(path.to_scratch('dwi_designer.bval',True), outfname + '.bval')
 
-import mrtrix3
-mrtrix3.execute() #pylint: disable=no-member
+# import mrtrix3
+# mrtrix3.execute() #pylint: disable=no-member
+
+def main():
+    import mrtrix3
+    mrtrix3.execute() #pylint: disable=no-member
 

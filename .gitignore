@@ -1,2 +1,6 @@
 .DS_STORE
 __pycache__/
+build/
+dist/
+*.egg_info/
+mrtrix3.py

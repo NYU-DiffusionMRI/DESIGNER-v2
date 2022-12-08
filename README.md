@@ -15,11 +15,11 @@ After development, designer-v2 will be uploaded to pip. Until then, here are ins
 `git clone https://github.com/badesar1/designer_v2_dev.git`
 
 - Install python dependancies:\
-`pip install -r designer_v2_dev/requirements.txt`
+`python setup.py install`
 
 - Set up environemnt, either run these commands directly in the terminal or in your ~/.bashrc file:\
 `export PATH=/my/path/designer_v2_dev/bin:${PATH}`\
-`export PYTHONPATH=/path/to/mrtrix3/bin`
+`export PYTHONPATH=/path/to/mrtrix3/lib`
 
 ## Example usage for meso data
 An example script can be found in the examples folder. It is copied here as well. As you can see, preprocessing and fitting are now split into two separate functions: designer for preprocessing and tmi for fitting. 
