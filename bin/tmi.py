@@ -51,7 +51,7 @@ def usage(cmdline): #pylint: disable=unused-variable
 
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, path, run, MRtrixError #pylint: disable=no-name-in-module, import-outside-toplevel
-    import tensor
+    import lib.tensor as tensor
     import numpy as np
     from ants import image_read
 
@@ -119,7 +119,7 @@ def execute(): #pylint: disable=unused-variable
         dt, s0, b = dti.dki_fit(dwi, mask, constraints=constraints)
 
     if app.ARGS.akc_outliers:
-        from mpunits import vectorize
+        from lib.mpunits import vectorize
         import scipy.io as sio
 
         dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -193,7 +193,7 @@ def execute(): #pylint: disable=unused-variable
         save_params(params_wmti, nii, model='wmti', outdir=outdir)
 
     if app.ARGS.SMIparams:
-        from smi import SMI
+        from lib.smi import SMI
         sigma = image_read(path.from_user(app.ARGS.sigma)).numpy()
 
         if app.ARGS.SMIcompartments:

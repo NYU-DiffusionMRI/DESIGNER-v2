@@ -18,7 +18,7 @@ run_normalization:
 """
 
 def run_denoising(args_extent, args_phase, args_shrinkage, args_algorithm):
-    import mpcomplex as mp #pylint: disable=import-error
+    import lib.mpcomplex as mp #pylint: disable=import-error
     from mrtrix3 import run, app
     from ants import image_read, image_write, from_numpy
     import numpy as np
@@ -63,7 +63,7 @@ def run_denoising(args_extent, args_phase, args_shrinkage, args_algorithm):
     run.command('mrconvert -force dwidn.mif working.mif', show=False)
 
 def run_degibbs(pf, pe_dir):
-    import gibbs_removal_rpg as rpg
+    import lib.gibbs_removal_rpg as rpg
     from mrtrix3 import run
     from ants import image_read, image_write, from_numpy
 
