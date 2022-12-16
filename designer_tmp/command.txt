@@ -1,0 +1,1 @@
+/Users/coelhs01/Documents/SantiagoCoelho/Git/designer_v2_dev/bin/designer dwi_raw_TE1.nii.gz dwi_processed_TE1.nii.gz -nocleanup -scratch designer_tmp -denoise -phase dwi_raw_phase_TE1.nii.gz -degibbs -pf 1 -mask -eddy -rpe_pair PA.nii.gz -pe_dir AP

@@ -132,24 +132,30 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         if not all(x == pf[0] for x in pf):
             raise MRtrixError('input series have different partial fourier factors,', +
                             'series should be processed separately')
-        else:
-            pf = pf[0]
+        pf_bids = pf[0]
 
         if not all(x == pe_dir[0] for x in pe_dir):
             raise MRtrixError('input series have different phase encoding directions, series should be processed separately')
-        
         pe_dir_bids = pe_dir[0]
     except:
         print('no bids files identified')
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
         pe_dir_bids = None
-        pf = args_pf
+        pf_bids = None
     
     if pe_dir_bids and pe_dir_app != pe_dir_bids:
         raise MRtrixError('input phase encoding direction and phase encoding direction from bids file do not match')
+    elif pe_dir_bids:
+        pe_dir = pe_dir_bids
+    else:
+        pe_dir = pe_dir_app
 
-    if args_pf and float(args_pf) != pf:
+    if pf_bids and float(args_pf) != pf_bids:
         raise MRtrixError('input partial fourier fractor and bids PF factor do not match')
+    elif pf_bids:
+        pf = pf_bids
+    else:
+        pf = args_pf
 
     return pe_dir, pf
 
