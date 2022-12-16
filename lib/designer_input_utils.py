@@ -60,41 +60,8 @@ def get_input_info(input, fslbval, fslbvec, bids):
 
     return isdicom, DWIext, bveclist, bvallist, DWInlist, bidslist
 
-def assert_inputs(bidslist, args_pe_dir, args_pf):
-    import json
-    from mrtrix3 import app, MRtrixError
-
-    try:
-        bids = [json.load(open(i)) for i in bidslist]
-    
-        TE = []
-        pe_dir = []
-        pf = []
-        for i in bids:
-            TE.append(i['EchoTime'])
-            pf.append(i['PartialFourier'])
-            pe_dir.append(i['PhaseEncodingDirection'])
-
-        if not all(x == TE[0] for x in TE):
-            raise MRtrixError('input series have different echo times. This is not yet supported')
-        else:
-            TE = TE=[0]
-
-        if not all(x == pf[0] for x in pf):
-            raise MRtrixError('input series have different partial fourier factors,', +
-                            'series should be processed separately')
-        else:
-            pf = pf[0]
-
-        if not all(x == pe_dir[0] for x in pe_dir):
-            raise MRtrixError('input series have different phase encoding directions, series should be processed separately')
-        pe_dir = pe_dir[0]
-    
-    except:
-        print('no bids files identified')
-
-        pe_dir = args_pe_dir
-        pf = args_pf
+def convert_pe_dir_to_ijk(args_pe_dir):
+    from mrtrix3 import MRtrixError
 
     avail_pe_dirs = [None,'1','-1','2','-2','3','-3','i','i-','j','j-','k','k-','LR','RL','AP','PA','IS','SI']
 
@@ -125,10 +92,60 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         pe_dir_app = 'k'
     elif args_pe_dir == 'SI':
         pe_dir_app = 'k-'
+    elif args_pe_dir == 'i':
+        pe_dir_app == 'i'
+    elif args_pe_dir == 'j':
+        pe_dir_app == 'j'
+    elif args_pe_dir == 'k':
+        pe_dir_app == 'k'
+    elif args_pe_dir == 'i-':
+        pe_dir_app == 'i-'
+    elif args_pe_dir == 'j-':
+        pe_dir_app == 'j-'
+    elif args_pe_dir == 'k-':
+        pe_dir_app == 'k-'
     else:
         pe_dir_app = None
 
-    if pe_dir_app and pe_dir_app != pe_dir:
+    return pe_dir_app
+
+def assert_inputs(bidslist, args_pe_dir, args_pf):
+    import json
+    from mrtrix3 import app, MRtrixError
+
+    try:
+        bids = [json.load(open(i)) for i in bidslist]
+    
+        TE = []
+        pe_dir = []
+        pf = []
+        for i in bids:
+            TE.append(i['EchoTime'])
+            pf.append(i['PartialFourier'])
+            pe_dir.append(i['PhaseEncodingDirection'])
+
+        if not all(x == TE[0] for x in TE):
+            raise MRtrixError('input series have different echo times. This is not yet supported')
+        else:
+            TE = TE=[0]
+
+        if not all(x == pf[0] for x in pf):
+            raise MRtrixError('input series have different partial fourier factors,', +
+                            'series should be processed separately')
+        else:
+            pf = pf[0]
+
+        if not all(x == pe_dir[0] for x in pe_dir):
+            raise MRtrixError('input series have different phase encoding directions, series should be processed separately')
+        
+        pe_dir_bids = pe_dir[0]
+    except:
+        print('no bids files identified')
+        pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
+        pe_dir_bids = None
+        pf = args_pf
+    
+    if pe_dir_bids and pe_dir_app != pe_dir_bids:
         raise MRtrixError('input phase encoding direction and phase encoding direction from bids file do not match')
 
     if args_pf and float(args_pf) != pf:

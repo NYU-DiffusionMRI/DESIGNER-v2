@@ -4,3 +4,7 @@ build/
 dist/
 *.egg-info/
 mrtrix3.py
+
+bld.bat
+build.sh
+meta.yaml

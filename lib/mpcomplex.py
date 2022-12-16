@@ -254,15 +254,11 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
     if phase is not None:
         mag = img.copy()
         minphi = np.min(phase)
+        maxphi = np.max(phase)
         
-        if minphi < -3.15:
+        if minphi < -np.pi:
             print('rescaling phase from -pi to pi')
-            maxphi = 4094
-            if minphi < 0:
-                minphi = -4096
-            else:
-                minphi = 0
-            phi = (phase - minphi)/(maxphi - minphi)*2*np.pi - np.pi
+            phi = (phase - minphi) / (maxphi - minphi) * 2 * np.pi - np.pi
         
         kernel_phase = [img.shape[0]//10, img.shape[1]//10, 1]
         step_phase = [kernel_phase[0]//2-1, kernel_phase[1]//2-1, 1]

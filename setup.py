@@ -26,13 +26,13 @@ setup(
         packages = find_packages(),
         #packages = ['bin'],
         #package_data = {'mrtrix3': ['bin/mrtrix3.py']},
-        #include_package_data=True,
-        # entry_points = {
-        #     'console_scripts': [
-        #         'designer = bin.designer:main',
-        #         'tmi = bin.tmi:main'
-        #     ]
-        # },
+        include_package_data=True,
+        entry_points = {
+            'console_scripts': [
+                'designer = bin.designer:main',
+                'tmi = bin.tmi:main'
+            ]
+        },
         classifiers = [
             "Programming Language :: Python :: 3",
             "License :: OSI Approved :: MIT License",
