@@ -91,7 +91,7 @@ def execute(): #pylint: disable=unused-variable
     # denoising
     if app.ARGS.denoise:
         run_denoising(
-            app.ARGS.extent, app.ARGS.phase, app.ARGS.shrinkage, app.ARGS.algorithm)
+            app.ARGS.extent, path.from_user(app.ARGS.phase), app.ARGS.shrinkage, app.ARGS.algorithm)
 
     # rpg gibbs artifact correction
     if app.ARGS.degibbs:

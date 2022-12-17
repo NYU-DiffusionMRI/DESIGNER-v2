@@ -251,21 +251,24 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
     first denoise the phase using a large 2D patch,
     then denoise the magnitude using user input arguments
     '''
+    import ants
     if phase is not None:
         mag = img.copy()
-        minphi = np.min(phase)
-        maxphi = np.max(phase)
+        img_phi = ants.image_read(phase).numpy()
+        minphi = np.min(img_phi)
+        maxphi = np.max(img_phi)
         
-        if minphi < -np.pi:
+        if (maxphi - minphi) > 2 * np.pi:
             print('rescaling phase from -pi to pi')
-            phi = (phase - minphi) / (maxphi - minphi) * 2 * np.pi - np.pi
+            phi = (img_phi - minphi) / (maxphi - minphi) * 2 * np.pi - np.pi
+    
         
         kernel_phase = [img.shape[0]//10, img.shape[1]//10, 1]
         step_phase = [kernel_phase[0]//2-1, kernel_phase[1]//2-1, 1]
         
         print('phase denoising')
         img = mag*np.exp(1j*phi)
-        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', phase.shape[-1]//2)
+        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', phi.shape[-1]//2)
         img_dn1, _, _ = mp_phase.process()
         phi_dn = np.angle(img_dn1)
 
