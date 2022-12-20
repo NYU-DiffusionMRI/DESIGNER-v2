@@ -137,25 +137,35 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         if not all(x == pe_dir[0] for x in pe_dir):
             raise MRtrixError('input series have different phase encoding directions, series should be processed separately')
         pe_dir_bids = pe_dir[0]
+        pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
     except:
         print('no bids files identified')
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
         pe_dir_bids = None
         pf_bids = None
+
+    # if no partial fourier information is found, assume full sampling
+    if not args_pf and not pf_bids:
+        args_pf = 1
+        pf_bids = 1
     
-    if pe_dir_bids and pe_dir_app != pe_dir_bids:
+    if (not pe_dir_app and not pe_dir_bids) and (app.ARGS.eddy or app.ARGS.degibbs):
+        raise MRtrixError('Some options require the user to include phase encoding direction, User must use -pe_dir option or include bids .json')
+    
+    if (pe_dir_bids and pe_dir_app) and (pe_dir_app != pe_dir_bids):
         raise MRtrixError('input phase encoding direction and phase encoding direction from bids file do not match')
     elif pe_dir_bids:
         pe_dir = pe_dir_bids
     else:
         pe_dir = pe_dir_app
 
-    if pf_bids and float(args_pf) != pf_bids:
+    if (pf_bids and args_pf) and (float(args_pf) != pf_bids):
         raise MRtrixError('input partial fourier fractor and bids PF factor do not match')
     elif pf_bids:
         pf = pf_bids
     else:
         pf = args_pf
+
 
     return pe_dir, pf
 

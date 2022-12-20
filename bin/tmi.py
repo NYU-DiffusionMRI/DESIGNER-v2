@@ -212,10 +212,6 @@ def execute(): #pylint: disable=unused-variable
         params_smi = smi.fit(dwi, bval=bval, bvec=bvec, mask=mask, sigma=sigma)
         save_params(params_smi, nii, model='smi', outdir=outdir)
 
-# import mrtrix3
-# mrtrix3.execute()
-
 def main():
     import mrtrix3
     mrtrix3.execute() #pylint: disable=no-member
-

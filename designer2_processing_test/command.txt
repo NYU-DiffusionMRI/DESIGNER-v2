@@ -1,0 +1,1 @@
+/Library/Frameworks/Python.framework/Versions/3.10/bin/designer -denoise -algorithm jespersen -extent 7,7,7 -degibbs -mask -scratch designer2_processing_test -nocleanup M9734_074YM_DIFF_meso.nii,M9734_074YM__DIFF_meso_research.nii designer2_test.mif

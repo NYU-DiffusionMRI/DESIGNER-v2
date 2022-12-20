@@ -79,6 +79,8 @@ def run_degibbs(pf, pe_dir):
         pe_rpg = 1
     elif pe_dir[0] == 'k':
         pe_rpg = 2
+    
+    pf = float(pf)
 
     print('Gibbs correction with parameters:')
     print('phase-encoding direction = %s' % (pe_dir))
@@ -192,7 +194,7 @@ def create_brainmask(fsl_suffix):
     if os.path.isfile('brain_mask.nii.gz'):
         with gzip.open('brain_mask' + fsl_suffix, 'rb') as f_in, open('brain_mask.nii', 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
-        run.function(os.remove,'brain_mask' + fsl_suffix)
+        run.function(os.remove,'brain_mask' + fsl_suffix, show=False)
 
 def run_rice_bias_correct():
     from mrtrix3 import run, app

@@ -1,7 +1,7 @@
 from joblib import Parallel, delayed
 import numpy as np
 from tqdm import tqdm
-from mpunits import vectorize
+from lib.mpunits import vectorize
 import os
 
 import scipy.io as sio

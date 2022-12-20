@@ -1,11 +1,12 @@
 from setuptools import setup, find_packages
+from glob import glob
 import sys
 import subprocess
 
 with open('requirements.txt') as f:
     requirements = f.readlines()
 
-long_description = '''signer and TMI package for use with brain 
+long_description = '''designer and TMI package for use with brain 
     diffusion MRI processing. Designer is used for image prepocessing 
     including denoising, partial-fourier gibbs correction, epi eddy 
     current and motion, and normalization. TMI is used for dti/dti/wmti/smi
@@ -26,6 +27,7 @@ setup(
         packages = find_packages(),
         #packages = ['bin'],
         #package_data = {'mrtrix3': ['bin/mrtrix3.py']},
+        data_files=[('constant', glob('constant/*'))],
         include_package_data=True,
         entry_points = {
             'console_scripts': [

@@ -2,9 +2,7 @@
 
 import os, sys
 import numpy as np, gzip, shutil
-
-#dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-#sys.path.insert(0, os.path.join(dwd, 'lib'))
+__version__ = "0.0.1"
 
 from lib.designer_input_utils import get_input_info, convert_input_data, assert_inputs
 from lib.designer_func_wrappers import run_denoising, run_degibbs, run_eddy, run_b1correct, create_brainmask, run_rice_bias_correct, run_normalization
@@ -90,8 +88,13 @@ def execute(): #pylint: disable=unused-variable
     
     # denoising
     if app.ARGS.denoise:
+        if app.ARGS.phase:
+            phasepath = path.from_user(app.ARGS.phase)
+        else:
+            phasepath = None
+
         run_denoising(
-            app.ARGS.extent, app.ARGS.phase, app.ARGS.shrinkage, app.ARGS.algorithm)
+            app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
 
     # rpg gibbs artifact correction
     if app.ARGS.degibbs:
@@ -132,10 +135,8 @@ def execute(): #pylint: disable=unused-variable
     shutil.copyfile(path.to_scratch('dwi_designer.bvec',True), outfname + '.bvec')
     shutil.copyfile(path.to_scratch('dwi_designer.bval',True), outfname + '.bval')
 
-# import mrtrix3
-# mrtrix3.execute() #pylint: disable=no-member
-
 def main():
     import mrtrix3
     mrtrix3.execute() #pylint: disable=no-member
+
 

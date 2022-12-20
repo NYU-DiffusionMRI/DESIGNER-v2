@@ -495,8 +495,7 @@ class RPG(object):
 
         pf_opts = [5/8, 6/8, 7/8, 1]
         if not pf_fact in pf_opts:
-            raise ValueError("RPG degibbs only supports partial fourier factors of" +
-                                "5/8, 6/8, 7/8, and 1")
+            raise ValueError("RPG degibbs only supports partial fourier factors of 5/8, 6/8, 7/8, and 1")
 
         vol = vol.copy()
 

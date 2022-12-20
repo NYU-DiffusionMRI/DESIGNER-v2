@@ -220,7 +220,7 @@ class MP(object):
             rec_img = self.patchav(wp, image.flatten(), self.temp.flatten())
             rec_img = self.unpad(rec_img, self.pwidth[:][:-1])
         elif image.ndim == 3:
-            S = Parallel(n_jobs=-1, prefer='threads')\
+            S = Parallel(n_jobs=-3, prefer='threads')\
             (delayed(self.patchav)(
                 wp, image[:,:,i].flatten(), self.temp.flatten()
                 ) for i in range(self.imsize[-1]))
@@ -234,7 +234,7 @@ class MP(object):
         
         inputs = tqdm(range(self.temp.shape[0]))
         
-        signal, sigma, npars = zip(*Parallel(n_jobs=-1, prefer='processes')\
+        signal, sigma, npars = zip(*Parallel(n_jobs=-3, prefer='processes')\
             (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in inputs))
 
         print('...patch avergaing...')
