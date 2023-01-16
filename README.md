@@ -19,14 +19,11 @@ After development, designer-v2 will be uploaded to pip. Until then, here are ins
 ` ./build`\
 ` export PYTHONPATH=/my/path/mrtrix3/lib`
 
-- Clone this repository into a local directory:\
+- Clone and install this repository:\
 ` cd /my/path`\
-` git clone https://github.com/badesar1/designer_v2_dev.git`
-
-- Install python dependancies:\
+` git clone https://github.com/badesar1/designer_v2_dev.git`\
 ` cd designer_v2_dev`\
 ` python setup.py install`
-
 
 ## Example usage for meso data
 An example script can be found in the examples folder. It is copied here as well. As you can see, preprocessing and fitting are now split into two separate functions: designer for preprocessing and tmi for fitting. 
@@ -41,14 +38,14 @@ pa=M9734_074YM_DIFF_meso_PA.nii
 
 cd $datapath
 
-python designer \
+designer \
 -denoise -algorithm jespersen -extent 7,7,7 \
 -degibbs \
 -mask \
 -scratch designer2_processing_test -nocleanup \
 $meso1,$meso2 designer2_test.mif
 
-python tmi \
+tmi \
 -DTIparams -DKIparams -WDKI -SMIparams \
 -mask designer2_processing_test/brain_mask.nii \
 -sigma designer2_processing_test/sigma.nii \
