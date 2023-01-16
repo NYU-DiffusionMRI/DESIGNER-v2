@@ -10,7 +10,7 @@ After development, designer-v2 will be uploaded to pip. Until then, here are ins
 
 - Note, designer still depends on FSL for topup and eddy, and mrtix3 for image-wise operations. 
 
-- The current master version of mrtrix3 has a bug that stops external python modules from configuring properly. Therefore for now I am requiring users to instal the dev version:
+- The current master version of mrtrix3 has a bug that stops external python modules from configuring properly. Therefore for now I am requiring users to install the dev version:\
 ` cd /my/path`\
 ` git clone https://github.com/MRtrix3/mrtrix3.git`\
 ` cd mrtrix3`\
