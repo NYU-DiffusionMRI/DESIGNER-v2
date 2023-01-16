@@ -8,18 +8,23 @@ Jenny, you might note that I now pull some data directly from the bids .json sid
 ## Dev Installation:
 After development, designer-v2 will be uploaded to pip. Until then, here are instructions for installing locally.
 
-- Note, designer still depends on FSL for topup and eddy, and mrtix3 for image-wise operations. Make note of the location where mrtrix3 binaries are installed before installing designer (in mac, it is often /usr/local/mrtrix3/bin).
+- Note, designer still depends on FSL for topup and eddy, and mrtix3 for image-wise operations. 
+
+- The current master version of mrtrix3 has a bug that stops external python modules from configuring properly. Therefore for now I am requiring users to instal the dev version:
+` cd /my/path`\
+` git clone https://github.com/MRtrix3/mrtrix3.git`\
+` cd mrtrix3`\
+` git checkout dev`\
+` export PYTHONPATH=/my/path/mrtrix3/lib`
 
 - Clone this repository into a local directory:
-`cd /my/path`\
-`git clone https://github.com/badesar1/designer_v2_dev.git`
+` cd /my/path`\
+` git clone https://github.com/badesar1/designer_v2_dev.git`
 
 - Install python dependancies:\
-`python setup.py install`
+` cd designer_v2_dev`\
+` python setup.py install`
 
-- Set up environemnt, either run these commands directly in the terminal or in your ~/.bashrc file:\
-`export PATH=/my/path/designer_v2_dev/bin:${PATH}`\
-`export PYTHONPATH=/path/to/mrtrix3/lib`
 
 ## Example usage for meso data
 An example script can be found in the examples folder. It is copied here as well. As you can see, preprocessing and fitting are now split into two separate functions: designer for preprocessing and tmi for fitting. 
