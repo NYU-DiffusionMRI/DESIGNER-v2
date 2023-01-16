@@ -170,6 +170,7 @@ class MP(object):
             t = Mp-tn-1
         
         sigma = np.sqrt(sigmasq_1[t])
+        print(sigma)
         if (sigma == 0) or (not np.isfinite(sigma)):
             sigma = np.finfo(float).eps
 
