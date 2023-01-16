@@ -126,7 +126,7 @@ def run_eddy(pe_dir, rpe):
     #print('dwifslpreproc -nocleanup -scratch ' + path.to_scratch('',True) + '/eddy_processing' + ' -eddy_options ' + eddyopts + ' -rpe_none -pe_dir ' + app.ARGS.pe_dir + ' working.mif dwiec.mif')
     if app.ARGS.rpe_none:
         #run.command('dwifslpreproc -nocleanup -eddy_options " --index=' + idxpath + ' --repol --data_is_shelled" -rpe_none -pe_dir ' + app.ARGS.pe_dir + ' working.mif dwiec.mif')
-        cmd = ('dwifslpreproc -nocleanup -scratch %s/eddy_processing -eddy_options %s -rpe_none -pe_dir %s working.mif dwiex.mif' % 
+        cmd = ('dwifslpreproc -nocleanup -scratch %s/eddy_processing -eddy_options %s -rpe_none -pe_dir %s working.mif dwiec.mif' % 
             (path.to_scratch('',True), eddyopts, pe_dir))
         run.command(cmd)
         #run.command('dwifslpreproc -nocleanup -scratch ' + path.to_scratch('',True) + '/eddy_processing' + ' -eddy_options ' + eddyopts + ' -rpe_none -pe_dir ' + app.ARGS.pe_dir + ' working.mif dwiec.mif')

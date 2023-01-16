@@ -170,6 +170,9 @@ class MP(object):
             t = Mp-tn-1
         
         sigma = np.sqrt(sigmasq_1[t])
+        if sigma == 0:
+            sigma = np.finfo(float).eps
+            
         npars = t
         if self.shrink == 'threshold':
             vals[t:] = 0
