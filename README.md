@@ -15,6 +15,8 @@ After development, designer-v2 will be uploaded to pip. Until then, here are ins
 ` git clone https://github.com/MRtrix3/mrtrix3.git`\
 ` cd mrtrix3`\
 ` git checkout dev`\
+` ./configure`\
+` ./build`\
 ` export PYTHONPATH=/my/path/mrtrix3/lib`
 
 - Clone this repository into a local directory:
