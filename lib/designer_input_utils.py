@@ -121,8 +121,11 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         pf = []
         for i in bids:
             TE.append(i['EchoTime'])
-            pf.append(i['PartialFourier'])
             pe_dir.append(i['PhaseEncodingDirection'])
+            try:
+                pf.append(i['PartialFourier'])
+            except:
+                pf.append(1)
 
         if not all(x == TE[0] for x in TE):
             raise MRtrixError('input series have different echo times. This is not yet supported')
