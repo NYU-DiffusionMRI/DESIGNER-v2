@@ -19,7 +19,7 @@ After development, designer-v2 will be uploaded to pip. Until then, here are ins
 ` ./build`\
 ` export PYTHONPATH=/my/path/mrtrix3/lib`
 
-- Clone this repository into a local directory:
+- Clone this repository into a local directory:\
 ` cd /my/path`\
 ` git clone https://github.com/badesar1/designer_v2_dev.git`
 
