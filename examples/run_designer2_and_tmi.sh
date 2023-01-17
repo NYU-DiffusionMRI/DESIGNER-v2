@@ -14,6 +14,7 @@ designer \
 -degibbs \
 -mask \
 -scratch designer2_processing_test -nocleanup \
+-echo_time 0.104,0.104 \
 $meso1,$meso2 designer2_test.mif
 
 # tmi \
