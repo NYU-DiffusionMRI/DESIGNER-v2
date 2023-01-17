@@ -114,10 +114,10 @@ class TensorFitting(object):
                 dt = np.linalg.pinv(w @ b) @ (w @ np.log(dwi))
             else:
                 x = cp.Variable((22,1))
-                A = w@b
-                B = w@np.log(dwi[...,None])
-                objective = cp.Minimize(cp.sum_squares(A@x-B))
-                constraints = [C@x >= 0]
+                A = w @ b
+                B = w @ np.log(dwi[...,None])
+                objective = cp.Minimize(cp.sum_squares(A @ x - B))
+                constraints = [C @ x >= 0]
                 prob = cp.Problem(objective, constraints)
                 result = prob.solve()
                 dt = x.value.squeeze()
@@ -362,18 +362,20 @@ class TensorFitting(object):
 
         nvxls = dt.shape[1]
         akc_mask = np.zeros((nvxls))
-        N = 10000
         nblocks = 10
 
-        akc_mask = Parallel(n_jobs=8, prefer='processes')\
-            (delayed(self.compute_outliers)
-            (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
-            )
-
-        # for i in range(1, nblocks):
-        #     akc = self.kurtosis_coeff(dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:])
-        #     akc_mask += np.any((akc < -1) | (akc > 10), axis=0)
-        # return akc_mask
+        try:
+            N = 10000
+            akc_mask = Parallel(n_jobs=8, prefer='processes')\
+                (delayed(self.compute_outliers)
+                (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
+                )
+        except:
+            N = 5000
+            akc_mask = Parallel(n_jobs=8, prefer='processes')\
+                (delayed(self.compute_outliers)
+                (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
+                )
 
         return np.sum(akc_mask, axis=0)
 
