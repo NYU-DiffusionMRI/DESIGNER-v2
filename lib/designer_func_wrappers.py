@@ -36,10 +36,11 @@ def run_denoising(args_extent, args_phase, args_shrinkage, args_algorithm):
     dwi = nii.numpy()
     #sx,sy,sz,N = np.shape(dwi)
 
+    n_cores = app.ARGS.n_cores
     print('...denoising...')
     # nonlocal denoising, no shrinkage
     Signal, Sigma, Nparameters = mp.denoise(
-        dwi, phase=args_phase, kernel=extent, shrinkage=args_shrinkage, algorithm=args_algorithm
+        dwi, phase=args_phase, kernel=extent, shrinkage=args_shrinkage, algorithm=args_algorithm, n_cores=n_cores
         )
     Sigma[np.isnan(Sigma)] = 0
 
@@ -64,7 +65,7 @@ def run_denoising(args_extent, args_phase, args_shrinkage, args_algorithm):
 
 def run_degibbs(pf, pe_dir):
     import lib.gibbs_removal_rpg as rpg
-    from mrtrix3 import run
+    from mrtrix3 import run, app
     from ants import image_read, image_write, from_numpy
 
     # convert working.mif to nii
@@ -81,12 +82,13 @@ def run_degibbs(pf, pe_dir):
         pe_rpg = 2
     
     pf = float(pf)
+    n_cores = app.ARGS.n_cores
 
     print('Gibbs correction with parameters:')
     print('phase-encoding direction = %s' % (pe_dir))
     print('partial-fourier factor   = %s' % (pf))
     
-    img_dg = rpg.gibbs_removal(dwi, pf_fact=pf, pe_dim=pe_rpg, nproc=8)
+    img_dg = rpg.gibbs_removal(dwi, pf_fact=pf, pe_dim=pe_rpg, nproc=n_cores)
     out = from_numpy(
         img_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
     image_write(out, 'working_rpg.nii')

@@ -13,8 +13,9 @@ warnings.filterwarnings("ignore")
 
 class TensorFitting(object):
 
-    def __init__(self, grad):
+    def __init__(self, grad, n_cores):
         self.grad = grad
+        self.n_cores = n_cores
 
     def create_tensor_order(self, order):
         """
@@ -166,7 +167,7 @@ class TensorFitting(object):
         Computes parameters MK AK and RK of the kurtosis tensor
         """
         # extract all tensor parameters from dt
-        num_cores = multiprocessing.cpu_count()
+        # num_cores = multiprocessing.cpu_count()
 
         DT = np.reshape(np.concatenate(
             (dt[0,:], dt[1,:], dt[2,:], dt[1,:], dt[3,:], dt[4,:], dt[2,:], dt[4,:], dt[5,:])
@@ -183,7 +184,7 @@ class TensorFitting(object):
 
         nvox = dt.shape[1]
         inputs = range(0, nvox)
-        values, vectors = zip(*Parallel(n_jobs=num_cores,prefer='processes')\
+        values, vectors = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
             (delayed(self.dti_tensor_params)(DT[:,:,i]) for i in inputs))        
         values = np.reshape(np.abs(values), (nvox, 3))
         vectors = np.reshape(vectors, (nvox, 3, 3))
@@ -215,7 +216,7 @@ class TensorFitting(object):
             if fit_w:
                 akc = self.w_kurtosis_coeff(dt, dirs)
                 mk = np.mean(akc, axis=0)
-                ak, rk = zip(*Parallel(n_jobs=num_cores,prefer='processes')\
+                ak, rk = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
                     (delayed(self.dki_tensor_params)(vectors[i,:,0], dt[:,i], fit_w=True) for i in inputs))
                 ak = np.reshape(ak, (nvox))
                 rk = np.reshape(rk, (nvox))
@@ -224,7 +225,7 @@ class TensorFitting(object):
             else:
                 akc = self.kurtosis_coeff(dt, dirs)
                 mk = np.mean(akc, axis=0)
-                ak, rk = zip(*Parallel(n_jobs=num_cores,prefer='processes')\
+                ak, rk = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
                     (delayed(self.dki_tensor_params)(vectors[i,:,0], dt[:,i], fit_w=False) for i in inputs))
                 ak = np.reshape(ak, (nvox))
                 rk = np.reshape(rk, (nvox))
@@ -299,12 +300,12 @@ class TensorFitting(object):
             C = None
 
         inputs = tqdm(range(0, dwi_.shape[1]))
-        num_cores = multiprocessing.cpu_count()
+        # num_cores = multiprocessing.cpu_count()
 
         # for i in inputs:
         #     self.wlls(shat[:,i], dwi_[:,i], b, C)
          
-        dt = Parallel(n_jobs=num_cores,prefer='processes')\
+        dt = Parallel(n_jobs=self.n_cores,prefer='processes')\
             (delayed(self.wlls)(shat[:,i], dwi_[:,i], b, C) for i in inputs)
         dt = np.reshape(dt, (dwi_.shape[1], b.shape[1])).T
 
@@ -343,9 +344,9 @@ class TensorFitting(object):
         shat = np.exp(np.matmul(b, init))
 
         inputs = tqdm(range(0, dwi_.shape[1]))
-        num_cores = multiprocessing.cpu_count()
+        # num_cores = multiprocessing.cpu_count()
         
-        dt = Parallel(n_jobs=num_cores,prefer='processes')\
+        dt = Parallel(n_jobs=self.n_cores, prefer='processes')\
             (delayed(self.wlls)(shat[:,i], dwi_[:,i], b) for i in inputs)
         dt = np.reshape(dt, (dwi_.shape[1], b.shape[1])).T
 
@@ -364,7 +365,7 @@ class TensorFitting(object):
         N = 10000
         nblocks = 10
 
-        akc_mask = Parallel(n_jobs=-1,prefer='processes')\
+        akc_mask = Parallel(n_jobs=self.n_cores, prefer='processes')\
             (delayed(self.compute_outliers)
             (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
             )

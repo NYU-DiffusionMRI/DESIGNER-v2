@@ -54,8 +54,10 @@ from scipy.linalg import svd
 from numpy_groupies import aggregate
 
 class MP(object):
-    def __init__(self, dwi, kernel, step, shrinkage, algorithm, crop):
+    def __init__(self, dwi, kernel, step, shrinkage, algorithm, crop, n_cores):
         from skimage.util.shape import view_as_windows
+
+        self.n_cores = n_cores
 
         if shrinkage is None:
             self.shrink = 'threshold'
@@ -237,7 +239,7 @@ class MP(object):
         
         inputs = tqdm(range(self.temp.shape[0]))
         
-        signal, sigma, npars = zip(*Parallel(n_jobs=-3, prefer='processes')\
+        signal, sigma, npars = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
             (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in inputs))
 
         print('...patch avergaing...')
@@ -248,7 +250,7 @@ class MP(object):
 
         return signal, sigma, npars
 
-def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0, phase=None):
+def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0, phase=None, n_cores=-3):
     ''' 
     denoising of complex data is implimented as a 2-pass procedure
     first denoise the phase using a large 2D patch,
@@ -271,16 +273,16 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         
         print('phase denoising')
         img = mag*np.exp(1j*phi)
-        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', phi.shape[-1]//2)
+        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', phi.shape[-1]//2, n_cores)
         img_dn1, _, _ = mp_phase.process()
         phi_dn = np.angle(img_dn1)
 
         print('magnitude denoising')
         img_np = np.real(img*np.exp(-1j*phi_dn))
-        mp = MP(img_np, kernel, step, shrinkage, algorithm, crop)
+        mp = MP(img_np, kernel, step, shrinkage, algorithm, crop, n_cores)
         Signal, Sigma, Npars = mp.process()
     else:
-        mp = MP(img, kernel, step, shrinkage, algorithm, crop)
+        mp = MP(img, kernel, step, shrinkage, algorithm, crop, n_cores)
         Signal, Sigma, Npars = mp.process()
 
     return Signal, Sigma, Npars

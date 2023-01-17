@@ -45,7 +45,7 @@ def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoo
             ).sum(axis=0)
     return wval
 
-def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None):
+def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores=-3):
     from joblib import Parallel, delayed
     import numpy as np
 
@@ -59,7 +59,7 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None):
     dwi_new = dwi.copy()
     kernel = 5
 
-    wval = (Parallel(n_jobs=-1, prefer='processes')
+    wval = (Parallel(n_jobs=n_cores, prefer='processes')
             (delayed(parallel_outlier_smooth)(
                 outinds[:,i], kernel, outlier_locations, dwi_norm, dwi, smoothlevel
             ) for i in range(len(outinds[0]))))

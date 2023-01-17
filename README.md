@@ -10,6 +10,11 @@ After development, designer-v2 will be uploaded to pip. Until then, here are ins
 
 - Note, designer still depends on FSL for topup and eddy, and mrtix3 for image-wise operations. 
 
+- I would recommend creating a python virtual environment for testing. This is helpful for ensuring that you are using a compatible version of python. You can create one with a command like the following:\
+` conda create --prefix /my/path/designer-env python=3.9`\
+` conda activate /my/path/designer-env`
+Now any Python packages you install will be installed into this virtual environemnt.
+
 - The current master version of mrtrix3 has a bug that stops external python modules from configuring properly. Therefore for now I am requiring users to install the dev version:\
 ` cd /my/path`\
 ` git clone https://github.com/MRtrix3/mrtrix3.git`\

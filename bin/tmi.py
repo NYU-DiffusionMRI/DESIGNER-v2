@@ -31,7 +31,8 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-fslbvec',metavar=('<bvecs>'),help='specify bvec path if path is different from the path to the dwi or the file has an unusual extention')
     options.add_argument('-fslbval',metavar=('<bvals>'),help='specify bval path if path is different from the path to the dwi or the file has an unusual extention')
     options.add_argument('-bids',metavar=('<bids>'),help='specify bids.json path if path is different from the path to the dwi or the file has an unusual extention')
-    
+    options.add_argument('n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasts, by default designer will use available cores - 2', default=-3)
+
     dki_options = cmdline.add_argument_group('tensor options for the TMI script')
     dki_options.add_argument('-DKIparams', action='store_true', help='Include DKI parameters in output folder (mk,ak,rk)')
     dki_options.add_argument('-DTIparams', action='store_true', help='Include DTI parameters in output folder (md,ad,rd,fa,eigenvalues, eigenvectors')
@@ -110,12 +111,12 @@ def execute(): #pylint: disable=unused-variable
         bval_dti = bval[dtishell]
         bvec_dti = bvec[dtishell]
         grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
-        dti = tensor.TensorFitting(grad_dti)
+        dti = tensor.TensorFitting(grad_dti, app.ARGS.n_cores)
         dt, s0, b = dti.dti_fit(dwi_dti, mask)
     elif app.ARGS.DKIparams:
-        print('...DKI fit with constraints = ' + str(constraints) + '...')
+        print('...DKI fit with constraints = ' + str(constraints))
         grad = np.hstack((bvec.T, bval[None,...].T))
-        dti = tensor.TensorFitting(grad)
+        dti = tensor.TensorFitting(grad, app.ARGS.n_cores)
         dt, s0, b = dti.dki_fit(dwi, mask, constraints=constraints)
 
     if app.ARGS.akc_outliers:
@@ -131,7 +132,7 @@ def execute(): #pylint: disable=unused-variable
         akc_mask = vectorize(akc_mask, mask).astype(bool)
         print('N outliers = %s' % (np.sum(akc_mask)))
 
-        dwi_new = refit_or_smooth(akc_mask, dwi)
+        dwi_new = refit_or_smooth(akc_mask, dwi, n_cores=app.ARGS.n_cores)
         if app.ARGS.DTIparams and not app.ARGS.DKIparams:
             dt_new,_,_ = dti.dti_fit(dwi_new, akc_mask)
         elif app.ARGS.DKIparams:
@@ -163,14 +164,17 @@ def execute(): #pylint: disable=unused-variable
         print('N outliers = %s' % (np.sum(akc_mask)))
 
     if app.ARGS.DTIparams:
+        print('...extracting and saving DTI maps...')
         params_dti = dti.extract_parameters(dt, b, mask, extract_dti=True, extract_dki=False, fit_w=False)
         save_params(params_dti, nii, model='dti', outdir=outdir)
 
     if app.ARGS.DKIparams:
+        print('...extracting and saving DKI maps...')
         params_dki = dti.extract_parameters(dt, b, mask, extract_dti=True, extract_dki=True, fit_w=False)
         save_params(params_dki, nii, model='dki', outdir=outdir)
 
     if app.ARGS.WDKI:
+        print('...extracting and saving WDKI maps...')
         params_dwi = dti.extract_parameters(dt, b, mask, extract_dti=False, extract_dki=True, fit_w=True)
         save_params(params_dwi, nii, model='wdki', outdir=outdir)
 
@@ -194,7 +198,11 @@ def execute(): #pylint: disable=unused-variable
 
     if app.ARGS.SMIparams:
         from lib.smi import SMI
-        sigma = image_read(path.from_user(app.ARGS.sigma)).numpy()
+        if not app.ARGS.sigma:
+            print('WARNING: SMI is poorly conditioned without prior estimate of sigma')
+            sigma = None
+        else:
+            sigma = image_read(path.from_user(app.ARGS.sigma)).numpy()
 
         if app.ARGS.SMIcompartments:
             compartments = app.ARGS.SMIcompartments

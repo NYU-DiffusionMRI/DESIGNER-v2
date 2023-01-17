@@ -501,7 +501,7 @@ class RPG(object):
 
         inputs = tqdm(range(vol.shape[0]))
 
-        vol = (Parallel(n_jobs=-1, prefer='processes')
+        vol = (Parallel(n_jobs=nproc, prefer='processes')
             (delayed(self._parallel_pf_gibbs_removal)(
                 vol[i,...], shap=shap, pf_fact=pf_fact, n_points=n_points, G0=G0, G1=G1, testff=testff
             ) for i in inputs))
