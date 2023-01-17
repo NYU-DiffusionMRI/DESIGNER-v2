@@ -8,7 +8,7 @@ Jenny, you might note that I now pull some data directly from the bids .json sid
 ## Dev Installation:
 After development, designer-v2 will be uploaded to pip. Until then, here are instructions for installing locally.
 
-- Note, designer still depends on FSL for topup and eddy, and mrtix3 for image-wise operations. 
+Note, designer still depends on FSL for topup and eddy, and mrtix3 for image-wise operations. 
 
 - I would recommend creating a python virtual environment for testing. This is helpful for ensuring that you are using a compatible version of python. You can create one with a command like the following:\
 ` conda create --prefix /my/path/designer-env python=3.9`\
@@ -22,13 +22,16 @@ Now any Python packages you install will be installed into this virtual environe
 ` git checkout dev`\
 ` ./configure`\
 ` ./build`\
-` export PYTHONPATH=/my/path/mrtrix3/lib`
 
 - Clone and install this repository:\
 ` cd /my/path`\
 ` git clone https://github.com/badesar1/designer_v2_dev.git`\
 ` cd designer_v2_dev`\
 ` python setup.py install`
+- Add the following line to your `.bashrc, .bash_profile, .zprofile` file:\
+ `export PYTHONPATH=/my/path/mrtrix3/lib`
+
+To update your installation, just run `git pull` in the `designer_v2_dev` folder, and then rerun `python setup.py install`.
 
 ## Example usage for meso data
 An example script can be found in the examples folder. It is copied here as well. As you can see, preprocessing and fitting are now split into two separate functions: designer for preprocessing and tmi for fitting. 

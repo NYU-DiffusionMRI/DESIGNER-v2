@@ -48,11 +48,14 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-b1correct', action='store_true', help='Include a bias correction step in dwi preprocessing', default=False)
     options.add_argument('-normalize', action='store_true', help='normalize the dwi volume to median b0 CSF intensity of 1000 (useful for multiple dwi acquisitions)', default=False)
     options.add_argument('-mask', action='store_true',help='compute a brain mask prior to tensor fitting to stip skull and improve efficientcy')
+    
     options.add_argument('-datatype', metavar=('<spec>'), help='If using the "-processing_only" option, you can specify the output datatype. Valid options are float32, float32le, float32be, float64, float64le, float64be, int64, uint64, int64le, uint64le, int64be, uint64be, int32, uint32, int32le, uint32le, int32be, uint32be, int16, uint16, int16le, uint16le, int16be, uint16be, cfloat32, cfloat32le, cfloat32be, cfloat64, cfloat64le, cfloat64be, int8, uint8, bit')
     options.add_argument('-fslbvec',metavar=('<bvecs>'),help='specify bvec path if path is different from the path to the dwi or the file has an unusual extention')
     options.add_argument('-fslbval',metavar=('<bvals>'),help='specify bval path if path is different from the path to the dwi or the file has an unusual extention')
-    options.add_argument('-bids',metavar=('<bids>'),help='specify bids.json path if path is different from the path to the dwi or the file has an unusual extention')
-    options.add_argument('n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasts, by default designer will use available cores - 2', default=-3)
+    options.add_argument('-bids',metavar=('<bids1,bids2,...>'),help='specify bids.json path if path is different from the path to the dwi or the file has an unusual extention')
+    options.add_argument('-n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasts, by default designer will use available cores - 2', default=-3)
+    options.add_argument('-echo_time',metavar=('<TE1,TE2,...>'),help='specify the echo time used in the acquisition (comma separated list the same length as number of inputs)')
+    options.add_argument('-bshape',metavar=('<beta1,beta2,...>'),help='specify the b-shape used in the acquisition (comma separated list the same length as number of inputs)')
 
     options.add_argument('-pe_dir', metavar=('<phase encoding direction>'), help='Specify the phase encoding direction of the input series (required if using the eddy option). Can be a signed axis number (e.g. -0, 1, +2), an axis designator (e.g. RL, PA, IS), or NIfTI axis codes (e.g. i-, j, k)')
     options.add_argument('-pf', metavar=('<PF factor>'), help='Specify the partial fourier factor (e.g. 7/8, 6/8)')
@@ -80,10 +83,14 @@ def execute(): #pylint: disable=unused-variable
     (isdicom, DWIext, bveclist, bvallist, DWInlist, bidslist) = get_input_info(
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
     
-    (pe_dir, pf) = assert_inputs(bidslist, app.ARGS.pe_dir, app.ARGS.pf)
+    (pe_dir, pf, TE, bshape) = assert_inputs(bidslist, app.ARGS.pe_dir, app.ARGS.pf)
 
     (idxlist) = convert_input_data(
         isdicom, DWIext, bveclist, bvallist, DWInlist)
+
+    print(TE)
+    print(bshape)
+    import pdb; pdb.set_trace()
 
     app.goto_scratch_dir()
     

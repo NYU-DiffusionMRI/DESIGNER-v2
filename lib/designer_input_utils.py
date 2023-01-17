@@ -116,21 +116,21 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
     try:
         bids = [json.load(open(i)) for i in bidslist]
     
-        TE = []
+        TE_bids = []
         pe_dir = []
         pf = []
         for i in bids:
-            TE.append(i['EchoTime'])
+            TE_bids.append(i['EchoTime'])
             pe_dir.append(i['PhaseEncodingDirection'])
             try:
                 pf.append(i['PartialFourier'])
             except:
                 pf.append(1)
 
-        if not all(x == TE[0] for x in TE):
-            raise MRtrixError('input series have different echo times. This is not yet supported')
-        else:
-            TE = TE=[0]
+        # if not all(x == TE[0] for x in TE):
+        #     raise MRtrixError('input series have different echo times. This is not yet supported')
+        # else:
+        #     TE = TE=[0]
 
         if not all(x == pf[0] for x in pf):
             raise MRtrixError('input series have different partial fourier factors,', +
@@ -146,6 +146,20 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
         pe_dir_bids = None
         pf_bids = None
+        TE_bids = None
+        TE_app = [i for i in app.ARGS.echo_time.rsplit(',')]
+
+    if app.ARGS.bshape:
+        bshape = [int(i) for i in app.ARGS.bshape.rsplit(',')]
+    else:
+        bshape = None
+
+    if TE_app and (not all(TE_bids == TE_app)):
+        raise MRtrixError('User defined echo times do not match those found in bids .json, please check input data for consistancy')
+    elif TE_app:
+        TE = TE_app
+    elif TE_bids:
+        TE = TE_bids
 
     # if no partial fourier information is found, assume full sampling
     if not args_pf and not pf_bids:
@@ -169,8 +183,7 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
     else:
         pf = args_pf
 
-
-    return pe_dir, pf
+    return pe_dir, pf, TE, bshape
 
 def convert_input_data(isdicom, DWIext, bveclist, bvallist, DWInlist):
     from mrtrix3 import run, image, MRtrixError, app
