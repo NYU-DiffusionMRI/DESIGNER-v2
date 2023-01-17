@@ -1,6 +1,6 @@
 def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoothlevel):
     import numpy as np
-
+    
     k = kernel // 2
     x = inds[0]
     y = inds[1]
@@ -19,30 +19,33 @@ def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoo
     if z+k > dwi.shape[2]: zmax = dwi.shape[2] 
     else: zmax = z+k
     
-    psize = (xmax - xmin) * (ymax - ymin) * (zmax - zmin)
-    akcpatch = outlier_locations[xmin:xmax, ymin:ymax, zmin:zmax].flatten()
-    ref = np.tile(np.reshape(dwi_norm[x,y,z,:],(1,dwi.shape[-1])),(psize,1))
-    patch = np.reshape(dwi_norm[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
-    patchorig = np.reshape(dwi[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
-    intensities = np.sqrt(np.sum((patch-ref)**2, axis=1)) / dwi.shape[-1]
-    import pdb; pdb.set_trace()
-    min_idx = np.argsort(intensities)
-    min_wgs = intensities[min_idx]
-    wgs_max = min_wgs[-1]
-    min_wgs[akcpatch] = wgs_max
-    if not smoothlevel:
-        goodidx = min_wgs < np.median(min_wgs)
-    else:
-        goodidx = min_wgs < np.percentile(min_wgs, smoothlevel)
+    try:
+        psize = (xmax - xmin) * (ymax - ymin) * (zmax - zmin)
+        akcpatch = outlier_locations[xmin:xmax, ymin:ymax, zmin:zmax].flatten()
+        ref = np.tile(np.reshape(dwi_norm[x,y,z,:],(1,dwi.shape[-1])),(psize,1))
+        patch = np.reshape(dwi_norm[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
+        patchorig = np.reshape(dwi[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
+        intensities = np.sqrt(np.sum((patch-ref)**2, axis=1)) / dwi.shape[-1]
+        
+        min_idx = np.argsort(intensities)
+        min_wgs = intensities[min_idx]
+        wgs_max = min_wgs[-1]
+        min_wgs[akcpatch] = wgs_max
+        if not smoothlevel:
+            goodidx = min_wgs < np.median(min_wgs)
+        else:
+            goodidx = min_wgs < np.percentile(min_wgs, smoothlevel)
 
-    min_idx = min_idx[goodidx]
-    min_wgs = min_wgs[goodidx]
-    wgs_max = np.max(min_wgs)
-    wgs_inv = wgs_max - min_wgs
-    wgs_nrm = wgs_inv/np.sum(wgs_inv)
-    wval = (patchorig[min_idx,:] * 
-            (wgs_nrm[...,None] @ np.ones((1,dwi.shape[-1])))
-            ).sum(axis=0)
+        min_idx = min_idx[goodidx]
+        min_wgs = min_wgs[goodidx]
+        wgs_max = np.max(min_wgs)
+        wgs_inv = wgs_max - min_wgs
+        wgs_nrm = wgs_inv/np.sum(wgs_inv)
+        wval = (patchorig[min_idx,:] * 
+                (wgs_nrm[...,None] @ np.ones((1,dwi.shape[-1])))
+                ).sum(axis=0)
+    except:
+        import pdb; pdb.set_trace()
     return wval
 
 def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores=-3):
