@@ -58,7 +58,7 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores
     dwi_norm = abs(dwi) / np.amax(dwi, axis=(0,1,2))
     dwi_new = dwi.copy()
     kernel = 5
-
+    import pdb; pdb.set_trace()
     wval = (Parallel(n_jobs=n_cores, prefer='processes')
             (delayed(parallel_outlier_smooth)(
                 outinds[:,i], kernel, outlier_locations, dwi_norm, dwi, smoothlevel
