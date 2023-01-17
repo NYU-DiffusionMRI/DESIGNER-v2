@@ -141,13 +141,21 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
             raise MRtrixError('input series have different phase encoding directions, series should be processed separately')
         pe_dir_bids = pe_dir[0]
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
+
+        if app.ARGS.echo_time:
+            TE_app = [i for i in app.ARGS.echo_time.rsplit(',')]
+        else:
+            TE_app = None
     except:
         print('no bids files identified')
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
         pe_dir_bids = None
         pf_bids = None
         TE_bids = None
-        TE_app = [i for i in app.ARGS.echo_time.rsplit(',')]
+        if app.ARGS.echo_time:
+            TE_app = [i for i in app.ARGS.echo_time.rsplit(',')]
+        else:
+            TE_app = None
 
     if app.ARGS.bshape:
         bshape = [int(i) for i in app.ARGS.bshape.rsplit(',')]
