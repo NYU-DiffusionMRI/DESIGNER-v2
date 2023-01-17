@@ -25,7 +25,7 @@ def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoo
     patch = np.reshape(dwi_norm[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
     patchorig = np.reshape(dwi[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
     intensities = np.sqrt(np.sum((patch-ref)**2, axis=1)) / dwi.shape[-1]
-
+    import pdb; pdb.set_trace()
     min_idx = np.argsort(intensities)
     min_wgs = intensities[min_idx]
     wgs_max = min_wgs[-1]
@@ -58,7 +58,10 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores
     dwi_norm = abs(dwi) / np.amax(dwi, axis=(0,1,2))
     dwi_new = dwi.copy()
     kernel = 5
-    import pdb; pdb.set_trace()
+    for i in range(len(outinds[0])):
+        wval = parallel_outlier_smooth(outinds[:,i], kernel, outlier_locations, dwi_norm, dwi, smoothlevel)
+
+    
     wval = (Parallel(n_jobs=n_cores, prefer='processes')
             (delayed(parallel_outlier_smooth)(
                 outinds[:,i], kernel, outlier_locations, dwi_norm, dwi, smoothlevel
