@@ -153,7 +153,7 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         pf_bids = None
         TE_bids = None
         if app.ARGS.echo_time:
-            TE_app = [i for i in app.ARGS.echo_time.rsplit(',')]
+            TE_app = [float(i) for i in app.ARGS.echo_time.rsplit(',')]
         else:
             TE_app = None
 
@@ -162,8 +162,7 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
     else:
         bshape = None
 
-    import pdb; pdb.set_trace()
-    if TE_app and (not all(TE_bids == TE_app)):
+    if TE_app and (not TE_bids == TE_app):
         raise MRtrixError('User defined echo times do not match those found in bids .json, please check input data for consistancy')
     elif TE_app:
         TE = TE_app
