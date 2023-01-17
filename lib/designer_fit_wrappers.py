@@ -31,6 +31,7 @@ def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoo
     min_wgs = intensities[min_idx]
     wgs_max = min_wgs[-1]
     min_wgs[akcpatch] = wgs_max
+    
     if not smoothlevel:
         goodidx = min_wgs < np.median(min_wgs)
     else:
