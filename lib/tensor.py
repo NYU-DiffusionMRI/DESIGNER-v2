@@ -366,7 +366,7 @@ class TensorFitting(object):
 
         try:
             N = 10000
-            akc_mask = Parallel(n_jobs=8, prefer='processes')\
+            akc_mask = Parallel(n_jobs=self.n_cores, prefer='processes')\
                 (delayed(self.compute_outliers)
                 (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
                 )
