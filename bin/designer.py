@@ -5,7 +5,7 @@ import numpy as np, gzip, shutil
 __version__ = "0.0.1"
 
 from lib.designer_input_utils import get_input_info, convert_input_data, assert_inputs
-from lib.designer_func_wrappers import run_denoising, run_degibbs, run_eddy, run_b1correct, create_brainmask, run_rice_bias_correct, run_normalization
+from lib.designer_func_wrappers import run_denoising, run_degibbs, run_eddy, run_b1correct, create_brainmask, run_rice_bias_correct, run_normalization, run_patch2self
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -107,7 +107,6 @@ def execute(): #pylint: disable=unused-variable
 
         if app.ARGS.p2c:
             run_patch2self()
-
 
     # rpg gibbs artifact correction
     if app.ARGS.degibbs:

@@ -168,6 +168,8 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         TE = TE_app
     elif TE_bids:
         TE = TE_bids
+    else:
+        TE = None
 
     # if no partial fourier information is found, assume full sampling
     if not args_pf and not pf_bids:
