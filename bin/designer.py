@@ -101,11 +101,11 @@ def execute(): #pylint: disable=unused-variable
         else:
             phasepath = None
 
-        run_denoising(
-            app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
-
         if app.ARGS.p2c:
             run_patch2self()
+        else:
+            run_denoising(
+                app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
 
     # rpg gibbs artifact correction
     if app.ARGS.degibbs:
