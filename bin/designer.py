@@ -89,9 +89,8 @@ def execute(): #pylint: disable=unused-variable
     (idxlist) = convert_input_data(
         isdicom, DWIext, bveclist, bvallist, DWInlist)
 
-    print(TE)
-    print(bshape)
-    import pdb; pdb.set_trace()
+    ####
+    #testuff
 
     app.goto_scratch_dir()
     
