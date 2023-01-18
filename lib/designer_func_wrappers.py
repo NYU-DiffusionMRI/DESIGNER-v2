@@ -74,7 +74,9 @@ def run_patch2self():
     dwi = nii.numpy()
 
     bvals = np.loadtxt('working.bval')
-    out = patch2self(dwi, bvals)
+    dwi_dn = patch2self(dwi, bvals)
+    out = from_numpy(
+        dwi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
     image_write(out, 'working_p2c.nii')
     run.command('mrconvert -force -fslgrad working.bvec working.bval working_p2c.nii working.mif', show=False)
 

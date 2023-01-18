@@ -21,7 +21,7 @@ Now any Python packages you install will be installed into this virtual environe
 ` cd mrtrix3`\
 ` git checkout dev`\
 ` ./configure`\
-` ./build`\
+` ./build`
 
 - Clone and install this repository:\
 ` cd /my/path`\
@@ -54,7 +54,7 @@ designer \
 $meso1,$meso2 designer2_test.mif
 
 tmi \
--DTIparams -DKIparams -WDKI -SMIparams \
+-DTI -DKI -WDKI -SMI \
 -mask designer2_processing_test/brain_mask.nii \
 -sigma designer2_processing_test/sigma.nii \
 -nocleanup \

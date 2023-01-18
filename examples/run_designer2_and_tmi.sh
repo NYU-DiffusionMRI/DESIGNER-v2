@@ -17,9 +17,9 @@ designer \
 -echo_time 0.104,0.104 \
 $meso1,$meso2 designer2_test.mif
 
-# tmi \
-# -DTIparams -DKIparams -WDKI -SMIparams \
-# -mask designer2_processing_test/brain_mask.nii \
-# -sigma designer2_processing_test/sigma.nii \
-# -nocleanup \
-# designer2_test.mif designer2_params_test
+tmi \
+-DTI -DKI -WDKI -SMI \
+-mask designer2_processing_test/brain_mask.nii \
+-sigma designer2_processing_test/sigma.nii \
+-nocleanup \
+designer2_test.mif designer2_params_test
