@@ -61,6 +61,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-pf', metavar=('<PF factor>'), help='Specify the partial fourier factor (e.g. 7/8, 6/8)')
 
     mp_options = cmdline.add_argument_group('Options for specifying mp parameters')
+    mp_options.add_argument('-p2c', action='store_true', help='Perform dwidenoise')
     mp_options.add_argument('-denoise', action='store_true', help='Perform dwidenoise')
     mp_options.add_argument('-shrinkage',metavar=('<shrink>'),help='specify shrinkage type. Options are "threshold" or "frob"', default='frob')
     mp_options.add_argument('-algorithm',metavar=('<alg>'),help='specify MP algorithm. Options are "veraart","cordero-grande","jespersen"',default='cordero-grande')
@@ -103,6 +104,10 @@ def execute(): #pylint: disable=unused-variable
 
         run_denoising(
             app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
+
+        if app.ARGS.p2c:
+            run_patch2self()
+
 
     # rpg gibbs artifact correction
     if app.ARGS.degibbs:

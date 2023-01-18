@@ -63,6 +63,22 @@ def run_denoising(args_extent, args_phase, args_shrinkage, args_algorithm):
     #run.command('dwidenoise -noise fullnoisemap.mif -estimator Exp2 working.mif dwidn.mif')
     run.command('mrconvert -force dwidn.mif working.mif', show=False)
 
+def run_patch2self():
+    from mrtrix3 import run, app
+    from dipy.denoise.patch2self import patch2self
+    from ants import image_read, image_write, from_numpy
+    import numpy as np
+
+    run.command('mrconvert -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+    nii = image_read('working.nii')
+    dwi = nii.numpy()
+
+    bvals = np.loadtxt('working.bval')
+    out = patch2self(dwi, bvals)
+    image_write(out, 'working_p2c.nii')
+    run.command('mrconvert -force -fslgrad working.bvec working.bval working_p2c.nii working.mif', show=False)
+
+
 def run_degibbs(pf, pe_dir):
     import lib.gibbs_removal_rpg as rpg
     from mrtrix3 import run, app
