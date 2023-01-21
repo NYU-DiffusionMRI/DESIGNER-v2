@@ -17,11 +17,18 @@ run_rice_bias_correct:
 run_normalization:
 """
 
-def run_denoising(args_extent, args_phase, args_shrinkage, args_algorithm):
-    import lib.mpcomplex as mp #pylint: disable=import-error
+def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
+    import lib.mpcomplex as mp
+
+
     from mrtrix3 import run, app
     from ants import image_read, image_write, from_numpy
     import numpy as np
+
+    if app.ARGS.adaptive_patch:
+        import lib.mpdenoise_sj as mp
+    else:
+        import lib.mpcomplex as mp
 
     if args_extent:
         extent = args_extent
@@ -36,12 +43,17 @@ def run_denoising(args_extent, args_phase, args_shrinkage, args_algorithm):
     dwi = nii.numpy()
     #sx,sy,sz,N = np.shape(dwi)
 
+    # note adaptive patch does not include mpcomplex
     n_cores = app.ARGS.n_cores
     print('...denoising...')
-    # nonlocal denoising, no shrinkage
-    Signal, Sigma, Nparameters = mp.denoise(
-        dwi, phase=args_phase, kernel=extent, shrinkage=args_shrinkage, algorithm=args_algorithm, n_cores=n_cores
-        )
+    if app.ARGS.adaptive_patch:
+        Signal, Sigma, Nparameters = mp.denoise(
+            dwi, patchtype='nonlocal', shrinkage=args_shrinkage, algorithm=args_algorithm)
+        Sigma[np.isnan(Sigma)] = 0
+    else:    
+        Signal, Sigma, Nparameters = mp.denoise(
+            dwi, phase=args_phase, kernel=extent, shrinkage=args_shrinkage, algorithm=args_algorithm, n_cores=n_cores
+            )
     Sigma[np.isnan(Sigma)] = 0
 
     out = from_numpy(

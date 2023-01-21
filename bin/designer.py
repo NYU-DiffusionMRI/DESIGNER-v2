@@ -5,7 +5,7 @@ import numpy as np, gzip, shutil
 __version__ = "0.0.1"
 
 from lib.designer_input_utils import get_input_info, convert_input_data, assert_inputs
-from lib.designer_func_wrappers import run_denoising, run_degibbs, run_eddy, run_b1correct, create_brainmask, run_rice_bias_correct, run_normalization, run_patch2self
+from lib.designer_func_wrappers import run_mppca, run_degibbs, run_eddy, run_b1correct, create_brainmask, run_rice_bias_correct, run_normalization, run_patch2self
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -67,6 +67,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     mp_options.add_argument('-algorithm',metavar=('<alg>'),help='specify MP algorithm. Options are "veraart","cordero-grande","jespersen"',default='cordero-grande')
     mp_options.add_argument('-extent', metavar=('<size>'), help='Denoising extent. Default is 5,5,5')
     mp_options.add_argument('-phase', metavar=('<image>'), help='Diffusion phases', default=None)
+    mp_options.add_argument('-adaptive_patch', action='store_true', help='Run MPPCA with adaptive patching')
     
     rpe_options = cmdline.add_argument_group('Options for specifying the acquisition phase-encoding design')
     rpe_options.add_argument('-rpe_none', action='store_true', help='Specify that no reversed phase-encoding image data is being provided; eddy will perform eddy current and motion correction only')
@@ -104,7 +105,7 @@ def execute(): #pylint: disable=unused-variable
         if app.ARGS.p2c:
             run_patch2self()
         else:
-            run_denoising(
+            run_mppca(
                 app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
 
     # rpg gibbs artifact correction
