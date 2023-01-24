@@ -81,7 +81,7 @@ def run_patch2self():
     from ants import image_read, image_write, from_numpy
     import numpy as np
 
-    run.command('mrconvert -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+    run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     nii = image_read('working.nii')
     dwi = nii.numpy()
 
@@ -99,7 +99,7 @@ def run_degibbs(pf, pe_dir):
     from ants import image_read, image_write, from_numpy
 
     # convert working.mif to nii
-    run.command('mrconvert -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+    run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     nii = image_read('working.nii')
     dwi = nii.numpy()
     print("...RPG degibbsing...")
