@@ -12,16 +12,6 @@ long_description = '''designer and TMI package for use with brain
     current and motion, and normalization. TMI is used for dti/dti/wmti/smi
     along with outlier corection.'''
 
-# module1 = Extension('rpg',
-#                     define_macros = [('MAJOR_VERSION', '1'),
-#                                      ('MINOR_VERSION', '0')],
-#                     include_dirs = ['rpg_cpp/thirdparty/fftw/include', 'rpg_cpp/thirdparty/nifticlib-2.0.0/include'],
-#                     libraries = ['nifticdf','niftiio','fftw3','znz','z'],
-#                     library_dirs = ['rpg_cpp/thirdparty/nifticlib-2.0.0/lib','rpg_cpp/thirdparty/fftw/lib'],
-#                     sources = ['rpg_cpp/unring_rpg.cpp'],
-#                     language = 'c++'
-#                     )
-
 def change_permissions_recursive(path, mode):
     for root, dirs, files in os.walk(path, topdown=False):
         for dir in [os.path.join(root, d) for d in dirs]:
@@ -29,8 +19,8 @@ def change_permissions_recursive(path, mode):
     for file in [os.path.join(root, f) for f in files]:
             os.chmod(file, mode)
 
-change_permissions_recursive('rpg_cpp', 0o777)
-subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
+#change_permissions_recursive('rpg_cpp', 0o777)
+#subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
 
 setup(
         name ='designer',
@@ -44,12 +34,12 @@ setup(
         license ='NYU',
         #scripts=['bin/designer', 'bin/tmi'],
         packages = find_packages(),
-        data_files=[('constant', glob('constant/*')), ('lib', ['rpg_cpp/rpg'])],
+        data_files=[('constant', glob('constant/*')), ('rpg_cpp', ['rpg_cpp/rpg'])],
         include_package_data=True,
         entry_points = {
             'console_scripts': [
-                'designer = bin.designer:main',
-                'tmi = bin.tmi:main'
+                'designer = src.designer:main',
+                'tmi = src.tmi:main'
             ]
         },
         classifiers = [

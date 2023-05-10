@@ -17,238 +17,11 @@ run_rice_bias_correct:
 run_normalization:
 """
 
-class QC(object):
-    def __init__(self, dwi_metadata):
-
-        self.idxlist = dwi_metadata['idxlist']
-        self.telist = dwi_metadata['TE']
-
-    def run_qc(self, tag):
-        import ants
-        from mrtrix3 import app, run, path, image, fsl, MRtrixError
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
-        import numpy as np
-        from lib.smi import SMI
-        import os
-        import pandas
-
-        qc_dir = path.to_scratch('QC-' + tag)
-        os.mkdir(qc_dir)
-        fsl_suffix = fsl.suffix()
-
-        run.command('mrconvert -force -export_grad_fsl %s %s %s %s' %
-                    (os.path.join(qc_dir,'working_qc.bvec'),
-                     os.path.join(qc_dir,'working_qc.bval'),
-                     path.to_scratch('working.mif'),
-                     os.path.join(qc_dir,'working_qc.nii')),
-                    show=False)
-
-        run.command('dwiextract -force -bzero %s - | mrmath - mean %s -force -axis 3' %
-                        (path.to_scratch('working.mif'), 
-                        os.path.join(qc_dir,'b0_qc.nii')),
-                        show=False)
-        run.command('bet %s %s -f 0.2 -m' %
-                        (os.path.join(qc_dir,'b0_qc.nii'), 
-                        os.path.join(qc_dir,'b0_qc_brain')),
-                        show=False)
-        
-        nii = ants.image_read(os.path.join(qc_dir,'working_qc.nii'))
-        dwi = nii.numpy()
-        dwi[dwi <= 0] = np.finfo(dwi.dtype).eps
-        bval = np.loadtxt(os.path.join(qc_dir,'working_qc.bval'))
-        bvec = np.loadtxt(os.path.join(qc_dir,'working_qc.bvec'))
-
-        nii_mask = ants.image_read(os.path.join(qc_dir,'b0_qc_brain' + fsl_suffix))
-        mask = nii_mask.numpy()
-
-        order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
-        if order >= 2:
-            bval = bval / 1000
-
-        idxlist = self.idxlist
-        telist = self.telist
-
-        unique_bvals = np.unique(bval)
-
-        # create table of unique b-values and echo times
-        mad_table = np.zeros((len(telist), len(np.unique(bval))))
-
-        for idx,i in enumerate(idxlist):
-            inds_int = [int(j) for j in i.split(',')]
-
-            dwii = dwi[:,:,:,inds_int]
-            bvali = bval[inds_int]
-            bveci = bvec[:,inds_int]
-
-            b0i = np.mean(dwii[:,:,:,bvali==0], axis=-1)
-            dwii_norm = dwii / b0i[...,None]
-            
-            # fit spherical harmonics
-            smi = SMI(bval=bvali, bvec=bveci)
-            smi.set_lmax_rotinv_smi()
-            smi.dwishape = dwii.shape
-            smi.set_mask(None)
-            smi.project_forward_SH = True
-
-            n_sh_coeffs = (1 + smi.l_max * (smi.l_max + 3) / 2).astype(int)
-            shproji, dwii_shproj = smi.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwii_norm, smi.mask)
-
-            for idxj,j in enumerate(np.unique(bvali)):
-                binds = np.where(bvali == j)[0]
-                ndirs = len(binds)
-                ncoeffs = n_sh_coeffs[idxj]
-                dwij = dwii_norm[:,:,:,binds]
-                dwij_shproj = dwii_shproj[:,:,:,binds]
-                madj= np.median(np.absolute(dwij - dwij_shproj)) * 1.4826
-                madj_norm = madj * np.sqrt(ndirs/(ndirs-ncoeffs))
-                
-                bval_index = np.where(j == unique_bvals)[0]
-                mad_table[idx,bval_index] = madj_norm
-        # import pdb; pdb.set_trace()
-
-def eddy_qc(dwi_metadata, tag):
-    import ants
-    from mrtrix3 import app, run, path, image, fsl, MRtrixError
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-    import numpy as np
-    from lib.smi import SMI
-
-    fsl_suffix = fsl.suffix()
-
-    run.command('mrconvert -force -export_grad_fsl working_preeddy.bvec working_preeddy.bval working.mif working_preeddy.nii', show=False)
-    run.command('dwiextract -force -bzero %s - | mrmath - mean %s -force -axis 3' %
-                    (path.to_scratch('working.mif'), 
-                    path.to_scratch('b0_working.nii')),
-                    show=False)
-    run.command('bet %s %s -f 0.2 -m' %
-                    (path.to_scratch('b0_working.nii'), 
-                    path.to_scratch('b0_working_brain')),
-                    show=False)
-    nii = ants.image_read('working_preeddy.nii')
-    dwi = nii.numpy()
-    dwi[dwi <= 0] = np.finfo(dwi.dtype).eps
-    bval = np.loadtxt('working_preeddy.bval')
-    bvec = np.loadtxt('working_preeddy.bvec')
-
-    nii_mask = ants.image_read('b0_working_brain' + fsl_suffix)
-    mask = nii_mask.numpy()
-
-    order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
-    if order >= 2:
-        bval = bval / 1000
-
-    idxlist = dwi_metadata['idxlist']
-    residual = np.zeros((dwi.shape[-1]))
-    residual_im = np.zeros((dwi.shape[0], dwi.shape[1], dwi.shape[2], len(idxlist)))
-    for idx,i in enumerate(idxlist):
-        inds_int = [int(j) for j in i.split(',')]
-
-        dwii = dwi[:,:,:,inds_int]
-        bvali = bval[inds_int]
-        bveci = bvec[:,inds_int]
-
-        b0i = np.mean(dwii[:,:,:,bvali==0], axis=-1)
-        dwii_norm = dwii / b0i[...,None]
-        
-        # fit spherical harmonics
-        smi = SMI(bval=bvali, bvec=bveci)
-        smi.set_lmax_rotinv_smi()
-        smi.dwishape = dwii.shape
-        smi.set_mask(None)
-        smi.project_forward_SH = True
-
-        n_sh_coeffs = (1 + smi.l_max * (smi.l_max + 3) / 2).astype(int)
-        shproji, dwii_shproj = smi.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwii_norm, smi.mask)
-
-        mad = np.zeros((dwii_shproj.shape[-1]))
-        mad_im = np.zeros((dwii.shape[0], dwii.shape[1], dwii.shape[2], len(bvali)))
-        s0b_im = mad_im.copy()
-        for idxj,j in enumerate(np.unique(bvali)):
-            
-            binds = np.where(bvali == j)[0]
-            ndirs = len(binds)
-            ncoeffs = n_sh_coeffs[idxj]
-            dwij = dwii_norm[:,:,:,binds]
-            dwij_shproj = dwii_shproj[:,:,:,binds]
-            madj= np.median(np.absolute(dwij - dwij_shproj), axis=(0,1,2)) * 1.4826
-            madj_norm = madj * np.sqrt(ndirs/(ndirs-ncoeffs))
-            mad[binds] = madj_norm
-            mad_im[:,:,:,idxj] = np.median(np.absolute(dwij - dwij_shproj), axis=-1) * 1.4826 * np.sqrt(ndirs/(ndirs-ncoeffs))
-            s0b_im[:,:,:,idxj] = shproji[:,:,:,0,idxj]
-
-        residual_im[:,:,:,idx] = np.mean(mad_im, axis=-1)
-        residual[inds_int] = mad
-
-    ref = ants.from_numpy(dwi[:,:,:,0], 
-        origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
-    mutual_info = []
-    for i in range(1, dwi.shape[-1]):
-        mov = ants.from_numpy(dwi[:,:,:,i],
-            origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
-        mi = ants.image_mutual_information(ref, mov)
-        mutual_info.append(mi)
-
-        if i == 200:
-            ants.image_write(mov,'test_ants_dir.nii')
-
-    # residual = np.mean((residual)**2, axis=(0,1,2))
-
-    mutual_info = abs(np.array(mutual_info))
-    idxlist = dwi_metadata['idxlist']
-    allinds = []
-    start = 0
-    n = len(idxlist)
-    colors = plt.cm.jet(np.linspace(0,1,n))
-
-    # plt.figure(figsize=(10,5))
-    # grid = plt.GridSpec(4, 4, wspace = 0.3, hspace = 0.8)
-    # for idx,i in enumerate(idxlist):
-    #     series_inds = i.split(",")
-    #     series_inds = np.array([int(j) for j in series_inds])
-    #     if series_inds[0] == 0:
-    #         series_inds = series_inds[1:]
-    #     plt.plot(series_inds, mutual_info[start:len(series_inds)+start], color=colors[idx], label='series ' + str(idx + 1))
-    #     start += len(series_inds)
-    # plt.legend()
-    # plt.ylabel('Mutual Information')
-    # plt.xlabel('Volume index')
-    # plt.savefig(tag + '_eddy_mutual_information.png')
-
-    start = 0
-    plt.figure(figsize = (12, 5))
-    grid = plt.GridSpec(1, 3, wspace =0.3, hspace = 0.8)
-    g1 = plt.subplot(grid[0, :2])
-    g2 = plt.subplot(grid[0, 2])
-
-    #fig, ax = plt.subplots(1, 2, figsize=(12,6), gridspec_kw={'width_ratios': [2, 1]})
-    #fig.tight_layout()
-    for idx,i in enumerate(idxlist):
-        series_inds = i.split(",")
-        series_inds = np.array([int(j) for j in series_inds])
-        g1.plot(series_inds, residual[start:len(series_inds)+start], color=colors[idx], label='series ' + str(idx + 1))
-        start += len(series_inds)
-    g1.legend()
-    g1.set_ylabel('MAD')
-    g1.set_xlabel('Volume index')
-    g1.set_ylim([0.1, .5])
-    g1.set_title('SH residuals')
-    
-    mad_vol = np.mean(mad_im, axis=-1)
-    mad_vol[mask == 0] = 0
-    im = g2.imshow(mad_vol[:,:,dwi.shape[2]//2], vmin=0, vmax=0.025, aspect='equal')
-    g2.set_title('mean MAD over all q')
-    asp = np.abs(np.diff(g2.get_xlim())[0] / np.diff(g2.get_ylim())[0])
-    asp /= np.abs(np.diff(g1.get_xlim())[0] / np.diff(g1.get_ylim())[0])
-    g2.set_aspect(asp*np.diff(g1.get_xlim())[0])
-    divider = make_axes_locatable(g2)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    plt.colorbar(im, cax=cax)
-    plt.savefig(tag + '_SHfit_residual.png')
-
-
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
+    """
+    wrapper for complex or magnitude, adatpive or local mppca
+    
+    """
     from mrtrix3 import run, app
     from ants import image_read, image_write, from_numpy
     import numpy as np
@@ -303,6 +76,9 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
     run.command('mrconvert -force dwidn.mif working.mif', show=False)
 
 def run_patch2self():
+    """
+    wrapper for patch2self
+    """
     from mrtrix3 import run, app
     from dipy.denoise.patch2self import patch2self
     from ants import image_read, image_write, from_numpy
@@ -321,9 +97,16 @@ def run_patch2self():
 
 
 def run_degibbs(pf, pe_dir):
+    """
+    wrapper for rpg degibbs
+    """
+
     import lib.gibbs_removal_rpg as rpg
     from mrtrix3 import run, app
     from ants import image_read, image_write, from_numpy
+    import os
+
+    rpg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'rpg_cpp')
 
     # convert working.mif to nii
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
@@ -338,17 +121,34 @@ def run_degibbs(pf, pe_dir):
     elif pe_dir[0] == 'k':
         pe_rpg = 2
     
-    pf = float(pf)
     n_cores = app.ARGS.n_cores
 
     print('Gibbs correction with parameters:')
     print('phase-encoding direction = %s' % (pe_dir))
     print('partial-fourier factor   = %s' % (pf))
-    
-    img_dg = rpg.gibbs_removal(dwi, pf_fact=pf, pe_dim=pe_rpg, nproc=n_cores)
-    out = from_numpy(
-        img_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
-    image_write(out, 'working_rpg.nii')
+
+
+    if 'i' in pe_dir:
+        pe_dir = 'x'
+    elif 'j' in pe_dir:
+        pe_dir = 'y'
+    elif 'k' in pe_dir:
+        pe_dir = 'z'
+    else:
+        pe_dir = 'y'
+
+    run.command('%s -pf %s -dim %s %s %s' %
+                (os.path.join(rpg_path,'rpg'),
+                pf, 
+                pe_dir,
+                'working.nii',
+                'working_rpg.nii'
+                ), show=False)
+
+    # img_dg = rpg.gibbs_removal(dwi, pf_fact=pf, pe_dim=pe_rpg, nproc=n_cores)
+    # out = from_numpy(
+    #     img_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+    # image_write(out, 'working_rpg.nii')
 
     #convert gibbs corrected nii to .mif
     run.command('mrconvert -force -fslgrad working.bvec working.bval working_rpg.nii working.mif', show=False)
@@ -498,20 +298,10 @@ def run_pre_align(dwi_metadata):
         
     group_alignment(series_list)
 
-    if app.ARGS.qc:
-        qc = QC(dwi_metadata)
-        qc.run_qc('series_alignment')
-        #eddy_qc(dwi_metadata, 'series_aligned')
-
-
 def run_ants_moco(dwi_metadata):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
 
     pre_eddy_ants_moco(dwi_metadata)
-
-    if app.ARGS.qc:
-        eddy_qc(dwi_metadata, 'ants_motion_corrected')    
-
 
 def run_eddy(shell_table, dwi_metadata):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
@@ -754,9 +544,6 @@ def run_eddy(shell_table, dwi_metadata):
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
-
-    if app.ARGS.qc:
-        eddy_qc(dwi_metadata, 'eddy')  
 
     run.command('mrconvert -force dwiec.mif working.mif', show=False)
 

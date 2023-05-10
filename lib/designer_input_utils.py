@@ -149,7 +149,7 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
         if app.ARGS.echo_time:
             TE_app = [float(i) for i in app.ARGS.echo_time.rsplit(',')]
         else:
-            TE_app = [None] * len(bidslist)
+            TE_app = [0] * len(bidslist)
     except:
         print('no bids files identified')
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
@@ -159,7 +159,7 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
         if app.ARGS.echo_time:
             TE_app = [float(i) for i in app.ARGS.echo_time.rsplit(',')]
         else:
-            TE_app = [None] * len(dwi_metadata['dwi_list'])
+            TE_app = [0] * len(dwi_metadata['dwi_list'])
 
     if app.ARGS.bshape:
         bshape = [float(i) for i in app.ARGS.bshape.rsplit(',')]
@@ -173,7 +173,7 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
     elif TE_bids:
         TE = TE_bids
     else:
-        TE = [None] * len(dwi_metadata['dwi_list'])
+        TE = [0] * len(dwi_metadata['dwi_list'])
 
     # if no partial fourier information is found, assume full sampling
     if not args_pf and not pf_bids:
@@ -196,13 +196,31 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
         pf = pf_bids
     else:
         pf = args_pf
+    
+    def convert_to_float(frac_str):
+        try:
+            return float(frac_str)
+        except ValueError:
+            num, denom = frac_str.split('/')
+            try:
+                leading, num = num.split(' ')
+                whole = float(leading)
+            except ValueError:
+                whole = 0
+            frac = float(num) / float(denom)
+            return whole - frac if whole < 0 else whole + frac
 
     dwi_metadata['pe_dir'] = pe_dir
-    dwi_metadata['pf'] = pf
+    dwi_metadata['pf'] = convert_to_float(pf)
     dwi_metadata['TE'] = TE
     dwi_metadata['bshape'] = bshape
 
 def convert_input_data(dwi_metadata):
+    """
+    convert input data to .mif mrtrix format
+    concatenates all inputs along 4th dimension
+    
+    """
     from mrtrix3 import run, image, MRtrixError, app
     import numpy as np
 
@@ -229,6 +247,9 @@ def convert_input_data(dwi_metadata):
             cmd = ('mrconvert %s %s/dwi.mif' %
             (''.join(dwi_n_list), app.SCRATCH_DIR))
             run.command(cmd)
+        dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))
+        dwi_ind_size.append([ int(s) for s in dwi_header.size() ])
+
     else:
         for idx,i in enumerate(dwi_n_list):
             if not isdicom:
