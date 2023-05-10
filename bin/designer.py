@@ -4,8 +4,8 @@ import os, sys
 import numpy as np, gzip, shutil
 __version__ = "0.0.1"
 
-from lib.designer_input_utils import get_input_info, convert_input_data, assert_inputs
-from lib.designer_func_wrappers import run_mppca, run_degibbs, run_eddy, run_b1correct, create_brainmask, run_rice_bias_correct, run_normalization, run_patch2self
+from lib.designer_input_utils import *
+from lib.designer_func_wrappers import *
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -56,45 +56,56 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasts, by default designer will use available cores - 2', default=-3)
     options.add_argument('-echo_time',metavar=('<TE1,TE2,...>'),help='specify the echo time used in the acquisition (comma separated list the same length as number of inputs)')
     options.add_argument('-bshape',metavar=('<beta1,beta2,...>'),help='specify the b-shape used in the acquisition (comma separated list the same length as number of inputs)')
+    options.add_argument('-pre_align',action='store_true',help='rigidly align each input series to correct for large motion between series')
+    options.add_argument('-ants_motion_correction',action='store_true',help='perform rigid motion correction using ANTs (useful for cases where eddy breaks down)')
+    options.add_argument('-qc',action='store_true',help='output quality control metrics')
 
     options.add_argument('-pe_dir', metavar=('<phase encoding direction>'), help='Specify the phase encoding direction of the input series (required if using the eddy option). Can be a signed axis number (e.g. -0, 1, +2), an axis designator (e.g. RL, PA, IS), or NIfTI axis codes (e.g. i-, j, k)')
     options.add_argument('-pf', metavar=('<PF factor>'), help='Specify the partial fourier factor (e.g. 7/8, 6/8)')
 
-    mp_options = cmdline.add_argument_group('Options for specifying mp parameters')
-    mp_options.add_argument('-p2c', action='store_true', help='Perform dwidenoise')
-    mp_options.add_argument('-denoise', action='store_true', help='Perform dwidenoise')
-    mp_options.add_argument('-shrinkage',metavar=('<shrink>'),help='specify shrinkage type. Options are "threshold" or "frob"', default='frob')
+    mp_options = cmdline.add_argument_group('Options for specifying denoising parameters')
+    mp_options.add_argument('-patch2self', action='store_true', help='Perform patch2self')
+    mp_options.add_argument('-denoise', action='store_true', help='Perform MPPCA')
+    mp_options.add_argument('-shrinkage',metavar=('<shrink>'),help='specify shrinkage type for MPPCA. Options are "threshold" or "frob"', default='frob')
     mp_options.add_argument('-algorithm',metavar=('<alg>'),help='specify MP algorithm. Options are "veraart","cordero-grande","jespersen"',default='cordero-grande')
-    mp_options.add_argument('-extent', metavar=('<size>'), help='Denoising extent. Default is 5,5,5')
+    mp_options.add_argument('-extent', metavar=('<size>'), help='MPPCA Denoising extent. Default is 5,5,5')
     mp_options.add_argument('-phase', metavar=('<image>'), help='Diffusion phases', default=None)
     mp_options.add_argument('-adaptive_patch', action='store_true', help='Run MPPCA with adaptive patching')
     
-    rpe_options = cmdline.add_argument_group('Options for specifying the acquisition phase-encoding design')
+    rpe_options = cmdline.add_argument_group('Options for eddy and to specify the acquisition phase-encoding design')
+    rpe_options.add_argument('-eddy_groups',metavar=('<index1,index2,...'),help='specify how input series should be grouped when running eddy, for use with variable TE or b-shape data. (Comma separared list of intergers beginning with 1, i.e. 1,1,1,2,2,2 for 6 series where the first 3 series and second 3 series have different echo times).', default=None)
     rpe_options.add_argument('-rpe_none', action='store_true', help='Specify that no reversed phase-encoding image data is being provided; eddy will perform eddy current and motion correction only')
     rpe_options.add_argument('-rpe_pair', metavar=('<reverse PE b=0 image>'), help='Specify the reverse phase encoding image')
     rpe_options.add_argument('-rpe_all', metavar=('<reverse PE dwi volume>'), help='Specify that ALL DWIs have been acquired with opposing phase-encoding; this information will be used to perform a recombination of image volumes (each pair of volumes with the same b-vector but different phase encoding directions will be combined together into a single volume). The argument to this option is the set of volumes with reverse phase encoding but the same b-vectors as the input image')
     rpe_options.add_argument('-rpe_header', action='store_true', help='Specify that the phase-encoding information can be found in the image header(s), and that this is the information that the script should use')
+    rpe_options.add_argument('-rpe_te', metavar=('<echo time (s)>'), help='Specify the echo time of the reverse phase encoded image, if it is not accompanied by a bids .json sidecar.')
 
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
     
+    # create a temparary directory to store processing files
     app.make_scratch_dir()
     
+    # grab the fsl suffix stored in $FSLOUTPUTTYPLE
     fsl_suffix = fsl.suffix()
 
-    (isdicom, DWIext, bveclist, bvallist, DWInlist, bidslist) = get_input_info(
+    # create dict containing metadata from either user input args or bids .json sidecars
+    dwi_metadata = get_input_info(
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
     
-    (pe_dir, pf, TE, bshape) = assert_inputs(bidslist, app.ARGS.pe_dir, app.ARGS.pf)
+    # ensure inputs are reasonable for subsequent dwi processing
+    assert_inputs(dwi_metadata, app.ARGS.pe_dir, app.ARGS.pf)
 
-    (idxlist) = convert_input_data(
-        isdicom, DWIext, bveclist, bvallist, DWInlist)
+    # convert input data to .mif format and concatenate
+    convert_input_data(dwi_metadata)
 
-    ####
-    #testuff
+    # get a table of b-shells, echo times, and b-shapes
+    shell_table = create_shell_table(dwi_metadata)
 
     app.goto_scratch_dir()
     
+    # begin pipeline
+
     # denoising
     if app.ARGS.denoise:
         if app.ARGS.phase:
@@ -102,21 +113,33 @@ def execute(): #pylint: disable=unused-variable
         else:
             phasepath = None
 
-        if app.ARGS.p2c:
-            run_patch2self()
-        else:
-            run_mppca(
-                app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
+        # by default perform mppca denoising with optional phase denoising for complex data
+        run_mppca(
+            app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
+    
+    # patch2self can be run either in addition or alternatively to mppca
+    if app.ARGS.patch2self:
+        run_patch2self()
 
     # rpg gibbs artifact correction
     if app.ARGS.degibbs:
-        run_degibbs(pf, pe_dir)
+        run_degibbs(dwi_metadata['pf'], dwi_metadata['pe_dir'])
 
+    # rigid alignment of b0s from separate input series
+    if app.ARGS.pre_align:
+        run_pre_align(dwi_metadata)
+
+    # rigid alignment of each dwi volume to the prior volume
+    if app.ARGS.ants_motion_correction:
+        run_ants_moco(dwi_metadata)
+
+    # eddy current, succeptibility, motion correction
     if app.ARGS.eddy:
-        run_eddy(pe_dir, app.ARGS.rpe_pair)
+        run_eddy(shell_table, dwi_metadata)
 
+    # b1 bias correction
     if app.ARGS.b1correct:
-        run_b1correct(DWInlist, idxlist)
+        run_b1correct(dwi_metadata)
 
     # generate a final brainmask
     if app.ARGS.mask or app.ARGS.normalize:
@@ -128,8 +151,9 @@ def execute(): #pylint: disable=unused-variable
     elif app.ARGS.rician and not app.ARGS.phase:
         run_rice_bias_correct()
 
+    # normalize separate input series (voxelwise) such that b0 images are properly scaled
     if app.ARGS.normalize:
-        run_normalization(DWInlist, idxlist)
+        run_normalization(dwi_metadata)
 
     run.command('mrinfo -export_grad_fsl dwi_designer.bvec dwi_designer.bval working.mif', show=False)
     run.command('mrconvert -force -datatype float32le working.mif dwi_designer.nii', show=False)

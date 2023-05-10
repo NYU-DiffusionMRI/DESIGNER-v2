@@ -2,24 +2,38 @@
 
 #root=/Volumes/Research/fieree01lab
 root=/mnt
-datapath=$root/labspace/Projects/MESO_v2.0/ALLSUBJS_2.0/M9734
-meso1=M9734_074YM_DIFF_meso.nii
-meso2=M9734_074YM__DIFF_meso_research.nii
-pa=M9734_074YM_DIFF_meso_PA.nii
+datapath=$root/labspace/Santiago/PyDesigner/ValidationData/subj_1_22oct21/LTE_ZTE_variableTE
+dwi1=20211022_194435sc1DIFF2isoTE92LTEs031a001.nii.gz
+dwi2=20211022_194435sc1FWF2isoTE92PTEs005a001.nii.gz
+dwi3=20211022_194435sc1FWF2isoTE92STEs007a001.nii.gz
+dwi4=20211022_194435sc1FWF2isoTE62LTEs009a001.nii.gz
+dwi5=20211022_194435sc1FWF2isoTE78PTEs013a001.nii.gz
+dwi6=20211022_194435sc1FWF2isoTE130LTEs011a001.nii.gz
+pa=20211022_194435sc1FWF2isoTE62LTEPAs015a1001.nii.gz
 
 cd $datapath
 
-designer \
--denoise -algorithm jespersen -extent 7,7,7 \
--degibbs \
--mask \
--scratch designer2_processing_test -nocleanup \
--echo_time 0.104,0.104 \
-$meso1,$meso2 designer2_test.mif
+# designer \
+# -eddy -rpe_pair $pa -rpe_te 62 -pe_dir AP \
+# -echo_time 92,92,92,62,78,130 \
+# -bshape 1,-0.5,0,1,-0.5,1 \
+# -eddy_groups 1,2,3,4,5,6 \
+# -scratch designer2_processing_test -nocleanup \
+# $dwi1,$dwi2,$dwi3,$dwi4,$dwi5,$dwi6 designer2_test.mif
 
-tmi \
--DTI -DKI -WDKI -SMI \
--mask designer2_processing_test/brain_mask.nii \
--sigma designer2_processing_test/sigma.nii \
--nocleanup \
-designer2_test.mif designer2_params_test
+designer \
+-pre_align -qc -ants_motion_correction \
+-eddy -rpe_pair $pa -rpe_te 62 -pe_dir AP \
+-echo_time 92,92,92,62,78,130 \
+-bshape 1,-0.5,0,1,-0.5,1 \
+-eddy_groups 1,2,3,4,5,6 \
+-scratch designer2_processing_test -nocleanup \
+$dwi1,$dwi2,$dwi3,$dwi4,$dwi5,$dwi6 designer2_test.mif
+
+
+# tmi \
+# -DTI -DKI -WDKI -SMI \
+# -mask designer2_processing_test/brain_mask.nii \
+# -sigma designer2_processing_test/sigma.nii \
+# -nocleanup \
+# designer2_test.mif designer2_params_test

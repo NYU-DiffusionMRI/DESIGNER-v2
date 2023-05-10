@@ -18,7 +18,7 @@ import warnings
 
 class SMI(object):
 
-    def __init__(self, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
+    def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=4e4, 
         l_max_training = None):
@@ -67,6 +67,11 @@ class SMI(object):
             self.flag_rician_bias = False
         elif noise_bias == 'rician':
             self.flag_rician_bias = True
+
+        # set up required inputs
+        self.set_bvals_bvecs(bval, bvec)
+        self.set_bshape(beta)
+        self.set_echotime(echo_time)
 
     def set_mask(self, mask):
         """
@@ -117,7 +122,7 @@ class SMI(object):
                 
 
     def set_bshape(self, beta):
-        if not beta:
+        if beta is None:
             self.beta = np.zeros(self.b.shape) + 1
         else:
             self.beta = beta
@@ -135,12 +140,12 @@ class SMI(object):
 
 
     def set_echotime(self, echo_time):
-        if not echo_time:
+        if echo_time is None:
             self.echo_time = np.zeros(self.b.shape)
         else:
             self.echo_time = echo_time
 
-        if not echo_time or len(np.unique(echo_time)) == 1:
+        if (echo_time is None) or (len(np.unique(echo_time)) == 1):
             self.fit_T2 = 0
         else:
             self.fit_T2 = 1
@@ -463,7 +468,7 @@ class SMI(object):
         for i in range(n_shells):
             ids_current_cluster = (
                 id_measurements[(abs(bb[0,i] - self.b) < self.merge_distance) &
-                (abs(bb[1,i]-self.beta) < self.merge_distance) &
+                (abs(bb[1,i] - self.beta) < self.merge_distance) &
                 (abs(bb[3,i] - self.echo_time) < 1e-1)]
             )
             if abs(len(ids_current_cluster) - bb[2,i]) > 0.1:
@@ -510,16 +515,39 @@ class SMI(object):
             sl = np.zeros((sz_dwi[0], sz_dwi[1], sz_dwi[2], int(np.max(l_max)/2+1), n_shells))
             slm = np.zeros((sz_dwi[0], sz_dwi[1], sz_dwi[2], np.max(n_sh_coeffs), n_shells))
             for i in range(n_shells):
-                sl[:,:,:,:,i] = self.vectorize(s_l_clusters_all[:,:,i], self.mask)
-                slm[:,:,:,:,i] = self.vectorize(s_lm_clusters_all[:,:,i], self.mask)
+                try:
+                    sl[:,:,:,:,i] = self.vectorize(s_l_clusters_all[:,:,i], self.mask)
+                    slm[:,:,:,:,i] = self.vectorize(s_lm_clusters_all[:,:,i], self.mask)
+                except:
+                    sl[:,:,:,:,i] = self.vectorize(s_l_clusters_all[:,:,i], self.mask)[...,None]
+                    slm[:,:,:,:,i] = self.vectorize(s_lm_clusters_all[:,:,i], self.mask)[...,None]
         else:
             sl = s_l_clusters_all
             slm = s_lm_clusters_all
         
         ids = np.hstack(ids_current_cluster_all)
 
-        return sl.reshape(sl.shape[0], sl.shape[1], sl.shape[2], -1)
+        if self.project_forward_SH:
 
+            group_clusters_all = ids[0, :]
+            ids_clusters_all = ids[1, :]
+            n_clusters = len(np.unique(group_clusters_all))
+            signal = np.zeros_like(dwi_2D)
+            for ii in range(n_clusters):
+                ids_current_cluster = ids_clusters_all[group_clusters_all == ii]
+                s_lm_current_cluster = s_lm_clusters_all[:,:,ii]
+                if np.sqrt(np.sum(s_lm_current_cluster[1:,:]**2)) < 1e-3:
+                    signal[ids_current_cluster,:] = n_l_all[0] * (y_lm_matrix[[ids_current_cluster],0].T @ s_lm_current_cluster[[0],:])
+                else:
+                    signal[ids_current_cluster,:] = y_lm_matrix[ids_current_cluster,:] @ (np.tile(n_l_all, (n_voxels,1)).T * s_lm_current_cluster)
+            signal_4d = self.vectorize(signal, self.mask)
+
+            return sl, signal_4d
+        
+        else:
+
+            return sl.reshape(sl.shape[0], sl.shape[1], sl.shape[2], -1)
+        
 
     def group_dwi_in_shells_b_beta_te(self):
         """
@@ -546,15 +574,15 @@ class SMI(object):
         table_4d = np.zeros((4, len(np.unique(id_clusters))))
 
         # loop over cluster indices and create an array decribing each cluster
-        for i in range(len(np.unique(id_clusters))):
-            table_4d[:,i] = np.vstack((
-                np.mean(self.b[id_clusters==i+1]), 
-                np.mean(self.beta[id_clusters==i+1]), 
-                np.sum(id_clusters==i+1),
-                np.mean(self.echo_time[id_clusters==i+1]))
+        for idx, i in enumerate(np.unique(id_clusters)):
+            table_4d[:,idx] = np.vstack((
+                np.mean(self.b[id_clusters==i]), 
+                np.mean(self.beta[id_clusters==i]), 
+                np.sum(id_clusters==i),
+                np.mean(self.echo_time[id_clusters==i]))
                 ).squeeze()
-            sorted_ids_int.append(id_original_sortparam[id_clusters==i+1])
-            shell_ids_int.append(i * np.ones(np.sum(id_clusters==i+1)))
+            sorted_ids_int.append(id_original_sortparam[id_clusters==i])
+            shell_ids_int.append(i * np.ones(np.sum(id_clusters==i)))
         sorted_ids_int = np.hstack(sorted_ids_int)
         shell_ids_int = np.hstack(shell_ids_int)
         
@@ -1193,7 +1221,7 @@ class SMI(object):
 
         return epsilon_all.T
 
-    def fit(self, dwi, bval, bvec, beta=None, echo_time=None, mask=None, sigma=None):
+    def fit(self, dwi, mask=None, sigma=None):
         """
         Main fitting function for SMI class
         Inputs: 
@@ -1209,11 +1237,6 @@ class SMI(object):
         RotInvs (4d NDarray)
 
         """
-
-        # set up required inputs
-        self.set_bvals_bvecs(bval, bvec)
-        self.set_bshape(beta)
-        self.set_echotime(echo_time)
 
         self.dwishape = dwi.shape    
         self.set_mask(mask)
@@ -1232,7 +1255,7 @@ class SMI(object):
             dwi = np.sqrt(abs(dwi**2 - sigma[...,None]**2))
 
         # spherical harmonic fit
-        rot_invs = self.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi, mask)
+        rot_invs = self.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi, self.mask)
         
         output = {}
         # standard model fit

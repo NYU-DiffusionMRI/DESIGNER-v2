@@ -215,9 +215,9 @@ def execute(): #pylint: disable=unused-variable
             compartments = ['IAS', 'EAS']
 
         print('...SMI fit...')
-        smi = SMI()
+        smi = SMI(bval=bval, bvec=bvec)
         smi.set_compartments(compartments)
-        params_smi = smi.fit(dwi, bval=bval, bvec=bvec, mask=mask, sigma=sigma)
+        params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
         save_params(params_smi, nii, model='smi', outdir=outdir)
 
 def main():

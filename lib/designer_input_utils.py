@@ -58,7 +58,15 @@ def get_input_info(input, fslbval, fslbvec, bids):
         UserBidspath = bids.resplit(',')
         bidslist = [os.path.realpath(i) for i in UserBidspath]
 
-    return isdicom, DWIext, bveclist, bvallist, DWInlist, bidslist
+    dwi_metadata = {
+        'isdicom': isdicom, 
+        'dwi_ext': DWIext,
+        'bvecs': bveclist,
+        'bvals': bvallist,
+        'dwi_list': DWInlist,
+        'bidslist': bidslist}
+
+    return dwi_metadata
 
 def convert_pe_dir_to_ijk(args_pe_dir):
     from mrtrix3 import MRtrixError
@@ -109,10 +117,11 @@ def convert_pe_dir_to_ijk(args_pe_dir):
 
     return pe_dir_app
 
-def assert_inputs(bidslist, args_pe_dir, args_pf):
+def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
     import json
     from mrtrix3 import app, MRtrixError
 
+    bidslist = dwi_metadata['bidslist']
     try:
         bids = [json.load(open(i)) for i in bidslist]
     
@@ -127,11 +136,6 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
             except:
                 pf.append(1)
 
-        # if not all(x == TE[0] for x in TE):
-        #     raise MRtrixError('input series have different echo times. This is not yet supported')
-        # else:
-        #     TE = TE=[0]
-
         if not all(x == pf[0] for x in pf):
             raise MRtrixError('input series have different partial fourier factors,', +
                             'series should be processed separately')
@@ -143,9 +147,9 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
 
         if app.ARGS.echo_time:
-            TE_app = [i for i in app.ARGS.echo_time.rsplit(',')]
+            TE_app = [float(i) for i in app.ARGS.echo_time.rsplit(',')]
         else:
-            TE_app = None
+            TE_app = [None] * len(bidslist)
     except:
         print('no bids files identified')
         pe_dir_app = convert_pe_dir_to_ijk(args_pe_dir)
@@ -155,21 +159,21 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
         if app.ARGS.echo_time:
             TE_app = [float(i) for i in app.ARGS.echo_time.rsplit(',')]
         else:
-            TE_app = None
+            TE_app = [None] * len(dwi_metadata['dwi_list'])
 
     if app.ARGS.bshape:
-        bshape = [int(i) for i in app.ARGS.bshape.rsplit(',')]
+        bshape = [float(i) for i in app.ARGS.bshape.rsplit(',')]
     else:
-        bshape = None
+        bshape = [1] * len(dwi_metadata['dwi_list'])
 
-    if TE_app and (not TE_bids == TE_app):
+    if (TE_app) and (TE_bids) and (TE_bids != TE_app):
         raise MRtrixError('User defined echo times do not match those found in bids .json, please check input data for consistancy')
     elif TE_app:
         TE = TE_app
     elif TE_bids:
         TE = TE_bids
     else:
-        TE = None
+        TE = [None] * len(dwi_metadata['dwi_list'])
 
     # if no partial fourier information is found, assume full sampling
     if not args_pf and not pf_bids:
@@ -193,29 +197,43 @@ def assert_inputs(bidslist, args_pe_dir, args_pf):
     else:
         pf = args_pf
 
-    return pe_dir, pf, TE, bshape
+    dwi_metadata['pe_dir'] = pe_dir
+    dwi_metadata['pf'] = pf
+    dwi_metadata['TE'] = TE
+    dwi_metadata['bshape'] = bshape
 
-def convert_input_data(isdicom, DWIext, bveclist, bvallist, DWInlist):
+def convert_input_data(dwi_metadata):
     from mrtrix3 import run, image, MRtrixError, app
+    import numpy as np
 
     miflist = []
     idxlist = []
+    telist = []
+    bshapelist = []
     dwi_ind_size = [[0,0,0,0]]
 
-    if len(DWInlist) == 1:
+    dwi_n_list = dwi_metadata['dwi_list']
+    isdicom = dwi_metadata['isdicom']
+    bveclist = dwi_metadata['bvecs']
+    bvallist = dwi_metadata['bvals']
+    dwi_ext = dwi_metadata['dwi_ext']
+    te_per_series = dwi_metadata['TE']
+    bshape_per_series = dwi_metadata['bshape']
+
+    if len(dwi_n_list) == 1:
         if not isdicom:
             cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi.mif' % 
-                (bveclist[0], bvallist[0], ''.join(DWInlist), ''.join(DWIext), app.SCRATCH_DIR))
+                (bveclist[0], bvallist[0], ''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
             run.command(cmd)
         else:
             cmd = ('mrconvert %s %s/dwi.mif' %
-            (''.join(DWInlist), app.SCRATCH_DIR))
+            (''.join(dwi_n_list), app.SCRATCH_DIR))
             run.command(cmd)
     else:
-        for idx,i in enumerate(DWInlist):
+        for idx,i in enumerate(dwi_n_list):
             if not isdicom:
                 cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi%s.mif' % 
-                (bveclist[idx], bvallist[idx], i, DWIext[idx], app.SCRATCH_DIR, str(idx)))
+                (bveclist[idx], bvallist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
                 run.command(cmd)
             else:
                 cmd = ('mrconvert %s %s/dwi%s.mif' %
@@ -236,26 +254,51 @@ def convert_input_data(isdicom, DWIext, bveclist, bvallist, DWInlist):
     grad = [ line for line in grad ]
     grad = [ [ float(f) for f in line ] for line in grad ]
     
+    grad = np.array(grad)
+    grad[:,-1] = grad[:,-1] / 1000
+    
     #stride = dwi_header.strides()
     num_volumes = 1
     if len(dwi_size) == 4:
         num_volumes = dwi_size[3]
-    bval = [int(i[3]) for i in grad]
 
     nvols = [i[3] for i in dwi_ind_size]
-    for idx,i in enumerate(DWInlist):
-        if len(DWInlist) == 1:
+    for idx,i in enumerate(dwi_n_list):
+        if len(dwi_n_list) == 1:
             tmpidxlist = range(0,num_volumes)
         else:
             tmpidxlist = range(sum(nvols[:idx+1]),sum(nvols[:idx+1])+nvols[idx+1])
         idxlist.append(','.join(str(i) for i in tmpidxlist))
+        telist.append([te_per_series[idx]] * nvols[idx+1])
+        bshapelist.append([bshape_per_series[idx]] * nvols[idx+1])
 
-    if not grad:
+    telist = [item for sublist in telist for item in sublist]
+    bshapelist = [item for sublist in bshapelist for item in sublist]
+
+    dwi_metadata['idxlist'] = idxlist
+    dwi_metadata['echo_time_per_volume'] = np.array(telist)
+    dwi_metadata['bshape_per_volume'] = np.array(bshapelist)
+    dwi_metadata['grad'] = grad
+
+    if grad is None:
         raise MRtrixError('No diffusion gradient table found')
     if not len(grad) == num_volumes:
         raise MRtrixError('Number of lines in gradient table (%s) does not match input image (%s volumes); check your input data' % 
         (str(len(grad)), str(num_volumes)))
 
     run.command('mrconvert %s/dwi.mif %s/working.mif' % (app.SCRATCH_DIR, app.SCRATCH_DIR), show=False)
-    
-    return idxlist
+
+def create_shell_table(dwi_metadata):
+    from lib.smi import SMI
+
+    bvals = dwi_metadata['grad'][:,-1]
+    bvecs = dwi_metadata['grad'][:,:-1]
+
+    smi = SMI(bval=bvals, bvec=bvecs)
+
+    bshape = dwi_metadata['bshape_per_volume']
+    echo_time = dwi_metadata['echo_time_per_volume']
+    smi.set_bshape(bshape)
+    smi.set_echotime(echo_time)
+
+    return smi.group_dwi_in_shells_b_beta_te()

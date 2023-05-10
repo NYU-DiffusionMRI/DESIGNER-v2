@@ -1,6 +1,6 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 from glob import glob
-import sys
+import sys, os, stat
 import subprocess
 
 with open('requirements.txt') as f:
@@ -12,6 +12,25 @@ long_description = '''designer and TMI package for use with brain
     current and motion, and normalization. TMI is used for dti/dti/wmti/smi
     along with outlier corection.'''
 
+# module1 = Extension('rpg',
+#                     define_macros = [('MAJOR_VERSION', '1'),
+#                                      ('MINOR_VERSION', '0')],
+#                     include_dirs = ['rpg_cpp/thirdparty/fftw/include', 'rpg_cpp/thirdparty/nifticlib-2.0.0/include'],
+#                     libraries = ['nifticdf','niftiio','fftw3','znz','z'],
+#                     library_dirs = ['rpg_cpp/thirdparty/nifticlib-2.0.0/lib','rpg_cpp/thirdparty/fftw/lib'],
+#                     sources = ['rpg_cpp/unring_rpg.cpp'],
+#                     language = 'c++'
+#                     )
+
+def change_permissions_recursive(path, mode):
+    for root, dirs, files in os.walk(path, topdown=False):
+        for dir in [os.path.join(root, d) for d in dirs]:
+            os.chmod(dir, mode)
+    for file in [os.path.join(root, f) for f in files]:
+            os.chmod(file, mode)
+
+change_permissions_recursive('rpg_cpp', 0o777)
+subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
 
 setup(
         name ='designer',
@@ -25,9 +44,7 @@ setup(
         license ='NYU',
         #scripts=['bin/designer', 'bin/tmi'],
         packages = find_packages(),
-        #packages = ['bin'],
-        #package_data = {'mrtrix3': ['bin/mrtrix3.py']},
-        data_files=[('constant', glob('constant/*'))],
+        data_files=[('constant', glob('constant/*')), ('lib', ['rpg_cpp/rpg'])],
         include_package_data=True,
         entry_points = {
             'console_scripts': [
@@ -42,6 +59,7 @@ setup(
         ],
         keywords ='python diffusion mri mppca gibbs preprocessing dki smi',
         install_requires = requirements,
-        zip_safe = False
+        zip_safe = False,
+        #ext_modules=[module1]
 )
     
