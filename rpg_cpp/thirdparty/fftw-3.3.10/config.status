@@ -439,8 +439,8 @@ gives unlimited permission to copy, distribute and modify it."
 
 ac_pwd='/Users/benaron/Documents/designer_v2_dev/rpg_cpp/thirdparty/fftw-3.3.10'
 srcdir='.'
-INSTALL='/usr/bin/install -c'
-MKDIR_P='./install-sh -c -d'
+INSTALL='/opt/homebrew/bin/ginstall -c'
+MKDIR_P='/opt/homebrew/bin/gmkdir -p'
 AWK='awk'
 test -n "$AWK" || AWK=awk
 # The default lists apply if the user does not specify any file.
@@ -927,8 +927,8 @@ S["PTHREAD_LIBS"]=""
 S["PTHREAD_CC"]=""
 S["acx_pthread_config"]=""
 S["OPENMP_CFLAGS"]=""
-S["FLIBS"]=" -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc"\
-" -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath"
+S["FLIBS"]=" -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc"\
+" -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath"
 S["ac_ct_F77"]="gfortran"
 S["FFLAGS"]="-g -O2"
 S["F77"]="gfortran"
@@ -1051,7 +1051,7 @@ S["am__leading_dot"]="."
 S["SET_MAKE"]=""
 S["AWK"]="awk"
 S["mkdir_p"]="$(MKDIR_P)"
-S["MKDIR_P"]="./install-sh -c -d"
+S["MKDIR_P"]="/opt/homebrew/bin/gmkdir -p"
 S["INSTALL_STRIP_PROGRAM"]="$(install_sh) -c -s"
 S["STRIP"]="strip"
 S["install_sh"]="${SHELL} /Users/benaron/Documents/designer_v2_dev/rpg_cpp/thirdparty/fftw-3.3.10/install-sh"

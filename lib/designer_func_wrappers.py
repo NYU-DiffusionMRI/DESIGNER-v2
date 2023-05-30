@@ -289,14 +289,17 @@ def pre_eddy_ants_moco(dwi_metadata):
 def run_pre_align(dwi_metadata):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
 
-    series_list = []
-    for i in range(len(dwi_metadata['dwi_list'])):
-        run.command('mrconvert -coord 3 %s working.mif %s' % 
-                (dwi_metadata['idxlist'][i], path.to_scratch('dwi_align_series_' + str(i) + '.mif')),
-                show=False)
-        series_list.append('dwi_align_series_' + str(i) + '.mif')
-        
-    group_alignment(series_list)
+    if len(dwi_metadata['dwi_list']) == 1:
+        print('Warning -pre_align option was used but only 1 input series was provided')
+    else:
+        series_list = []
+        for i in range(len(dwi_metadata['dwi_list'])):
+            run.command('mrconvert -coord 3 %s working.mif %s' % 
+                    (dwi_metadata['idxlist'][i], path.to_scratch('dwi_align_series_' + str(i) + '.mif')),
+                    show=False)
+            series_list.append('dwi_align_series_' + str(i) + '.mif')
+            
+        group_alignment(series_list)
 
 def run_ants_moco(dwi_metadata):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
@@ -507,6 +510,7 @@ def run_eddy(shell_table, dwi_metadata):
 
     # if not variable TE (not using eddy_groups - only run eddy once)
     else:
+
         if app.ARGS.rpe_pair:
 
             run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
@@ -516,15 +520,60 @@ def run_eddy(shell_table, dwi_metadata):
             else: 
                 run.command('mrconvert ' + path.from_user(app.ARGS.rpe_pair) + ' b0rpe.nii')
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
-            run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz rpepair.mif')
-            cmd = ('dwifslpreproc -nocleanup -scratch %s/eddy_processing -eddy_options %s -rpe_pair -se_epi rpepair.mif -align_seepi -pe_dir %s working.mif dwiec.mif' % 
-                (path.to_scratch('',True), eddyopts, pe_dir))
-            run.command(cmd)
+            run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+
+            acqp = np.zeros((2,3))
+            if 'i' in pe_dir: acqp[:,0] = 1
+            if 'j' in pe_dir: acqp[:,1] = 1
+            if 'k' in pe_dir: acqp[:,2] = 1
+            if '-' in pe_dir:
+                acqp[0,:] = -acqp[0,:]
+            else:
+                acqp[1,:] = -acqp[1,:]
+                
+            acqp[acqp==-0] = 0
+            acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+            np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+
+            run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
+                (path.to_scratch('b0_pair_topup.nii'),
+                path.to_scratch('topup_acqp.txt'),
+                path.to_scratch('topup_results'),
+                path.to_scratch('topup_results' + fsl_suffix)))
+                
+            # mask the topup corrected image
+            run.command('mrmath %s mean %s -axis 3' %
+                        (path.to_scratch('topup_results' + fsl_suffix),
+                            path.to_scratch('topup_corrected_mean.nii')
+                        ))
+                 
+            run.command('bet %s %s -f 0.2 -m' %
+                (path.to_scratch('topup_corrected_mean.nii'), 
+                path.to_scratch('topup_corrected_brain')))
+            
+            run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -topup_files %s -pe_dir %s %s %s' % 
+                    (path.to_scratch('eddy_processing'), 
+                    eddyopts, 
+                    path.to_scratch('topup_corrected_brain_mask' + fsl_suffix),
+                    path.to_scratch('topup_results'),
+                    pe_dir,
+                    path.to_scratch('working.mif'),
+                    path.to_scratch('dwiec.mif')))
 
         elif app.ARGS.rpe_none:
 
-            run.command('dwifslpreproc -nocleanup -scratch %s/eddy_processing -eddy_options %s -rpe_none -pe_dir %s working.mif dwiec.mif' % 
-                (path.to_scratch('',True), eddyopts, pe_dir))
+            run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
+            run.command('bet %s %s -f 0.2 -m' %
+                (path.to_scratch('b0pe.nii'), 
+                path.to_scratch('b0_pe_brain')))
+            
+            run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -pe_dir %s %s %s' % 
+                    (path.to_scratch('eddy_processing'), 
+                    eddyopts, 
+                    path.to_scratch('b0_pe_brain_mask' + fsl_suffix),
+                    pe_dir,
+                    path.to_scratch('working.mif'),
+                    path.to_scratch('dwiec.mif')))
             
         elif app.ARGS.rpe_all:
 

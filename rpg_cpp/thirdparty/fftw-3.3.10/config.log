@@ -30,8 +30,8 @@ Kernel configured for up to 10 processors.
 Processor type: arm64e (ARM64E)
 Processors active: 0 1 2 3 4 5 6 7 8 9
 Primary memory available: 64.00 gigabytes
-Default processor set: 895 tasks, 4246 threads, 10 processors
-Load average: 29.50, Mach factor: 0.94
+Default processor set: 877 tasks, 4370 threads, 10 processors
+Load average: 34.67, Mach factor: 0.35
 /bin/machine           = unknown
 /usr/bin/oslevel       = unknown
 /bin/universe          = unknown
@@ -62,11 +62,11 @@ PATH: /var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinter
 ## ----------- ##
 
 configure:2878: checking for a BSD-compatible install
-configure:2946: result: /usr/bin/install -c
+configure:2946: result: /opt/homebrew/bin/ginstall -c
 configure:2957: checking whether build environment is sane
 configure:3012: result: yes
 configure:3158: checking for a thread-safe mkdir -p
-configure:3197: result: ./install-sh -c -d
+configure:3197: result: /opt/homebrew/bin/gmkdir -p
 configure:3204: checking for gawk
 configure:3234: result: no
 configure:3204: checking for mawk
@@ -1366,7 +1366,7 @@ configure:16901: checking for _doprnt
 configure:16901: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c  >&5
 Undefined symbols for architecture arm64:
   "__doprnt", referenced from:
-      _main in conftest-2ff00c.o
+      _main in conftest-15a500.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:16901: $? = 1
@@ -1470,7 +1470,7 @@ configure:17051: checking for BSDgettimeofday
 configure:17051: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm  >&5
 Undefined symbols for architecture arm64:
   "_BSDgettimeofday", referenced from:
-      _main in conftest-9b2fca.o
+      _main in conftest-4c31d0.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:17051: $? = 1
@@ -1570,7 +1570,7 @@ configure:17051: checking for gethrtime
 configure:17051: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm  >&5
 Undefined symbols for architecture arm64:
   "_gethrtime", referenced from:
-      _main in conftest-d88232.o
+      _main in conftest-99cdb0.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:17051: $? = 1
@@ -1667,7 +1667,7 @@ configure:17051: checking for read_real_time
 configure:17051: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm  >&5
 Undefined symbols for architecture arm64:
   "_read_real_time", referenced from:
-      _main in conftest-a60e8a.o
+      _main in conftest-68dbed.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:17051: $? = 1
@@ -1764,7 +1764,7 @@ configure:17051: checking for time_base_to_time
 configure:17051: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm  >&5
 Undefined symbols for architecture arm64:
   "_time_base_to_time", referenced from:
-      _main in conftest-b9e35c.o
+      _main in conftest-820af6.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:17051: $? = 1
@@ -1892,7 +1892,7 @@ conftest.c:77:6: note: 'memalign' is a builtin with type 'void *(unsigned long, 
 1 warning generated.
 Undefined symbols for architecture arm64:
   "_memalign", referenced from:
-      _main in conftest-75bb53.o
+      _main in conftest-9c5d21.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:17051: $? = 1
@@ -1993,7 +1993,7 @@ configure:17051: checking for _mm_malloc
 configure:17051: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm  >&5
 Undefined symbols for architecture arm64:
   "__mm_malloc", referenced from:
-      _main in conftest-1072a8.o
+      _main in conftest-5c7698.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:17051: $? = 1
@@ -2094,7 +2094,7 @@ configure:17051: checking for _mm_free
 configure:17051: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm  >&5
 Undefined symbols for architecture arm64:
   "__mm_free", referenced from:
-      _main in conftest-a4bb1c.o
+      _main in conftest-1a4667.o
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 configure:17051: $? = 1
@@ -2775,8 +2775,8 @@ configure:17536: found /opt/homebrew/bin/gfortran
 configure:17547: result: gfortran
 configure:17573: checking for Fortran 77 compiler version
 configure:17582: gfortran --version >&5
-GNU Fortran (Homebrew GCC 12.2.0) 12.2.0
-Copyright (C) 2022 Free Software Foundation, Inc.
+GNU Fortran (Homebrew GCC 13.1.0) 13.1.0
+Copyright (C) 2023 Free Software Foundation, Inc.
 This is free software; see the source for copying conditions.  There is NO
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
@@ -2784,12 +2784,12 @@ configure:17593: $? = 0
 configure:17582: gfortran -v >&5
 Using built-in specs.
 COLLECT_GCC=gfortran
-COLLECT_LTO_WRAPPER=/opt/homebrew/Cellar/gcc/12.2.0/bin/../libexec/gcc/aarch64-apple-darwin21/12/lto-wrapper
-Target: aarch64-apple-darwin21
-Configured with: ../configure --prefix=/opt/homebrew/opt/gcc --libdir=/opt/homebrew/opt/gcc/lib/gcc/current --disable-nls --enable-checking=release --with-gcc-major-version-only --enable-languages=c,c++,objc,obj-c++,fortran --program-suffix=-12 --with-gmp=/opt/homebrew/opt/gmp --with-mpfr=/opt/homebrew/opt/mpfr --with-mpc=/opt/homebrew/opt/libmpc --with-isl=/opt/homebrew/opt/isl --with-zstd=/opt/homebrew/opt/zstd --with-pkgversion='Homebrew GCC 12.2.0' --with-bugurl=https://github.com/Homebrew/homebrew-core/issues --with-system-zlib --build=aarch64-apple-darwin21 --with-sysroot=/Library/Developer/CommandLineTools/SDKs/MacOSX12.sdk
+COLLECT_LTO_WRAPPER=/opt/homebrew/Cellar/gcc/13.1.0/bin/../libexec/gcc/aarch64-apple-darwin22/13/lto-wrapper
+Target: aarch64-apple-darwin22
+Configured with: ../configure --prefix=/opt/homebrew/opt/gcc --libdir=/opt/homebrew/opt/gcc/lib/gcc/current --disable-nls --enable-checking=release --with-gcc-major-version-only --enable-languages=c,c++,objc,obj-c++,fortran --program-suffix=-13 --with-gmp=/opt/homebrew/opt/gmp --with-mpfr=/opt/homebrew/opt/mpfr --with-mpc=/opt/homebrew/opt/libmpc --with-isl=/opt/homebrew/opt/isl --with-zstd=/opt/homebrew/opt/zstd --with-pkgversion='Homebrew GCC 13.1.0' --with-bugurl=https://github.com/Homebrew/homebrew-core/issues --with-system-zlib --build=aarch64-apple-darwin22 --with-sysroot=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk
 Thread model: posix
 Supported LTO compression algorithms: zlib zstd
-gcc version 12.2.0 (Homebrew GCC 12.2.0) 
+gcc version 13.1.0 (Homebrew GCC 13.1.0) 
 configure:17593: $? = 0
 configure:17582: gfortran -V >&5
 gfortran: error: unrecognized command-line option '-V'
@@ -2840,76 +2840,66 @@ configure:20661: gfortran -c -g -O2 conftest.f >&5
 configure:20661: $? = 0
 configure:20679: gfortran -o conftest -g -O2 -v conftest.f -lm
 Using built-in specs.
-Target: aarch64-apple-darwin21
+Target: aarch64-apple-darwin22
 Thread model: posix
 Supported LTO compression algorithms: zlib zstd
-gcc version 12.2.0 (Homebrew GCC 12.2.0) 
- /opt/homebrew/Cellar/gcc/12.2.0/bin/../libexec/gcc/aarch64-apple-darwin21/12/f951 conftest.f -ffixed-form -fPIC -quiet -dumpbase conftest.f -dumpbase-ext .f -mmacosx-version-min=13.0.0 -mlittle-endian -mabi=lp64 -g -O2 -version -fintrinsic-modules-path /opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/finclude -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccNpT1jT.s
-GNU Fortran (Homebrew GCC 12.2.0) version 12.2.0 (aarch64-apple-darwin21)
-	compiled by GNU C version 12.2.0, GMP version 6.2.1, MPFR version 4.1.0, MPC version 1.2.1, isl version isl-0.25-GMP
+gcc version 13.1.0 (Homebrew GCC 13.1.0) 
+ /opt/homebrew/Cellar/gcc/13.1.0/bin/../libexec/gcc/aarch64-apple-darwin22/13/f951 conftest.f -ffixed-form -fPIC -quiet -dumpbase conftest.f -dumpbase-ext .f -mmacosx-version-min=13.0.0 -mlittle-endian -mabi=lp64 -g -O2 -version -fintrinsic-modules-path /opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/finclude -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cch5UL08.s
+GNU Fortran (Homebrew GCC 13.1.0) version 13.1.0 (aarch64-apple-darwin22)
+	compiled by GNU C version 13.1.0, GMP version 6.2.1, MPFR version 4.2.0-p4, MPC version 1.3.1, isl version isl-0.26-GMP
 
-warning: MPFR header version 4.1.0 differs from library version 4.1.0-p13.
+warning: MPFR header version 4.2.0-p4 differs from library version 4.2.0-p9.
 GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
-GNU Fortran2008 (Homebrew GCC 12.2.0) version 12.2.0 (aarch64-apple-darwin21)
-	compiled by GNU C version 12.2.0, GMP version 6.2.1, MPFR version 4.1.0, MPC version 1.2.1, isl version isl-0.25-GMP
-
-warning: MPFR header version 4.1.0 differs from library version 4.1.0-p13.
-GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
- as -arch arm64 -v -mmacosx-version-min=13.0 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc1eC2cU.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccNpT1jT.s
+ as -arch arm64 -v -mmacosx-version-min=13.0 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc0vDOxj.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cch5UL08.s
 Apple clang version 14.0.3 (clang-1403.0.22.14.1)
 Target: arm64-apple-darwin22.4.0
 Thread model: posix
 InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
- "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1as -triple arm64-apple-macosx13.0.0 -filetype obj -main-file-name ccNpT1jT.s -target-cpu apple-m1 -target-feature +v8.5a -target-feature +crc -target-feature +lse -target-feature +rdm -target-feature +crypto -target-feature +dotprod -target-feature +fp-armv8 -target-feature +neon -target-feature +fp16fml -target-feature +ras -target-feature +rcpc -target-feature +zcm -target-feature +zcz -target-feature +fullfp16 -target-feature +sm4 -target-feature +sha3 -target-feature +sha2 -target-feature +aes -fdebug-compilation-dir=/Users/benaron/Documents/designer_v2_dev/rpg_cpp/thirdparty/fftw-3.3.10 -dwarf-debug-producer "Apple clang version 14.0.3 (clang-1403.0.22.14.1)" -dwarf-version=4 -mrelocation-model pic --mrelax-relocations -mllvm -disable-aligned-alloc-awareness=1 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc1eC2cU.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccNpT1jT.s
-Reading specs from /opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../../libgfortran.spec
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1as -triple arm64-apple-macosx13.0.0 -filetype obj -main-file-name cch5UL08.s -target-cpu apple-m1 -target-feature +v8.5a -target-feature +crc -target-feature +lse -target-feature +rdm -target-feature +crypto -target-feature +dotprod -target-feature +fp-armv8 -target-feature +neon -target-feature +fp16fml -target-feature +ras -target-feature +rcpc -target-feature +zcm -target-feature +zcz -target-feature +fullfp16 -target-feature +sm4 -target-feature +sha3 -target-feature +sha2 -target-feature +aes -fdebug-compilation-dir=/Users/benaron/Documents/designer_v2_dev/rpg_cpp/thirdparty/fftw-3.3.10 -dwarf-debug-producer "Apple clang version 14.0.3 (clang-1403.0.22.14.1)" -dwarf-version=4 -mrelocation-model pic --mrelax-relocations -mllvm -disable-aligned-alloc-awareness=1 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc0vDOxj.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cch5UL08.s
+Reading specs from /opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../../libgfortran.spec
 rename spec lib to liborig
- /opt/homebrew/Cellar/gcc/12.2.0/bin/../libexec/gcc/aarch64-apple-darwin21/12/collect2 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX12.sdk/ -dynamic -arch arm64 -macosx_version_min 13.0.0 -o conftest -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc1eC2cU.o -lgfortran -lemutls_w -lgcc -lquadmath -lemutls_w -lgcc -lSystem -lgcc -no_compact_unwind -rpath @loader_path -rpath /opt/homebrew/Cellar/gcc/12.2.0/lib/gcc/current/gcc/aarch64-apple-darwin21/12 -rpath /opt/homebrew/Cellar/gcc/12.2.0/lib/gcc/current/gcc -rpath /opt/homebrew/Cellar/gcc/12.2.0/lib/gcc/current -idsym -dsym
+ /opt/homebrew/Cellar/gcc/13.1.0/bin/../libexec/gcc/aarch64-apple-darwin22/13/collect2 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk/ -dynamic -arch arm64 -macosx_version_min 13.0.0 -o conftest -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc0vDOxj.o -lgfortran -lemutls_w -lgcc -lquadmath -lemutls_w -lgcc -lSystem -lgcc -no_compact_unwind -rpath @loader_path -rpath /opt/homebrew/Cellar/gcc/13.1.0/lib/gcc/current/gcc/aarch64-apple-darwin22/13 -rpath /opt/homebrew/Cellar/gcc/13.1.0/lib/gcc/current/gcc -rpath /opt/homebrew/Cellar/gcc/13.1.0/lib/gcc/current -idsym -dsym
 ld: library not found for -lSystem
 collect2: error: ld returned 1 exit status
 configure:20762: result: -v
 configure:20764: checking for Fortran 77 libraries of gfortran
 configure:20787: gfortran -o conftest -g -O2 -v conftest.f -lm
 Using built-in specs.
-Target: aarch64-apple-darwin21
+Target: aarch64-apple-darwin22
 Thread model: posix
 Supported LTO compression algorithms: zlib zstd
-gcc version 12.2.0 (Homebrew GCC 12.2.0) 
- /opt/homebrew/Cellar/gcc/12.2.0/bin/../libexec/gcc/aarch64-apple-darwin21/12/f951 conftest.f -ffixed-form -fPIC -quiet -dumpbase conftest.f -dumpbase-ext .f -mmacosx-version-min=13.0.0 -mlittle-endian -mabi=lp64 -g -O2 -version -fintrinsic-modules-path /opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/finclude -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc528IHR.s
-GNU Fortran (Homebrew GCC 12.2.0) version 12.2.0 (aarch64-apple-darwin21)
-	compiled by GNU C version 12.2.0, GMP version 6.2.1, MPFR version 4.1.0, MPC version 1.2.1, isl version isl-0.25-GMP
+gcc version 13.1.0 (Homebrew GCC 13.1.0) 
+ /opt/homebrew/Cellar/gcc/13.1.0/bin/../libexec/gcc/aarch64-apple-darwin22/13/f951 conftest.f -ffixed-form -fPIC -quiet -dumpbase conftest.f -dumpbase-ext .f -mmacosx-version-min=13.0.0 -mlittle-endian -mabi=lp64 -g -O2 -version -fintrinsic-modules-path /opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/finclude -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccwJjiMU.s
+GNU Fortran (Homebrew GCC 13.1.0) version 13.1.0 (aarch64-apple-darwin22)
+	compiled by GNU C version 13.1.0, GMP version 6.2.1, MPFR version 4.2.0-p4, MPC version 1.3.1, isl version isl-0.26-GMP
 
-warning: MPFR header version 4.1.0 differs from library version 4.1.0-p13.
+warning: MPFR header version 4.2.0-p4 differs from library version 4.2.0-p9.
 GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
-GNU Fortran2008 (Homebrew GCC 12.2.0) version 12.2.0 (aarch64-apple-darwin21)
-	compiled by GNU C version 12.2.0, GMP version 6.2.1, MPFR version 4.1.0, MPC version 1.2.1, isl version isl-0.25-GMP
-
-warning: MPFR header version 4.1.0 differs from library version 4.1.0-p13.
-GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
- as -arch arm64 -v -mmacosx-version-min=13.0 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccAv72Jh.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc528IHR.s
+ as -arch arm64 -v -mmacosx-version-min=13.0 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccUAfrHr.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccwJjiMU.s
 Apple clang version 14.0.3 (clang-1403.0.22.14.1)
 Target: arm64-apple-darwin22.4.0
 Thread model: posix
 InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
- "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1as -triple arm64-apple-macosx13.0.0 -filetype obj -main-file-name cc528IHR.s -target-cpu apple-m1 -target-feature +v8.5a -target-feature +crc -target-feature +lse -target-feature +rdm -target-feature +crypto -target-feature +dotprod -target-feature +fp-armv8 -target-feature +neon -target-feature +fp16fml -target-feature +ras -target-feature +rcpc -target-feature +zcm -target-feature +zcz -target-feature +fullfp16 -target-feature +sm4 -target-feature +sha3 -target-feature +sha2 -target-feature +aes -fdebug-compilation-dir=/Users/benaron/Documents/designer_v2_dev/rpg_cpp/thirdparty/fftw-3.3.10 -dwarf-debug-producer "Apple clang version 14.0.3 (clang-1403.0.22.14.1)" -dwarf-version=4 -mrelocation-model pic --mrelax-relocations -mllvm -disable-aligned-alloc-awareness=1 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccAv72Jh.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//cc528IHR.s
-Reading specs from /opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../../libgfortran.spec
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1as -triple arm64-apple-macosx13.0.0 -filetype obj -main-file-name ccwJjiMU.s -target-cpu apple-m1 -target-feature +v8.5a -target-feature +crc -target-feature +lse -target-feature +rdm -target-feature +crypto -target-feature +dotprod -target-feature +fp-armv8 -target-feature +neon -target-feature +fp16fml -target-feature +ras -target-feature +rcpc -target-feature +zcm -target-feature +zcz -target-feature +fullfp16 -target-feature +sm4 -target-feature +sha3 -target-feature +sha2 -target-feature +aes -fdebug-compilation-dir=/Users/benaron/Documents/designer_v2_dev/rpg_cpp/thirdparty/fftw-3.3.10 -dwarf-debug-producer "Apple clang version 14.0.3 (clang-1403.0.22.14.1)" -dwarf-version=4 -mrelocation-model pic --mrelax-relocations -mllvm -disable-aligned-alloc-awareness=1 -o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccUAfrHr.o /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccwJjiMU.s
+Reading specs from /opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../../libgfortran.spec
 rename spec lib to liborig
- /opt/homebrew/Cellar/gcc/12.2.0/bin/../libexec/gcc/aarch64-apple-darwin21/12/collect2 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX12.sdk/ -dynamic -arch arm64 -macosx_version_min 13.0.0 -o conftest -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccAv72Jh.o -lgfortran -lemutls_w -lgcc -lquadmath -lemutls_w -lgcc -lSystem -lgcc -no_compact_unwind -rpath @loader_path -rpath /opt/homebrew/Cellar/gcc/12.2.0/lib/gcc/current/gcc/aarch64-apple-darwin21/12 -rpath /opt/homebrew/Cellar/gcc/12.2.0/lib/gcc/current/gcc -rpath /opt/homebrew/Cellar/gcc/12.2.0/lib/gcc/current -idsym -dsym
+ /opt/homebrew/Cellar/gcc/13.1.0/bin/../libexec/gcc/aarch64-apple-darwin22/13/collect2 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk/ -dynamic -arch arm64 -macosx_version_min 13.0.0 -o conftest -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. /var/folders/85/2c_hpzlx3j50c40lxtpwq5300000gn/T//ccUAfrHr.o -lgfortran -lemutls_w -lgcc -lquadmath -lemutls_w -lgcc -lSystem -lgcc -no_compact_unwind -rpath @loader_path -rpath /opt/homebrew/Cellar/gcc/13.1.0/lib/gcc/current/gcc/aarch64-apple-darwin22/13 -rpath /opt/homebrew/Cellar/gcc/13.1.0/lib/gcc/current/gcc -rpath /opt/homebrew/Cellar/gcc/13.1.0/lib/gcc/current -idsym -dsym
 ld: library not found for -lSystem
 collect2: error: ld returned 1 exit status
-configure:20983: result:  -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath
+configure:20983: result:  -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath
 configure:20999: checking for dummy main to link with Fortran 77 libraries
-configure:21033: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm   -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath >&5
+configure:21033: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c -lm   -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath >&5
 ld: warning: could not create compact unwind for ___emutls_get_address: registers 23 and 24 not saved contiguously in frame
 configure:21033: $? = 0
 configure:21078: result: none
 configure:21118: checking for Fortran 77 name-mangling scheme
 configure:21131: gfortran -c -g -O2 conftest.f >&5
 configure:21131: $? = 0
-configure:21172: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c cfortran_test.o -lm   -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath >&5
+configure:21172: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c cfortran_test.o -lm   -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath >&5
 ld: warning: could not create compact unwind for ___emutls_get_address: registers 23 and 24 not saved contiguously in frame
 Undefined symbols for architecture arm64:
   "_foobar", referenced from:
-      _main in conftest-4546bb.o
+      _main in conftest-92d376.o
      (maybe you meant: _foobar_)
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
@@ -3010,10 +3000,10 @@ configure: failed program was:
 |   ;
 |   return 0;
 | }
-configure:21172: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c cfortran_test.o -lm   -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath >&5
+configure:21172: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c cfortran_test.o -lm   -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath >&5
 ld: warning: could not create compact unwind for ___emutls_get_address: registers 23 and 24 not saved contiguously in frame
 configure:21172: $? = 0
-configure:21230: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c cfortran_test.o -lm   -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath >&5
+configure:21230: gcc -o conftest -O3 -fomit-frame-pointer -mtune=native -fstrict-aliasing   conftest.c cfortran_test.o -lm   -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath >&5
 ld: warning: could not create compact unwind for ___emutls_get_address: registers 23 and 24 not saved contiguously in frame
 configure:21230: $? = 0
 configure:21272: result: lower case, underscore, no extra underscore
@@ -3303,7 +3293,7 @@ ac_cv_env_target_alias_set=
 ac_cv_env_target_alias_value=
 ac_cv_f77_compiler_gnu=yes
 ac_cv_f77_dummy_main=none
-ac_cv_f77_libs=' -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath'
+ac_cv_f77_libs=' -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath'
 ac_cv_f77_mangling='lower case, underscore, no extra underscore'
 ac_cv_fortran_dummy_main=none
 ac_cv_func_BSDgettimeofday=no
@@ -3366,8 +3356,9 @@ ac_cv_path_EGREP='/usr/bin/grep -E'
 ac_cv_path_FGREP='/usr/bin/grep -F'
 ac_cv_path_GREP=/usr/bin/grep
 ac_cv_path_SED=/usr/bin/sed
-ac_cv_path_install='/usr/bin/install -c'
+ac_cv_path_install='/opt/homebrew/bin/ginstall -c'
 ac_cv_path_lt_DD=/bin/dd
+ac_cv_path_mkdir=/opt/homebrew/bin/gmkdir
 ac_cv_prog_AWK=awk
 ac_cv_prog_CPP='gcc -E'
 ac_cv_prog_ac_ct_AR=ar
@@ -3498,7 +3489,7 @@ EXEEXT=''
 F77='gfortran'
 FFLAGS='-g -O2'
 FGREP='/usr/bin/grep -F'
-FLIBS=' -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12 -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/12.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin21/12/../../.. -lgfortran -lemutls_w -lquadmath'
+FLIBS=' -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13 -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.1.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin22/13/../../.. -lgfortran -lemutls_w -lquadmath'
 GREP='/usr/bin/grep'
 HAVE_ALTIVEC_FALSE=''
 HAVE_ALTIVEC_TRUE='#'
@@ -3545,7 +3536,7 @@ MAINTAINER_MODE_FALSE=''
 MAINTAINER_MODE_TRUE='#'
 MAKEINFO='${SHELL} '\''/Users/benaron/Documents/designer_v2_dev/rpg_cpp/thirdparty/fftw-3.3.10/missing'\'' makeinfo'
 MANIFEST_TOOL=':'
-MKDIR_P='./install-sh -c -d'
+MKDIR_P='/opt/homebrew/bin/gmkdir -p'
 MPICC=''
 MPILIBS=''
 MPIRUN=''
