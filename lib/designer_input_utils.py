@@ -101,17 +101,17 @@ def convert_pe_dir_to_ijk(args_pe_dir):
     elif args_pe_dir == 'SI':
         pe_dir_app = 'k-'
     elif args_pe_dir == 'i':
-        pe_dir_app == 'i'
+        pe_dir_app = 'i'
     elif args_pe_dir == 'j':
-        pe_dir_app == 'j'
+        pe_dir_app = 'j'
     elif args_pe_dir == 'k':
-        pe_dir_app == 'k'
+        pe_dir_app = 'k'
     elif args_pe_dir == 'i-':
-        pe_dir_app == 'i-'
+        pe_dir_app = 'i-'
     elif args_pe_dir == 'j-':
-        pe_dir_app == 'j-'
+        pe_dir_app = 'j-'
     elif args_pe_dir == 'k-':
-        pe_dir_app == 'k-'
+        pe_dir_app = 'k-'
     else:
         pe_dir_app = None
 
@@ -179,9 +179,6 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
     if not args_pf and not pf_bids:
         args_pf = 1
         pf_bids = 1
-    
-    if (not pe_dir_app and not pe_dir_bids) and (app.ARGS.eddy or app.ARGS.degibbs):
-        raise MRtrixError('Some options require the user to include phase encoding direction, User must use -pe_dir option or include bids .json')
     
     if (pe_dir_bids and pe_dir_app) and (pe_dir_app != pe_dir_bids):
         raise MRtrixError('input phase encoding direction and phase encoding direction from bids file do not match')

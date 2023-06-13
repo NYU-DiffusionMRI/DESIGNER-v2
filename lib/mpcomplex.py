@@ -1,6 +1,6 @@
-"""A Python class containing an implimentation of MPPCA denoising for magnirude and/or phase images.
+"""A Python class containing an implementation of MPPCA denoising for magnitude and/or phase images.
         
-    Inputs are a 4D image with dimentions (X x Y x Z x N)
+    Inputs are a 4D image with dimensions (X x Y x Z x N)
     
     Usage:
     import mpcomplex as mp
@@ -21,7 +21,7 @@
     Software.
     
     2. THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
-    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIESOF
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
     NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BELIABLE FOR ANY CLAIM,
     DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
@@ -120,6 +120,9 @@ class MP(object):
         return x[tuple(slices)]
 
     def eig_shrink(self, vals, gamma):
+        """
+        eigenvalue shrinkage
+        """
         t = 1 + np.sqrt(gamma)
         s = np.zeros((vals.shape))
         x = vals[vals > t]
@@ -127,6 +130,9 @@ class MP(object):
         return np.diag(s)
     
     def denoise(self, X):
+        """
+        Main function to denoise the data matrix X
+        """
 
         M = X.shape[0]
         N = X.shape[1]
@@ -266,7 +272,6 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         if (maxphi - minphi) > 2 * np.pi:
             print('rescaling phase from -pi to pi')
             phi = (img_phi - minphi) / (maxphi - minphi) * 2 * np.pi - np.pi
-    
         
         kernel_phase = [img.shape[0]//10, img.shape[1]//10, 1]
         step_phase = [kernel_phase[0]//2-1, kernel_phase[1]//2-1, 1]

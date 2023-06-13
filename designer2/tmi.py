@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 import os
-
-# dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# sys.path.insert(0, os.path.join(dwd, 'lib'))
-
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
 from lib.designer_fit_wrappers import refit_or_smooth, save_params
 
@@ -20,7 +16,7 @@ def usage(cmdline): #pylint: disable=unused-variable
                         """)
 
     cmdline.add_citation('Veraart, J.; Novikov, D.S.; Christiaens, D.; Ades-aron, B.; Sijbers, J. & Fieremans, E. Denoising of diffusion MRI using random matrix theory. NeuroImage, 2016, 142, 394-406, doi: 10.1016/j.neuroimage.2016.08.016',is_external=True)
-  
+
     cmdline.add_argument('input',  help='The input DWI series. For multiple input series, separate file names with commas (i.e. dwi1.nii,dwi2.nii,...)')
     cmdline.add_argument('output', help='The output directory (includes diffusion parameters, kurtosis parameters and processed dwi) unless option -processing_only is used, in which case this is the output basename')
     
@@ -63,9 +59,9 @@ def execute(): #pylint: disable=unused-variable
     dwi_metadata = get_input_info(
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
 
-    convert_input_data(dwi_metadata)
+    assert_inputs(dwi_metadata, None, None)
 
-    assert_inputs(dwi_metadata, app.ARGS.pe_dir, app.ARGS.pf)
+    convert_input_data(dwi_metadata)
 
     shell_table = create_shell_table(dwi_metadata)
     shell_rows = ['b-value', 'b-shape', 'n volumes', 'echo time']
@@ -116,10 +112,10 @@ def execute(): #pylint: disable=unused-variable
 
     if app.ARGS.DTI:
         print('...Single shell DTI fit...')
-        dtishell = (bval <= 100) | (bval > .5 & bval < 1.5)
+        dtishell = (bval <= 0.1) | ((bval > .5) & (bval <= 1.5))
         dwi_dti = dwi[:,:,:,dtishell]
         bval_dti = bval[dtishell]
-        bvec_dti = bvec[dtishell]
+        bvec_dti = bvec[:,dtishell]
         grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
         dti = tensor.TensorFitting(grad_dti, app.ARGS.n_cores)
         dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
@@ -127,8 +123,8 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.DKI:
         print('...Multi shell DKI fit with constraints = ' + str(constraints))
         grad = np.hstack((bvec.T, bval[None,...].T))
-        dti = tensor.TensorFitting(grad, app.ARGS.n_cores)
-        dt_dki, s0_dki, b_dki = dti.dki_fit(dwi, mask, constraints=constraints)
+        dki = tensor.TensorFitting(grad, app.ARGS.n_cores)
+        dt_dki, s0_dki, b_dki = dki.dki_fit(dwi, mask, constraints=constraints)
 
     if app.ARGS.akc_outliers:
         from lib.mpunits import vectorize
@@ -142,19 +138,19 @@ def execute(): #pylint: disable=unused-variable
         if not app.ARGS.DKI:
             raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
         else:
-            akc_mask = dti.outlierdetection(dt_dki, mask, dir)
+            akc_mask = dki.outlierdetection(dt_dki, mask, dir)
             
         akc_mask = vectorize(akc_mask, mask).astype(bool)
         print('N outliers = %s' % (np.sum(akc_mask)))
 
         dwi_new = refit_or_smooth(akc_mask, dwi, n_cores=app.ARGS.n_cores)
-        dt_new,_,_ = dti.dki_fit(dwi_new, akc_mask)
+        dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
 
         x,y,z = np.where(akc_mask == 1)
         DT = vectorize(dt_dki, mask)
         DT[x,y,z,:] = dt_new.T
         dt_dki = vectorize(DT, mask)
-        akc_mask = dti.outlierdetection(dt_dki, mask, dir)
+        akc_mask = dki.outlierdetection(dt_dki, mask, dir)
         akc_mask = vectorize(akc_mask, mask).astype(bool)
         print('N outliers = %s' % (np.sum(akc_mask)))
     else:
@@ -166,7 +162,7 @@ def execute(): #pylint: disable=unused-variable
         if app.ARGS.DTI:
             dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
         if app.ARGS.DKI:
-            dt_dki,_,_ = dti.dki_fit(dwi_new, mask)
+            dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
 
     if app.ARGS.DTI:
         print('...extracting and saving DTI maps...')
@@ -175,12 +171,12 @@ def execute(): #pylint: disable=unused-variable
 
     if app.ARGS.DKI:
         print('...extracting and saving DKI maps...')
-        params_dki = dti.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+        params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
         save_params(params_dki, nii, model='dki', outdir=outdir)
 
     if app.ARGS.WDKI:
         print('...extracting and saving WDKI maps...')
-        params_dwi = dti.extract_parameters(dt_dki, b_dki, mask, extract_dti=False, extract_dki=True, fit_w=True)
+        params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=False, extract_dki=True, fit_w=True)
         save_params(params_dwi, nii, model='wdki', outdir=outdir)
 
     if app.ARGS.WMTI:

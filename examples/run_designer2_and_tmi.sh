@@ -36,10 +36,14 @@ cd $datapath
 # -scratch designer2_processing_test -nocleanup \
 # $dwi1 designer2_test.nii
 
-designer \
--scratch designer2_processing_test -nocleanup \
-$dwi1 designer2_test.nii
+# designer \
+# -scratch designer2_processing_test -nocleanup \
+# $dwi1 designer2_test.nii
 
+tmi \
+-DTI -DKI \
+-scratch tmi_processing_test -nocleanup \
+designer2_test.nii designer2_params
 
 # tmi \
 # -DTI -DKI -WDKI -SMI \

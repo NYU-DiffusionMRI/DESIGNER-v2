@@ -27,7 +27,7 @@ tar xvzf fftw-3.3.10.tar.gz
 mkdir fftw
 # Obtain the absolute path to the folder for fftw compilation
 #export FFTW_DIR_NAME=`readlink -f thirdparty/fftw`
-export FFTW_DIR_NAME=`readlink -f fftw`
+export FFTW_DIR_NAME=$(pwd)/fftw
 echo "#######*********INSTALLATION FOLDER: ${FFTW_DIR_NAME}*************######"
 # move inside fftw folder
 cd fftw-3.3.10
@@ -69,3 +69,11 @@ if [ -f $rpg_path/unring_rpg.cpp ]; then
 rm -rf $rpg_path/rpg
 fi
 g++ unring_rpg.cpp -o rpg -O3 -Lthirdparty/nifticlib-2.0.0/lib -Lthirdparty/fftw/lib -Ithirdparty/nifticlib-2.0.0/include -Ithirdparty/fftw/include  -lnifticdf -lniftiio -lfftw3 -lznz -lz
+
+
+chmod -R 0777 $rpg_path/thirdparty/fftw-3.3.10
+chmod -R 0777 $rpg_path/thirdparty/nifticlib-2.0.0
+
+rm -rf $rpg_path/thirdparty/fftw
+rm -rf $rpg_path/thirdparty/fftw-3.3.10
+rm -rf $rpg_path/thirdparty/nifticlib-2.0.0
