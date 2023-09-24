@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 import os
 
-import sys
-sys.path.append('/Users/benaron/Documents/designer_v2_dev')
-
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
 from lib.designer_fit_wrappers import refit_or_smooth, save_params
 
@@ -230,5 +227,3 @@ def execute(): #pylint: disable=unused-variable
 def main():
     import mrtrix3
     mrtrix3.execute() #pylint: disable=no-member
-
-main()
