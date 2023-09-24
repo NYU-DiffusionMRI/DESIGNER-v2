@@ -7,10 +7,10 @@ with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
 long_description = '''designer and TMI package for use with brain 
-    diffusion MRI processing. Designer is used for image prepocessing 
+    diffusion MRI processing. Designer is used for image preprocessing 
     including denoising, partial-fourier gibbs correction, epi eddy 
     current and motion, and normalization. TMI is used for dti/dti/wmti/smi
-    along with outlier corection.'''
+    along with outlier correction.'''
 
 def change_permissions_recursive(path, mode):
     for root, dirs, files in os.walk(path, topdown=False):
@@ -24,11 +24,11 @@ subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
 
 setup(
         name ='designer2',
-        version ='0.0.18',
+        version ='0.0.32',
         author ='Benjamin Ades-Aron',
         author_email ='benjamin.ades-aron@nyulangone.org',
         url ='https://github.com/badesar1/designer_v2_dev.git',
-        description ='Test for designerV2',
+        description ='designerV2',
         long_description = long_description,
         long_description_content_type ="text/markdown",
         license ='NYU',

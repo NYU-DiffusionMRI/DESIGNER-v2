@@ -323,12 +323,18 @@ def run_eddy(shell_table, dwi_metadata):
     pe_dir = dwi_metadata['pe_dir']
 
     echo_times_per_series = dwi_metadata['TE']
+    bshape_per_series = dwi_metadata['bshape']
     if  echo_times_per_series.count(echo_times_per_series[0]) == len(echo_times_per_series):
         flag_variable_TE = False
     else:
         flag_variable_TE = True
 
-    if flag_variable_TE:
+    if  bshape_per_series.count(bshape_per_series[0]) == len(bshape_per_series):
+        flag_variable_bshape = False
+    else:
+        flag_variable_bshape = True
+
+    if flag_variable_TE or flag_variable_bshape:
         if app.ARGS.eddy_groups is None:
             raise MRtrixError('for variable TE data, the user must supply the \
                             -eddy_groups command line argument')
@@ -357,7 +363,8 @@ def run_eddy(shell_table, dwi_metadata):
             # extract b0s of dwi matching te of PA image
             run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean %s -axis 3' %
                 (dwi_metadata['idxlist'][id_dwi_match_pa],
-                path.to_scratch('pe_original_meanb0.nii')))
+                path.to_scratch('pe_original_meanb0.nii')),
+                show=False)
             # extract brain from mean b0
             run.command('bet %s %s -f 0.2 -m' %
                 (path.to_scratch('pe_original_meanb0.nii'), 
@@ -435,11 +442,25 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
 
-                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
-                    (path.to_scratch('b0_pair_topup_' + str(i) + '.nii'),
-                    path.to_scratch('topup_acqp.txt'),
-                    path.to_scratch('topup_results_' + str(i)),
-                    path.to_scratch('topup_results_' + str(i) + fsl_suffix)))
+                # if any of the image dims are odd dont subsample during topup
+                odd_dims = [ int(s) for s in image.Header(path.to_scratch('pe_to_ref_' + str(i) + fsl_suffix)).size()[:3] if s % 2 ]
+                if np.any(np.array(odd_dims)):
+                    flag_no_subsampling = True
+                else:
+                    flag_no_subsampling = False
+
+                if flag_no_subsampling:
+                    run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --subsamp=1 --scale=1 --out=%s --iout=%s' %
+                        (path.to_scratch('b0_pair_topup_' + str(i) + '.nii'),
+                        path.to_scratch('topup_acqp.txt'),
+                        path.to_scratch('topup_results_' + str(i)),
+                        path.to_scratch('topup_results_' + str(i) + fsl_suffix)))
+                else:
+                    run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
+                        (path.to_scratch('b0_pair_topup_' + str(i) + '.nii'),
+                        path.to_scratch('topup_acqp.txt'),
+                        path.to_scratch('topup_results_' + str(i)),
+                        path.to_scratch('topup_results_' + str(i) + fsl_suffix)))
                 
                 # mask the topup corrected image
                 run.command('mrmath %s mean %s -axis 3' %
@@ -521,7 +542,7 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('mrconvert ' + path.from_user(app.ARGS.rpe_pair) + ' b0rpe.nii')
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
-
+ 
             acqp = np.zeros((2,3))
             if 'i' in pe_dir: acqp[:,0] = 1
             if 'j' in pe_dir: acqp[:,1] = 1
@@ -535,11 +556,25 @@ def run_eddy(shell_table, dwi_metadata):
             acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
             np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
 
-            run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
-                (path.to_scratch('b0_pair_topup.nii'),
-                path.to_scratch('topup_acqp.txt'),
-                path.to_scratch('topup_results'),
-                path.to_scratch('topup_results' + fsl_suffix)))
+            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
+            odd_dims = [ int(s) for s in image.Header(path.to_scratch('b0pe.nii')).size()[:3] if s % 2 ]
+            if np.any(np.array(odd_dims)):
+                flag_no_subsampling = True
+            else:
+                flag_no_subsampling = False
+
+            if flag_no_subsampling:
+                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --subsamp=1 --scale=1 --out=%s --iout=%s' %
+                    (path.to_scratch('b0_pair_topup.nii'),
+                    path.to_scratch('topup_acqp.txt'),
+                    path.to_scratch('topup_results'),
+                    path.to_scratch('topup_results' + fsl_suffix)))
+            else:
+                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
+                    (path.to_scratch('b0_pair_topup.nii'),
+                    path.to_scratch('topup_acqp.txt'),
+                    path.to_scratch('topup_results'),
+                    path.to_scratch('topup_results' + fsl_suffix)))
                 
             # mask the topup corrected image
             run.command('mrmath %s mean %s -axis 3' %
@@ -576,13 +611,64 @@ def run_eddy(shell_table, dwi_metadata):
                     path.to_scratch('dwiec.mif')))
             
         elif app.ARGS.rpe_all:
-
+            # run an initial topup to create a brain mask
             run.command('mrconvert -export_grad_mrtrix grad.txt dwi.mif tmp.mif', show=False)
             run.command('mrconvert -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif')
+
+            run.command('dwiextract -bzero working.mif - | mrconvert -coord 3 0 - b0pe.nii')
+            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
+            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+            run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+            
+            acqp = np.zeros((2,3))
+            if 'i' in pe_dir: acqp[:,0] = 1
+            if 'j' in pe_dir: acqp[:,1] = 1
+            if 'k' in pe_dir: acqp[:,2] = 1
+            if '-' in pe_dir:
+                acqp[0,:] = -acqp[0,:]
+            else:
+                acqp[1,:] = -acqp[1,:]
+                
+            acqp[acqp==-0] = 0
+            acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+            np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+
+            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
+            odd_dims = [ int(s) for s in image.Header(path.to_scratch('b0pe.nii')).size()[:3] if s % 2 ]
+            if np.any(np.array(odd_dims)):
+                flag_no_subsampling = True
+            else:
+                flag_no_subsampling = False
+
+            if flag_no_subsampling:
+                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --subsamp=1 --scale=1 --out=%s --iout=%s' %
+                    (path.to_scratch('b0_pair_topup.nii'),
+                    path.to_scratch('topup_acqp.txt'),
+                    path.to_scratch('topup_results'),
+                    path.to_scratch('topup_results' + fsl_suffix)))
+            else:
+                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
+                    (path.to_scratch('b0_pair_topup.nii'),
+                    path.to_scratch('topup_acqp.txt'),
+                    path.to_scratch('topup_results'),
+                    path.to_scratch('topup_results' + fsl_suffix)))
+                
+            # mask the topup corrected image
+            run.command('mrmath %s mean %s -axis 3' %
+                        (path.to_scratch('topup_results' + fsl_suffix),
+                            path.to_scratch('topup_corrected_mean.nii')
+                        ))
+                 
+            run.command('bet %s %s -f 0.2 -m' %
+                (path.to_scratch('topup_corrected_mean.nii'), 
+                path.to_scratch('topup_corrected_brain')))
+
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-            cmd = ('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir %s dwipe_rpe.mif dwiec.mif' %
-                (eddyopts, pe_dir))
-            run.command('cmd')
+            run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir %s -eddy_mask %s dwipe_rpe.mif dwiec.mif' %
+                        (eddyopts, 
+                        pe_dir,
+                        path.to_scratch('topup_corrected_brain_mask' + fsl_suffix)
+                        ))
             run.function(os.remove,'tmp.mif')
 
         elif app.ARGS.rpe_header:

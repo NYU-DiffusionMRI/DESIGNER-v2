@@ -120,6 +120,7 @@ def convert_pe_dir_to_ijk(args_pe_dir):
 def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
     import json
     from mrtrix3 import app, MRtrixError
+    import numpy as np
 
     bidslist = dwi_metadata['bidslist']
     try:
@@ -166,14 +167,15 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
     else:
         bshape = [1] * len(dwi_metadata['dwi_list'])
 
-    if (TE_app) and (TE_bids) and (TE_bids != TE_app):
-        raise MRtrixError('User defined echo times do not match those found in bids .json, please check input data for consistancy')
-    elif TE_app:
+    if (app.ARGS.echo_time) and (TE_bids) and (TE_bids != TE_app):
+        raise MRtrixError('User defined echo times do not match those found in bids .json, please check input data for consistency')
+    
+    if np.any(np.array(TE_app) > 0):
         TE = TE_app
-    elif TE_bids:
+    elif TE_bids is not None:
         TE = TE_bids
     else:
-        TE = [0] * len(dwi_metadata['dwi_list'])
+        TE = TE_app
 
     # if no partial fourier information is found, assume full sampling
     if not args_pf and not pf_bids:
@@ -188,7 +190,7 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
         pe_dir = pe_dir_app
 
     if (pf_bids and args_pf) and (float(args_pf) != pf_bids):
-        raise MRtrixError('input partial fourier fractor and bids PF factor do not match')
+        raise MRtrixError('input partial fourier factor and bids PF factor do not match')
     elif pf_bids:
         pf = pf_bids
     else:
@@ -220,6 +222,7 @@ def convert_input_data(dwi_metadata):
     """
     from mrtrix3 import run, image, MRtrixError, app
     import numpy as np
+    import os
 
     miflist = []
     idxlist = []
@@ -237,9 +240,17 @@ def convert_input_data(dwi_metadata):
 
     if len(dwi_n_list) == 1:
         if not isdicom:
-            cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi.mif' % 
-                (bveclist[0], bvallist[0], ''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
-            run.command(cmd)
+            if os.path.exists(bvallist[0]):
+                cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi.mif' % 
+                    (bveclist[0], bvallist[0], ''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+                run.command(cmd)
+            elif ~os.path.exists(bvallist[0]) and ('.mif' in ''.join(dwi_ext)):
+                cmd = ('mrconvert %s%s %s/dwi.mif' % 
+                    (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+                run.command(cmd)
+            else:
+                raise MRtrixError('please make sure that inputs are either .nii files accompanied by corresponding .bval and .bvec files, or a .mif file with embedded gradient information')
+            
         else:
             cmd = ('mrconvert %s %s/dwi.mif' %
             (''.join(dwi_n_list), app.SCRATCH_DIR))
@@ -250,9 +261,16 @@ def convert_input_data(dwi_metadata):
     else:
         for idx,i in enumerate(dwi_n_list):
             if not isdicom:
-                cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi%s.mif' % 
-                (bveclist[idx], bvallist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
-                run.command(cmd)
+                if os.path.exists(bvallist[idx]):
+                    cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi%s.mif' % 
+                        (bveclist[idx], bvallist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                    run.command(cmd)
+                elif ~os.path.exists(bvallist[idx]) and ('.mif' in dwi_ext[idx]):
+                    cmd = ('mrconvert %s%s %s/dwi%s.mif' % 
+                        (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                    run.command(cmd)
+                else:
+                    raise MRtrixError('please make sure that inputs are either .nii files accompanied by corresponding .bval and .bvec files, or a .mif file with embedded gradient information')
             else:
                 cmd = ('mrconvert %s %s/dwi%s.mif' %
                 (i, app.SCRATCH_DIR, str(idx)))

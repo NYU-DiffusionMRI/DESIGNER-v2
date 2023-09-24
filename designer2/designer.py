@@ -7,7 +7,10 @@ from lib.designer_func_wrappers import *
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
     cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
-    cmdline.set_synopsis("""1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations 
+    cmdline.set_synopsis("""
+                        Designer by default, with no optional arguments used "designer <input> <output>" will not perform any preprocessing. Each preprocessing step must be chosen using the appropriate option. For example usage please see the Designer documentation at https://nyu-diffusionmri.github.io/docs/designer/examples/\n
+                        
+                        1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations. Ensure input parameters are reasonable, perform a check on diffusion gradient scheme.\n
  						
                         2. Denoising\n
 						
@@ -74,6 +77,7 @@ def usage(cmdline): #pylint: disable=unused-variable
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
     import pandas as pd
+    import os
 
     # create a temporary directory to store processing files
     app.make_scratch_dir()
@@ -156,23 +160,27 @@ def execute(): #pylint: disable=unused-variable
     run.command('mrconvert -force -datatype float32le working.mif dwi_designer.nii', show=False)
 
     outpath = path.from_user(app.ARGS.output, True)
+    (head, fname) = os.path.split(outpath)
+    oname = fname.split(os.extsep)[0]
 
     if app.ARGS.datatype:
         run.command('mrconvert -force -datatype %s -export_grad_fsl %s %s %s %s' % 
             (app.ARGS.datatype, 
-            path.from_user('dwi_designer.bvec', True),
-            path.from_user('dwi_designer.bval', True),
+            os.path.join(head, oname + '.bvec'),
+            os.path.join(head, oname + '.bval'),
             path.to_scratch('working.mif', True),
             outpath))
     else:
         run.command('mrconvert -force -export_grad_fsl %s %s %s %s' % 
-            (path.from_user('dwi_designer.bvec', True),
-            path.from_user('dwi_designer.bval', True),
+            (
+            os.path.join(head, oname + '.bvec'),
+            os.path.join(head, oname + '.bval'),
             path.to_scratch('working.mif', True), 
             outpath))
 
 def main():
     import mrtrix3
     mrtrix3.execute() #pylint: disable=no-member
+
 
 

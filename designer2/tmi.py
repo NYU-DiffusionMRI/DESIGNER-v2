@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 import os
+
+import sys
+sys.path.append('/Users/benaron/Documents/designer_v2_dev')
+
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
 from lib.designer_fit_wrappers import refit_or_smooth, save_params
 
@@ -39,12 +43,12 @@ def usage(cmdline): #pylint: disable=unused-variable
     dki_options.add_argument('-fit_smoothing',metavar=('<percentile>'),help='NLM smoothing on wlls fit')
 
     smi_options = cmdline.add_argument_group('tensor options for the TMI script')
-    smi_options.add_argument('-SMI', action='store_true',help='output the kurtosis tensor with W cumulant rather than K')  
+    smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
 
     wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
-    wmti_options.add_argument('-WMTI', action='store_true', help='Include DKI parameters in output folder (awf,ias_params,eas_params)')
+    wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
 
 
 def execute(): #pylint: disable=unused-variable
@@ -89,7 +93,7 @@ def execute(): #pylint: disable=unused-variable
     if order >= 2:
         bval = bval / 1000
 
-    maxb = 3
+    maxb = 3.2
     dwi = dwi[:,:,:,bval < maxb]
     bvec = bvec[:,bval < maxb]
     bval = bval[bval < maxb]
@@ -117,13 +121,13 @@ def execute(): #pylint: disable=unused-variable
         bval_dti = bval[dtishell]
         bvec_dti = bvec[:,dtishell]
         grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
-        dti = tensor.TensorFitting(grad_dti, app.ARGS.n_cores)
+        dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
         dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
 
-    if app.ARGS.DKI:
+    if app.ARGS.DKI or app.ARGS.WDKI:
         print('...Multi shell DKI fit with constraints = ' + str(constraints))
         grad = np.hstack((bvec.T, bval[None,...].T))
-        dki = tensor.TensorFitting(grad, app.ARGS.n_cores)
+        dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
         dt_dki, s0_dki, b_dki = dki.dki_fit(dwi, mask, constraints=constraints)
 
     if app.ARGS.akc_outliers:
@@ -143,7 +147,7 @@ def execute(): #pylint: disable=unused-variable
         akc_mask = vectorize(akc_mask, mask).astype(bool)
         print('N outliers = %s' % (np.sum(akc_mask)))
 
-        dwi_new = refit_or_smooth(akc_mask, dwi, n_cores=app.ARGS.n_cores)
+        dwi_new = refit_or_smooth(akc_mask, dwi, n_cores=int(app.ARGS.n_cores))
         dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
 
         x,y,z = np.where(akc_mask == 1)
@@ -160,8 +164,8 @@ def execute(): #pylint: disable=unused-variable
         print('...Nonlocal smoothing...')
         dwi_new = refit_or_smooth(akc_mask, dwi, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
         if app.ARGS.DTI:
-            dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
-        if app.ARGS.DKI:
+            dt_dti,_,_ = dti.dti_fit(dwi_new[:,:,:,dtishell], mask)
+        if (app.ARGS.DKI or app.ARGS.WDKI):
             dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
 
     if app.ARGS.DTI:
@@ -226,3 +230,5 @@ def execute(): #pylint: disable=unused-variable
 def main():
     import mrtrix3
     mrtrix3.execute() #pylint: disable=no-member
+
+main()

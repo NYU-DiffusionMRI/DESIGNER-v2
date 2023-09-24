@@ -33,7 +33,7 @@ class TensorFitting(object):
 
     def diffusion_coeff(self, dt, dir):
         """
-        Compute the approximate diffusion coefficient
+        Compute the apparent diffusion coefficient
         """
         # compute ADC
         dcnt, dind = self.create_tensor_order(2)
@@ -45,7 +45,7 @@ class TensorFitting(object):
 
     def kurtosis_coeff(self, dt, dir):
         """
-        Function to Compute the aproximate kurtosis coefficient
+        Function to Compute the apparent kurtosis coefficient
         """
         # compute AKC
         wcnt, wind = self.create_tensor_order(4)
@@ -362,17 +362,17 @@ class TensorFitting(object):
 
         nvxls = dt.shape[1]
         akc_mask = np.zeros((nvxls))
-        nblocks = 10
+        nblocks = 200
 
         try:
             N = 10000
-            akc_mask = Parallel(n_jobs=self.n_cores, prefer='processes')\
+            akc_mask = Parallel(n_jobs=self.n_cores, prefer='threads')\
                 (delayed(self.compute_outliers)
                 (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
                 )
         except:
-            N = 5000
-            akc_mask = Parallel(n_jobs=8, prefer='processes')\
+            N = 1000
+            akc_mask = Parallel(n_jobs=8)\
                 (delayed(self.compute_outliers)
                 (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
                 )
