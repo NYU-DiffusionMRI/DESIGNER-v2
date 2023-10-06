@@ -24,7 +24,7 @@ subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
 
 setup(
         name ='designer2',
-        version ='0.0.33',
+        version ='2.0.0',
         author ='Benjamin Ades-Aron',
         author_email ='benjamin.ades-aron@nyulangone.org',
         url ='https://github.com/badesar1/designer_v2_dev.git',

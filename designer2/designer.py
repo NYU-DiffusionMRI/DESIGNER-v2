@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-__version__ = "0.0.9"
+__version__ = "2.0.0"
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
