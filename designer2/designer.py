@@ -108,6 +108,7 @@ def execute(): #pylint: disable=unused-variable
     app.goto_scratch_dir()
     
     # begin pipeline
+    print('development branch')
 
     # denoising
     if app.ARGS.denoise:
@@ -185,3 +186,8 @@ def main():
     mrtrix3.execute() #pylint: disable=no-member
 
 
+<<<<<<< HEAD
+=======
+
+main()
+>>>>>>> dev
