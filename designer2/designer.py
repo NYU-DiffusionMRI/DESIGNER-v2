@@ -112,7 +112,7 @@ def execute(): #pylint: disable=unused-variable
     # denoising
     if app.ARGS.denoise:
         if app.ARGS.phase:
-            phasepath = path.from_user(app.ARGS.phase)
+            phasepath = path.to_scratch('phase.nii')
         else:
             phasepath = None
 
@@ -163,7 +163,10 @@ def execute(): #pylint: disable=unused-variable
 
     outpath = path.from_user(app.ARGS.output, True)
     (head, fname) = os.path.split(outpath)
-    oname = fname.split(os.extsep)[0]
+    full_outname = fname.split(os.extsep)
+    oname = full_outname[0]
+    if len(full_outname) == 1:
+        outpath += '.nii'
 
     if app.ARGS.datatype:
         run.command('mrconvert -force -datatype %s -export_grad_fsl %s %s %s %s' % 

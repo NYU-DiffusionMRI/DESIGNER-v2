@@ -18,13 +18,21 @@ def splitext_(path):
             return path[:-len(ext)], path[-len(ext):]
     return os.path.splitext(path)
 
+# determine the type and number of input datasets
 def get_input_info(input, fslbval, fslbvec, bids):
-    import os
-    from mrtrix3 import image, MRtrixError
+    '''
+    Input: This function takes in the user input along with gradient and BIDS sidecar, if they exist.
+    Output: A dictionary containing the input file paths, file names, extensions, gradient table path, json path, and the paths of any data that should accompany the inputs
+    '''
 
+    import os
+    from mrtrix3 import image, MRtrixError, app
+
+    # split input datasets that are separated by commas
     UserCpath = input.rsplit(',')
     DWIlist = [os.path.realpath(i) for i in UserCpath]
     
+    # determine if the input DWI is in dicom format (directory inputs are assumed dicom)
     isdicom = False
     for i in DWIlist:
         if not os.path.exists(i):
@@ -37,10 +45,12 @@ def get_input_info(input, fslbval, fslbvec, bids):
             else:
                 raise MRtrixError('input is a directory but does not contain DICOMs, quitting')
 
-    DWIflist = [splitext_(i) for i in DWIlist]
+    # split dwi into file name and ext for each comma separated input
+    DWIflist = [splitext_(i) for i in DWIlist] 
     DWInlist = [i[0] for i in DWIflist]
     DWIext = [i[1] for i in DWIflist]
 
+    # if the paths to gradients are not specified by the user, assume they are using BIDS convention
     if not fslbval:
         bvallist = [i + '.bval' for i in DWInlist]
     else:
@@ -58,17 +68,38 @@ def get_input_info(input, fslbval, fslbvec, bids):
         UserBidspath = bids.resplit(',')
         bidslist = [os.path.realpath(i) for i in UserBidspath]
 
+    # if the user provides the path to phases
+    if app.ARGS.phase:
+        phase_cpath = app.ARGS.phase.rsplit(',')
+        phase_list = [os.path.realpath(i) for i in phase_cpath]
+        phase_flist = [splitext_(i) for i in phase_list]
+        phase_nlist = [i[0] for i in phase_flist]
+        phase_ext = [i[1] for i in phase_flist]
+
+        if not '.nii' in phase_ext:
+            raise MRtrixError('phases must be in .nii format')
+    else:
+        phase_nlist = None
+        phase_ext = None
+
     dwi_metadata = {
         'isdicom': isdicom, 
         'dwi_ext': DWIext,
         'bvecs': bveclist,
         'bvals': bvallist,
         'dwi_list': DWInlist,
+        'phase_list': phase_nlist,
+        'phase_ext': phase_ext,
         'bidslist': bidslist}
 
     return dwi_metadata
 
 def convert_pe_dir_to_ijk(args_pe_dir):
+    '''
+    Converts phase encoding information supplied manually or in the BIDS json into ijk format
+    Input: phase encoding argument
+    Ouput: phase encoding in ijk convention
+    '''
     from mrtrix3 import MRtrixError
 
     avail_pe_dirs = [None,'1','-1','2','-2','3','-3','i','i-','j','j-','k','k-','LR','RL','AP','PA','IS','SI']
@@ -225,6 +256,7 @@ def convert_input_data(dwi_metadata):
     import os
 
     miflist = []
+    phaselist = []
     idxlist = []
     telist = []
     bshapelist = []
@@ -237,6 +269,8 @@ def convert_input_data(dwi_metadata):
     dwi_ext = dwi_metadata['dwi_ext']
     te_per_series = dwi_metadata['TE']
     bshape_per_series = dwi_metadata['bshape']
+    phase_n_list = dwi_metadata['phase_list']
+    phase_ext = dwi_metadata['phase_ext']
 
     if len(dwi_n_list) == 1:
         if not isdicom:
@@ -250,10 +284,9 @@ def convert_input_data(dwi_metadata):
                 run.command(cmd)
             else:
                 raise MRtrixError('please make sure that inputs are either .nii files accompanied by corresponding .bval and .bvec files, or a .mif file with embedded gradient information')
-            
         else:
             cmd = ('mrconvert %s %s/dwi.mif' %
-            (''.join(dwi_n_list), app.SCRATCH_DIR))
+                (''.join(dwi_n_list), app.SCRATCH_DIR))
             run.command(cmd)
         dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))
         dwi_ind_size.append([ int(s) for s in dwi_header.size() ])
@@ -282,6 +315,17 @@ def convert_input_data(dwi_metadata):
         DWImif = ' '.join(miflist)
         cmd = ('mrcat -axis 3 %s %s/dwi.mif' % (DWImif, app.SCRATCH_DIR))
         run.command(cmd)
+
+    if app.ARGS.phase:
+        if len(phase_n_list) == 1:
+            run.command('mrconvert %s%s %s/phase.nii' % 
+                        (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+        else:
+            for idx,i in enumerate(phase_n_list):
+                run.command('mrconvert %s%s %s/phase%s.nii' % 
+                            (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                phaselist.append('%s/phase%s.nii' % (app.SCRATCH_DIR, str(idx)))
+            run.command('mrcat -axis 3 %s %s/phase.nii' % (' '.join(phaselist), app.SCRATCH_DIR))
 
     # get diffusion header info - check to make sure all values are valid for processing
     dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))
