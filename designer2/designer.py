@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-__version__ = "0.0.9"
+__version__ = "2.0.0"
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
@@ -7,7 +7,9 @@ from lib.designer_func_wrappers import *
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
     cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
-    cmdline.set_synopsis("""
+    cmdline.set_synopsis("""Version 2.0.0\n\n
+                        
+                         
                         Designer by default, with no optional arguments used "designer <input> <output>" will not perform any preprocessing. Each preprocessing step must be chosen using the appropriate option. For example usage please see the Designer documentation at https://nyu-diffusionmri.github.io/docs/designer/examples/\n
                         
                         1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations. Ensure input parameters are reasonable, perform a check on diffusion gradient scheme.\n

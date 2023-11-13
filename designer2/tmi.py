@@ -7,13 +7,18 @@ from lib.designer_fit_wrappers import refit_or_smooth, save_params
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
     cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
-    cmdline.set_synopsis("""1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations \n 
+    cmdline.set_synopsis("""Version 2.0.0\n\n
+                         
+
+                         
+                        1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations \n 
  						
                         2. Run fitting: Available options include DTI (TMI will look for b0 and b1000 images by default.\n
                             DKI (constrained fitting is available using the -fit_constraints option).\n
                             W-DKI (DKI parameters using the W definition instead of K).\n
                             WMTI (using dipy implimentation from Rafael Henriques).\n
                             SMI (From Santiago Coelho).\n
+                        
                         """)
 
     cmdline.add_citation('Veraart, J.; Novikov, D.S.; Christiaens, D.; Ades-aron, B.; Sijbers, J. & Fieremans, E. Denoising of diffusion MRI using random matrix theory. NeuroImage, 2016, 142, 394-406, doi: 10.1016/j.neuroimage.2016.08.016',is_external=True)
