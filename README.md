@@ -1,6 +1,6 @@
 # designer-v2
 
-## For complete documentation on designer & tmi installation and usage please visit the [documention](https://nyu-diffusionmri.github.io).
+## For complete documentation on designer & tmi installation and usage please visit the [documentation](https://nyu-diffusionmri.github.io).
 
 ## Example usage for "meso" data
 An example script can be found in the examples folder. It is copied here as well. Preprocessing and fitting are now split into two separate functions: designer for preprocessing and tmi for fitting. 
