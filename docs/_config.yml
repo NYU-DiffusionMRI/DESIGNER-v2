@@ -4,7 +4,7 @@ remote_theme: pmarsceill/just-the-docs
 repository: NYU-DiffusionMRI/NYU-diffusionMRI.github.io
 #theme: just-the-docs
 
-baseurl: "DESIGNER-v2"
+baseurl: "DESIGNER-v2/"
 url: https://nyu-diffusionmri.github.io
 
 aux_links:
