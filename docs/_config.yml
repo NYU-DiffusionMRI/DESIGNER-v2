@@ -1,0 +1,75 @@
+title: NYU Diffusion Biophysics Docs
+description: Documentation, usage and examples for DESIGNER, TMI (Tissue microstructure Imaging) parameter estimation tools, and more.
+remote_theme: pmarsceill/just-the-docs
+repository: NYU-DiffusionMRI/NYU-diffusionMRI.github.io
+theme: just-the-docs
+
+baseurl: "DV2-docs"
+url: https://nyu-diffusionmri.github.io
+
+aux_links:
+  Github Repository: https://github.com/NYU-DiffusionMRI
+
+gems:
+- jekyll-seo-tag
+
+callouts_level: quiet # or loud
+callouts:
+  note:
+    title: Note
+    color: yellow
+  important:
+    title: Important
+    color: blue
+  new:
+    title: New
+    color: green
+  ref:
+    title: References
+    color: purple
+  warning:
+    title: Warning
+    color: red
+
+permalink: pretty
+
+enable_copy_code_button: true
+
+logo: "/assets/images/logo_rectangle.png"
+favicon_ico: "/assets/images/logo_transparent_shitty.png"
+
+# Back to top link
+back_to_top: true
+back_to_top_text: "Back to top"
+
+# Makes Aux links open in a new tab. Default is false
+aux_links_new_tab: false
+
+# Enable or disable heading anchors
+heading_anchors: true
+
+search_enabled: true
+
+mermaid:
+  # Version of mermaid library
+  # Pick an available version from https://cdn.jsdelivr.net/npm/mermaid/
+  version: "9.1.6"
+
+plugins:
+  - jekyll-seo-tag
+  # - jekyll-github-metadata
+
+kramdown:
+  syntax_highlighter_opts:
+    block:
+      line_numbers: false
+
+# compress_html:
+#   clippings: all
+#   comments: all
+#   endings: all
+#   startings: []
+#   blanklines: false
+#   profile: false
+#   # ignore:
+#   #   envs: all
