@@ -17,7 +17,7 @@ nav_order: 2
 
 ---
 
-This page describes background on how the diffusion and kurtosis tensors are fit in TMI. For information on the particular DTI/DKI fitting options available with TMI please see the [usage]({% link docs/TMI/usage.md %}) page.
+This page describes background on how the diffusion and kurtosis tensors are fit in TMI. For information on the particular DTI/DKI fitting options available with TMI please see the [usage]({{ site.baseurl }}{% link docs/TMI/usage.md %}) page.
 
 ## The Basics
 

@@ -9,7 +9,7 @@ parent: TMI
 # Options and Usage for TMI
 {: .no_toc }
 
-This page describes each optional argument to TMI. For specific use-case examples of TMI calls, please see the [examples]({% link docs/TMI/examples.md %}) page.
+This page describes each optional argument to TMI. For specific use-case examples of TMI calls, please see the [examples]({{ site.baseurl }}{% link docs/TMI/examples.md %}) page.
 
 Main usage:
 `tmi <input> <output>`

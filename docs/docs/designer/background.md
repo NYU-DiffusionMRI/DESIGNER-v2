@@ -17,7 +17,7 @@ nav_order: 2
 
 ---
 
-For most single/multi-shell diffusion weighted imaging data, we recommend running designer using the following preprocessing methods. We summarize and provide references for the methods below. For their usage in Designer please see the [usage]({% link docs/designer/usage.md %}) page.
+For most single/multi-shell diffusion weighted imaging data, we recommend running designer using the following preprocessing methods. We summarize and provide references for the methods below. For their usage in Designer please see the [usage]({{ site.baseurl }}{% link docs/designer/usage.md %}) page.
 
 ## DWI Denoising with MPPCA
 

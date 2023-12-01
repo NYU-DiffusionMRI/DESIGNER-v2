@@ -50,7 +50,7 @@ Veraart, J., Novikov, D. S., Christiaens, D., Ades-Aron, B., Sijbers, J., & Fier
 Fadnavis, S., Batson, J., & Garyfallidis, E. (2020). Patch2Self: Denoising Diffusion MRI with Self-Supervised Learning​. Advances in Neural Information Processing Systems, 33, 16293-16303.
 
 ### `-shrinkage <frob>`
-- Perform or do not perform singular value shrinkage using the Frobenuous norm described [here]({% link docs/designer/background.md %}#singular-value-shrinkage) after MPPCA denoising
+- Perform or do not perform singular value shrinkage using the Frobenuous norm described [here]({{ site.baseurl }}{% link docs/designer/background.md %}#singular-value-shrinkage) after MPPCA denoising
 - Options are `threshold` or `frob`. default `frob`.
 - Used in conjunction with the `-denoise` option.
 - When using this option please include the following citation:
@@ -59,7 +59,7 @@ Fadnavis, S., Batson, J., & Garyfallidis, E. (2020). Patch2Self: Denoising Diffu
 Gavish, M., & Donoho, D. L. (2017). Optimal shrinkage of singular values. IEEE Transactions on Information Theory, 63(4), 2137-2152.
 
 ### `-algorithm <cordero-grande>`
-- Specification for the MP thresholding algorithm described [here]({% link docs/designer/background.md %}#symmetric-pca-thresholding).
+- Specification for the MP thresholding algorithm described [here]({{ site.baseurl }}{% link docs/designer/background.md %}#symmetric-pca-thresholding).
 - Used in conjunction with the `-denoise` option.
 - Options are `veraart`, `cordero-grande`, and `jespersen`; default `cordero-grande`.
 - When using the `cordero-grande` algorithm please using the following citation:
@@ -80,14 +80,14 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 - Users should ensure that their chosen patch size is not larger than the total image size in any dimension.
 
 ### `-adaptive_patch`
-- Run MPPCA with adaptive patching as described [here]({% link docs/designer/background.md %}#adaptive-patching).
+- Run MPPCA with adaptive patching as described [here]({{ site.baseurl }}{% link docs/designer/background.md %}#adaptive-patching).
 - used in conjunction with the `-denoise` option.
 - When this option is used an adaptive patch is chosen where N=100 (TODO: make N an input parameter)
 
 ### `-phase <phase_image1,phase_image2,...>`
 - Include a volume (or volumes) of phase images corresponding to the input(s) to Designer. For example, if two series are input to Designer with a total of 100 directions, there should be two phase series with 100 total volumes.
 - Used in conjunction with `-denoise` option.
-- This option will perform denoising on the complex-valued DWI data to help reduce the effect of the noise floor as described [here]({% link docs/designer/background.md %}#denoising-complex-data).
+- This option will perform denoising on the complex-valued DWI data to help reduce the effect of the noise floor as described [here]({{ site.baseurl }}{% link docs/designer/background.md %}#denoising-complex-data).
 
 ---
 
@@ -189,7 +189,7 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 
 ### `-rician`
 - Perform Rician bias correction using the approximation for the method of moments.
-- Background on this option can be found [here]({% link docs/designer/background.md %}#rician-bias-correction).
+- Background on this option can be found [here]({{ site.baseurl }}{% link docs/designer/background.md %}#rician-bias-correction).
 - If used in conjunction with `-denoise`, the noisemap from MPPCA is used to compute the bias free maginutude DWI dataset.
 
 {: .warning }

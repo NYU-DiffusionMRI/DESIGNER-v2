@@ -21,7 +21,7 @@ nav_order: 1
 
 TMI is installed alongside Designer. TMI is written in python and and is an external [Mrtrix3](https://www.mrtrix.org) project.
 
-Please follow the [installation instructions]({% link docs/designer/installation.md %}) for Designer.
+Please follow the [installation instructions]({{ site.baseurl }}{% link docs/designer/installation.md %}) for Designer.
 
 ---
 
