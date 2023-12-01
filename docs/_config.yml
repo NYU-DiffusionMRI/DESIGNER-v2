@@ -4,11 +4,11 @@ remote_theme: pmarsceill/just-the-docs
 repository: NYU-DiffusionMRI/NYU-diffusionMRI.github.io
 #theme: just-the-docs
 
-baseurl: "DV2-docs"
+baseurl: "DESIGNER-v2"
 url: https://nyu-diffusionmri.github.io
 
 aux_links:
-  Github Repository: https://github.com/NYU-DiffusionMRI
+  Github Repository: https://github.com/NYU-DiffusionMRI/DESIGNER-v2
 
 gems:
 - jekyll-seo-tag

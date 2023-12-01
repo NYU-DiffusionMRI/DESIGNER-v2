@@ -1,7 +1,9 @@
 ---
 title: Home
-layout: home
+layout: default
 nav_order: 1
+description: "Temp description"
+permalink: /
 ---
 
 # DESIGNER-v2
