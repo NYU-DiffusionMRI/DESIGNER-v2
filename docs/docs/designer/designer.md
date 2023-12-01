@@ -9,7 +9,7 @@ permalink: /docs/designer
 # DESIGNER-v2
 
 Designer is a python tool for diffusion MRI preprocessing. It includes:
-- [denoising using MPPCA]({% link docs/designer/background.md %}#dwi-denoising-with-mppca) (or optionally using patch2self through dipy)
+- [denoising using MPPCA]({{ site.baseurl }}{% link docs/designer/background.md %}#dwi-denoising-with-mppca) (or optionally using patch2self through dipy)
 - [RPG Gibbs artifact correction]({% link docs/designer/background.md %}#dwi-gibbs-correction)
 - [Rician bias correction]({% link docs/designer/background.md %}#rician-bias-correction)
 - [EPI distortion correction]({% link docs/designer/background.md %}#epi-distortion-correction-and-eddy current-and-motion-correction)
