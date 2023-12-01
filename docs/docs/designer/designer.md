@@ -20,7 +20,7 @@ Designer is a python tool for diffusion MRI preprocessing. It includes:
 Designer was developed to simplify the often complex process of eliminating noise and artifacts from DICOM level diffusion data. It was written so that multiple input series can be preprocessed at once, in the case where some diffusion shells are acquired in separate series or acquisitions. Designer can support data with varying echo-time or b-shape depending on user input. It also supports complex-valued data, as users can import a diffusion phase map in order to eliminate the effects of the noise floor. It was originally developed by Benjamin Ades-Aron and Jenny Chen.
 
 ![v1 vs v2](/assets/images/dv1_dv2.png)
-Designer version 2 has a number of notable changes from the original implementation. The majority of processing steps have been ported to either Python or C++ for speed, memory, and compatibility improvements. Beyond this, MPPCA and Gibbs correction techniques have been optimized. For details on these improvements please visit our [background]({% link docs/designer/background.md %}) page.
+Designer version 2 has a number of notable changes from the original implementation. The majority of processing steps have been ported to either Python or C++ for speed, memory, and compatibility improvements. Beyond this, MPPCA and Gibbs correction techniques have been optimized. For details on these improvements please visit our [background]({% link docs/docs/designer/background.md %}) page.
 
 If you use designer please cite one of the following reference:
 

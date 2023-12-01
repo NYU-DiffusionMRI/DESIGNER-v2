@@ -7,15 +7,6 @@ permalink: /docs/TMI
 ---
 
 # Tissue Microstructure Imaging
-{: .no_toc }
-
-## Table of contents
-{: .no_toc .text-delta }
-
-1. TOC
-{:toc}
-
----
 
 `tmi` (tissue microstructure imaging) is a python tool for diffusion MRI parameter estimation. It has been designed along with the `designer` preprocessing package and they are meant to be used in conjunction - `designer` for image pre-processing and `tmi` for parameter estimation. `tmi` includes:
 - [singe shell diffusion tensor estimation]({% link docs/TMI/DTI-DKI.md %}#The-Diffusion-and-Kurtosis-Tensors)
