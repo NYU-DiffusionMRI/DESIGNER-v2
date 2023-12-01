@@ -1,10 +1,10 @@
 title: NYU Diffusion Biophysics Docs
 description: Documentation, usage and examples for DESIGNER, TMI (Tissue microstructure Imaging) parameter estimation tools, and more.
 remote_theme: pmarsceill/just-the-docs
-repository: NYU-DiffusionMRI/NYU-diffusionMRI.github.io
+repository: NYU-DiffusionMRI/DESIGNER-v2
 #theme: just-the-docs
 
-baseurl: "/Designer-v2"
+baseurl: "/DESIGNER-v2"
 url: https://nyu-diffusionmri.github.io
 
 aux_links:
