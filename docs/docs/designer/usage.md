@@ -9,7 +9,7 @@ parent: designer
 # Options and Usage for Designer
 {: .no_toc }
 
-This page describes each optional argument to designer. For specific use-case examples of designer calls, please see the [examples]({% link docs/designer/examples.md %}) page.
+This page describes each optional argument to designer. For specific use-case examples of designer calls, please see the [examples]({{ site.baseurl }}{% link docs/designer/examples.md %}) page.
 
 Main usage:
 `designer <input1,input2,...> <output>`
