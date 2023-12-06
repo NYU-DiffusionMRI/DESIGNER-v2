@@ -16,7 +16,7 @@ Welcome to the [NYU diffusion biophysics group](https://diffusion-mri.com) docum
 
 This website documents DESIGNER version 2.0 and onwards. Prior versions of the DESIGNER package are officially deprecated and are no longer being maintained. GitHub code for designer-v2 is available [here](https://github.com/NYU-DiffusionMRI/DESIGNER-v2).
 
-Both Designer-v2 and TMI are built as [mrtrix3](https://www.mrtrix.org) external packages. Please see our [installation]({% link docs/designer/installation.md %}), [usage]({% link docs/designer/usage.md %}), and [examples]({% link docs/designer/examples.md %}) pages for information on how to run designer.
+Both Designer-v2 and TMI are built as [mrtrix3](https://www.mrtrix.org) external packages. Please see our [installation]({{ site.baseurl }}{% link docs/designer/installation.md %}), [usage]({{ site.baseurl }}{% link docs/designer/usage.md %}), and [examples]({{ site.baseurl }}{% link docs/designer/examples.md %}) pages for information on how to run designer.
 
 {: .note }
 This webpage is still under development! Please excuse us for any missing information and don't hesitate to reach out if you have immediate issues with package installation.
