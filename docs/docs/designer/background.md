@@ -26,7 +26,7 @@ Designer includes the `-denoise` optional argument, which implements dMRI noise 
 The method used in Designer contains additional functionality compared to the original implementation. This includes adaptive patching, eigenvalue shrinkage, a modified threshold on the principal component domain, and eigenvalue shrinkage.
 
 ### Adaptive patching
-![Adaptive patch example](/assets/images/Fig1_AdaptPatch_2.png)
+![Adaptive patch example]({{ site.baseurl }}/assets/images/Fig1_AdaptPatch_2.png)
 
 In contrast to the original MPPCA approach where patches are squares or cubes around a given voxel (e.g., $5\times5\times5$ voxels), we enhanced the spatial redundancy, in addition to the redundancy in the measurements (here in the diffusion $q$-space), by pre-selecting voxels that have similar ground truth. Our goal is to minimize the number $p$ of components, and to maximize their contributions $s_i$, such that they describe most of the signal --- this is the assumption of the underlying noise-free signal to be of low-rank. 
 
@@ -76,7 +76,7 @@ $$ p(\lambda) =
 $$
 
 ### Denoising Complex Data
-![phase denoising example](/assets/images/denoised_phases.png)
+![phase denoising example]({{ site.baseurl }}/assets/images/denoised_phases.png)
 Designer provides users with the option to include a phase dataset as an optional input. To perform denoising on complex data, Designer first denoises the complex data using MPPCA (symmetric thresholding) using a $15 \times 15$ 2d box-shaped kernel within each slice. The denoised and spatially smoothly-varying phase $\phi_{\rm dn}(\br)$ is then unwound according to: $S_{\rm real} = $Re$\,(S_{\rm complex} e^{-i\phi_{\rm dn}})$. Finally, the noisy phase-unwound signal $S_{\rm real}$ is denoised using an adaptive 3d moving patch, symmetric thresholding, and eigenvalue shrinkage. Phase unwinding helps remove spurious components arising due to shot-to-shot phase variations in dMRI. In addition to improved denoising performance (due to the two-pass approach), MP-Complex also reduces the Rician noise floor of the data, reducing bias and increasing the precision of downstream parameter estimation.
 
 ---
@@ -86,19 +86,19 @@ Designer provides users with the option to include a phase dataset as an optiona
 This application attempts to remove Gibbs ringing artifacts from MRI images using the method of local subvoxel-shifts proposed by [Kellner et al.](https://onlinelibrary.wiley.com/doi/10.1002/mrm.26054) and extended to Partial Fourier acquired images by [Lee et al.](https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.28830). This method is designed to work on images acquired with either full k-space coverage or partial k-space coverage, by setting the input argument `-pf`. 
 
 The augmented pipline to eliminate 6/8 Partial Fouerier induced Gibbs ringing is shown here (reproduced from [Lee et al.](https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.28830)):
-![RPG pipelines example](/assets/images/rpg_pipeline.png)
+![RPG pipelines example]({{ site.baseurl }}/assets/images/rpg_pipeline.png)
 The PF acquisition and zero filling induce extra ringings of interval $2\Delta y$ in phase-encoding (y) direction. The ringing removal pipeline has two steps: First, the weighting filter $Gy$ is applied to the Fourier domain of the original image, smoothing out ringings of interval $\Delta x$ in x-direction. The remaining ringings of interval $\Delta y$ in y direction are subsequently removed by applying unring y to the image, and ringings of interval $2\Delta y$ are removed by applying unring y to sub-images consisting of odd columns and even columns respectively. Combining the two sub-images, we obtain the first corrected image. Secondly, the weighting filter $Gx$ is applied to the Fourier domain of the original image, smoothing out ringings of interval $\Delta y$ in y direction. The remaining ringings of interval $\Delta x$ in x direction are further removed by applying unring x to the image, and ringings of interval $2 \Delta y$ in y direction are kept untreated. Then we obtain the second corrected image. Finally, the average of two corrected images yields the output image. In this figure, each image is rotated by 90$\circ$, and the column in each image is in a horizontal direction.
 
 
  Phantom example of PF induced gibbs:
- ![RPG phantom example](/assets/images/rpg_example.png)
+ ![RPG phantom example]({{ site.baseurl }}/assets/images/rpg_example.png)
 
 ---
 
 ## Rician bias correction
 
 In addition to high noise levels inherent to MRI, noise in DICOM level MRI data (data that has gone through a standard reconstruction from k-space to image space) is no longer Gaussian in profile. Since MRI data is acquired in the frequency (k-space) domain it comes with two noise channels, a real noise channel and an imaginary noise channel. DICOM level MRI data consists of the absolute value of this complex information, which means that the Gaussian noise inherent to the raw data becomes skewed during image reconstruction. The image below shows the process of how signal and noise skew in the positive direction during reconstruction. This positive bias will also bias quantitative scalar maps.
-![Rician bias example](/assets/images/noisedists.png)
+![Rician bias example]({{ site.baseurl }}/assets/images/noisedists.png)
 
 Designer offers two methods for the reduction of Rician bias. The first is by including the `-phase` option along with the `-denoise` option in order to perform [complex denoising]({% link docs/designer/background.md %}#denoising-complex-data). 
 

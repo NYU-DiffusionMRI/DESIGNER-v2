@@ -27,7 +27,7 @@ of spin phases. The cumulant expansion of the diffusion signal for a Gaussian pr
 
 In tissue, we cannot expect axons to line up perfectly with applied gradient fields. If we want to effectively measure diffusion in tissue with many orientations, we must also sample along many gradient directions. We can express $b$, $D$, and $K$, in the above expression as tensors, and use the eigenvalues of $D$ and $K$ to measure the amount of diffusion or kurtosis in each direction. For diffusion tensor imaging (DTI), as least 6 unique gradient directions are required, and for higher order diffusion schemes such as diffusion kurtosis imaging (DKI), at least 15 additional directions must be acquired. In practice, precision requirements demand closer to 30 directions for DTI and 90 for DKI to reach sufficient data quality for practical use. 
 
-![DTI decay](/assets/images/decay2.png)
+![DTI decay]({{ site.baseurl }}/assets/images/decay2.png)
 
 ---
 
@@ -62,7 +62,7 @@ We can create color FA images by scaling the principal diffusion tensor eigenvec
 
 Likewise, the kurtosis tensor parameters MK, AK, and RK correspond the the kurtosis tensor as MD, AD, and RD correspond to eigenvalues of the diffusion tensor. For kurtosis, TMI offers two definitions of the tensor based on published conventions. 
 
-![DTIDKI params](/assets/images/simpleDTIDKI.png)
+![DTIDKI params]({{ site.baseurl }}/assets/images/simpleDTIDKI.png)
 top: Simple clinical example of a mean diffusivity scalar map derived from a single b-shell acquisition Bottom: example of a mean kurtosis scalar map derived from a multi b-shell acquisition.
 
 ---
