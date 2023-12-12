@@ -69,7 +69,7 @@ def get_input_info(input, fslbval, fslbvec, bids):
         bidslist = [os.path.realpath(i) for i in UserBidspath]
 
     # if the user provides the path to phases
-    if app.ARGS.phase:
+    try:
         phase_cpath = app.ARGS.phase.rsplit(',')
         phase_list = [os.path.realpath(i) for i in phase_cpath]
         phase_flist = [splitext_(i) for i in phase_list]
@@ -78,7 +78,7 @@ def get_input_info(input, fslbval, fslbvec, bids):
 
         if not '.nii' in phase_ext:
             raise MRtrixError('phases must be in .nii format')
-    else:
+    except:
         phase_nlist = None
         phase_ext = None
 
@@ -316,16 +316,19 @@ def convert_input_data(dwi_metadata):
         cmd = ('mrcat -axis 3 %s %s/dwi.mif' % (DWImif, app.SCRATCH_DIR))
         run.command(cmd)
 
-    if app.ARGS.phase:
-        if len(phase_n_list) == 1:
-            run.command('mrconvert %s%s %s/phase.nii' % 
-                        (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
-        else:
-            for idx,i in enumerate(phase_n_list):
-                run.command('mrconvert %s%s %s/phase%s.nii' % 
-                            (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
-                phaselist.append('%s/phase%s.nii' % (app.SCRATCH_DIR, str(idx)))
-            run.command('mrcat -axis 3 %s %s/phase.nii' % (' '.join(phaselist), app.SCRATCH_DIR))
+    try:
+        if app.ARGS.phase:
+            if len(phase_n_list) == 1:
+                run.command('mrconvert %s%s %s/phase.nii' % 
+                            (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+            else:
+                for idx,i in enumerate(phase_n_list):
+                    run.command('mrconvert %s%s %s/phase%s.nii' % 
+                                (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                    phaselist.append('%s/phase%s.nii' % (app.SCRATCH_DIR, str(idx)))
+                run.command('mrcat -axis 3 %s %s/phase.nii' % (' '.join(phaselist), app.SCRATCH_DIR))
+    except:
+        pass
 
     # get diffusion header info - check to make sure all values are valid for processing
     dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))

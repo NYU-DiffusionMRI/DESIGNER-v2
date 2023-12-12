@@ -22,6 +22,7 @@ def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoo
         akcpatch = outlier_locations[xmin:xmax, ymin:ymax, zmin:zmax].flatten()
         k += 2
 
+
     ref = np.tile(np.reshape(dwi_norm[x,y,z,:],(1,dwi.shape[-1])),(psize,1))
     patch = np.reshape(dwi_norm[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
     patchorig = np.reshape(dwi[xmin:xmax,ymin:ymax,zmin:zmax,:],(psize, dwi.shape[-1]))
@@ -33,15 +34,16 @@ def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoo
     min_wgs[akcpatch] = wgs_max
     
     if not smoothlevel:
-        goodidx = min_wgs < np.median(min_wgs)
+        goodidx = min_wgs <= np.median(min_wgs)
     else:
-        goodidx = min_wgs < np.percentile(min_wgs, smoothlevel)
+        goodidx = min_wgs <= np.percentile(min_wgs, smoothlevel)
 
+    
     min_idx = min_idx[goodidx]
     min_wgs = min_wgs[goodidx]
     wgs_max = np.max(min_wgs)
     wgs_inv = wgs_max - min_wgs
-    
+
     wgs_nrm = wgs_inv/np.sum(wgs_inv)
     wval = (patchorig[min_idx,:] * 
             (wgs_nrm[...,None] @ np.ones((1,dwi.shape[-1])))
@@ -64,7 +66,7 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores
     kernel = 7
     # for i in range(len(outinds[0])):
     #     wval = parallel_outlier_smooth(outinds[:,i], kernel, outlier_locations, dwi_norm, dwi, smoothlevel)
-
+    
     wval = (Parallel(n_jobs=n_cores, prefer='processes')
             (delayed(parallel_outlier_smooth)(
                 outinds[:,i], kernel, outlier_locations, dwi_norm, dwi, smoothlevel

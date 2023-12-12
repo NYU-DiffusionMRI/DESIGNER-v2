@@ -125,7 +125,7 @@ class TensorFitting(object):
                 # res = opt.lsq_linear(w @ b, w @ np.log(dwi), (-5, 1), method='trf', tol=1e-12, max_iter=220000)
                 # dt = res.x
         except:
-            dt = np.zeros((22))
+            dt = np.zeros((b.shape[1]))
 
         return dt  
 
@@ -348,6 +348,7 @@ class TensorFitting(object):
         
         dt = Parallel(n_jobs=self.n_cores, prefer='processes')\
             (delayed(self.wlls)(shat[:,i], dwi_[:,i], b) for i in inputs)
+        
         dt = np.reshape(dt, (dwi_.shape[1], b.shape[1])).T
 
         s0 = np.exp(dt[0,:])
