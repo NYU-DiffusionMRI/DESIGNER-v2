@@ -43,6 +43,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     dki_options.add_argument('-akc_outliers', action='store_true', help='brute force K tensor outlier rejection')
     dki_options.add_argument('-fit_constraints',metavar=('<string>'),help='constrain the wlls fit (default 0,1,0)')
     dki_options.add_argument('-fit_smoothing',metavar=('<percentile>'),help='NLM smoothing on wlls fit')
+    dki_options.add_argument('-polyreg',action='store_true',help='polynomial regression based DKI estimation')
 
     smi_options = cmdline.add_argument_group('tensor options for the TMI script')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
@@ -132,6 +133,9 @@ def execute(): #pylint: disable=unused-variable
         dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
         dt_dki, s0_dki, b_dki = dki.dki_fit(dwi, mask, constraints=constraints)
 
+    if app.ARGS.polyreg and app.ARGS.DKI:
+        dt_poly = dki.train_rotated_bayes_fit(dwi, dt_dki, s0_dki, b_dki, mask)
+
     if app.ARGS.akc_outliers:
         from lib.mpunits import vectorize
         import scipy.io as sio
@@ -180,6 +184,10 @@ def execute(): #pylint: disable=unused-variable
         params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
         save_params(params_dki, nii, model='dki', outdir=outdir)
 
+    if app.ARGS.polyreg:
+        params_dki_poly = dki.extract_parameters(dt_poly, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+        save_params(params_dki_poly, nii, model='dki_poly', outdir=outdir)
+
     if app.ARGS.WDKI:
         print('...extracting and saving WDKI maps...')
         params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=False, extract_dki=True, fit_w=True)
@@ -205,8 +213,11 @@ def execute(): #pylint: disable=unused-variable
 
     if app.ARGS.SMI:
         from lib.smi import SMI
+        import warnings
+        warnings.simplefilter('always', UserWarning) 
+
         if not app.ARGS.sigma:
-            print('WARNING: SMI is poorly conditioned without prior estimate of sigma')
+            warnings.warn('SMI is poorly conditioned without prior estimate of sigma')
             sigma = None
         else:
             sigma = image_read(path.from_user(app.ARGS.sigma)).numpy()
@@ -224,8 +235,8 @@ def execute(): #pylint: disable=unused-variable
         print('...SMI fit...')
         smi = SMI(bval=bval, bvec=bvec)
         smi.set_compartments(compartments)
-        smi.set_echotime(dwi_metadata['echo_time'])
-        smi.set_bshape(dwi_metadata['bshape'])
+        smi.set_echotime(dwi_metadata['echo_time_per_volume'])
+        smi.set_bshape(dwi_metadata['bshape_per_volume'])
         params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
         save_params(params_smi, nii, model='smi', outdir=outdir)
 

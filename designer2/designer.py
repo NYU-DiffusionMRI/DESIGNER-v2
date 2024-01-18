@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-__version__ = "2.0.0"
+__version__ = "2.0.3"
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
@@ -139,6 +139,9 @@ def execute(): #pylint: disable=unused-variable
     # eddy current, succeptibility, motion correction
     if app.ARGS.eddy:
         run_eddy(shell_table, dwi_metadata)
+
+    # if app.ARGS.denoise_after_eddy:
+    #     run_sigma_denoiser(dwi_metadata)
 
     # b1 bias correction
     if app.ARGS.b1correct:
