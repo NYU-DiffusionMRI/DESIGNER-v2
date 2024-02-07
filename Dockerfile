@@ -5,7 +5,7 @@ RUN apt-get -y update
 RUN apt-get -y install git g++ libeigen3-dev zlib1g-dev libqt5opengl5-dev libqt5svg5-dev libgl1-mesa-dev libfftw3-dev libtiff5-dev libpng-dev libopenblas-dev libhdf5-dev cmake
 
 WORKDIR /usr/local
-RUN wget   -O fslinstaller.py
+RUN wget https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/releases/fslinstaller.py -O fslinstaller.py -O fslinstaller.py
 RUN python fslinstaller.py -d /usr/local/fsl
 
 WORKDIR  /usr/local
