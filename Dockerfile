@@ -1,6 +1,6 @@
 # Use an official Python runtime as a parent image
 FROM python:3.12.1-bookworm as base
-FROM buildpack-deps:bookworm AS base-builder
+FROM python:3.12.1-bookworm AS base-builder
 
 
 

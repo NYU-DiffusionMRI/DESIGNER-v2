@@ -1,0 +1,23 @@
+FROM python:3.12.1-bookworm
+
+RUN apt-get -qq update \
+    && apt-get install -yq --no-install-recommends \
+    libeigen3-dev \
+    libfftw3-dev \
+    libgl1-mesa-dev \
+    libpng-dev \
+    libqt5opengl5-dev \
+    libqt5svg5-dev \
+    zlib1g-dev \
+    ninja-build \
+    ccache \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/local
+RUN git clone https://github.com/MRtrix3/mrtrix3.git
+WORKDIR /usr/local/mrtrix3
+RUN git checkout dev
+RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/user/local/mrtrix3
+RUN cmake --build build
+RUN cmake --install build
