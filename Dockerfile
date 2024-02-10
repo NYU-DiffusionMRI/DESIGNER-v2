@@ -24,11 +24,12 @@ WORKDIR /app
 # Add the current directory contents into the container at /app
 ADD . /app
 
+RUN /app/rpg_cpp/compile.sh 
 # Run setup.py
-RUN python setup.py install
+RUN python -m pip install .
 
 ENV FSLDIR=/usr/local/fsl
 ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3/bin"
-ENV LD_LIBRARY+PATH=$LD_LIBRARY_PATH:/usr/local/mrtrix3/src:/usr/local/mrtrix3/core
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/mrtrix3/src:/usr/local/mrtrix3/core
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
 ENV PYTHONPATH=/usr/local/mrtrix3/lib
