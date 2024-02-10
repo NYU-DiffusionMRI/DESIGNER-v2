@@ -28,6 +28,10 @@ RUN /app/rpg_cpp/compile.sh
 # Run setup.py
 RUN python -m pip install .
 
+# Multi stage build from existing dependencies
+COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
+COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3
+
 ENV FSLDIR=/usr/local/fsl
 ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3/bin"
 ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/mrtrix3/src:/usr/local/mrtrix3/core
