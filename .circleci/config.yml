@@ -22,10 +22,7 @@ workflows:
           tag: main
           filters:
             branches:
-              only: circleci-project-setup
-            tags:
-              only: /.*/
-  
+              only: main
           context:
             - DockerHub
   build-and-push-on-tag:
