@@ -1,6 +1,9 @@
 version: 2.1
 jobs:
   build:
+    parameters:
+      tag:
+        type: string
     docker:
       - image: cimg/base:2024.01
     steps:
@@ -9,16 +12,33 @@ jobs:
       - run:
           name: Build and Push application Docker image
           command: |
-            TAG=main
-            docker build -t $DOCKERHUB_USERNAME/designer:$TAG .
+            docker build -t $DOCKERHUB_USERNAME/designer:<<parameters.tag>> .
             echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
-            docker push $DOCKERHUB_USERNAME/designer:$TAG
+            docker push $DOCKERHUB_USERNAME/designer:<<parameters.tag>>
 workflows:
-  build-and-push-docker-image:
+  build-and-push-on-commit-to-main:
     jobs:
       - build:
+          parameters:
+            tag: main
           filters:
             branches:
               only: circleci-project-setup
+            tags:
+              only: /.*/
+  
           context:
             - DockerHub
+  build-and-push-on-tag:
+    jobs:
+      - build:
+          parameters:
+            tag: << pipeline.git.tag >>
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/
+          context:
+            - DockerHub
+    

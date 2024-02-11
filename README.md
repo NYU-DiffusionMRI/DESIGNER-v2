@@ -1,3 +1,4 @@
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/twom/DESIGNER-v2/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/twom/DESIGNER-v2/tree/main)
 # designer-v2
 
 ## For complete documentation on designer & tmi installation and usage please visit the [documentation](https://nyu-diffusionmri.github.io/DESIGNER-v2).
