@@ -1,5 +1,4 @@
-# Use an official Python runtime as a parent image
-FROM python:3.12.1-bookworm 
+FROM --platform=linux/amd64 python:3.12.1-bookworm 
 
 COPY --from=twom/fsl:latest /usr/local/fsl /usr/local/fsl
 COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3 /usr/local/mrtrix3
@@ -13,10 +12,10 @@ RUN apt-get -qq update \
 
 
 ENV FSLDIR=/usr/local/fsl
-ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3/bin"
+ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3/bin:/root/.local/bin"
 ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/mrtrix3/src:/usr/local/mrtrix3/core
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
-ENV PYTHONPATH=/usr/local/mrtrix3/lib
+ENV PYTHONPATH=/usr/local/mrtrix3/build/lib
 
 
 
