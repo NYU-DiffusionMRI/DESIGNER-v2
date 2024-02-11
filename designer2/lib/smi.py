@@ -36,6 +36,7 @@ class SMI(object):
         self.flag_rectify_fodf = flag_rectify_fodf
         self.n_levels = n_levels
         self.l_max = l_max
+        self.project_forward_SH = False
         
         self.rotinv_lmax = rotinv_lmax
         self.n_training = int(n_training)
@@ -89,18 +90,18 @@ class SMI(object):
         If sigma was not input, it is esimtated from b0 data.
         """
         if sigma is None:
-            if not self.echo_time:
+            if self.echo_time is None:
                 b0_for_sigma_flag = self.b < 0.1
             else:
                 b0_for_sigma_flag = (
-                    self.b < 0.1 & self.echo_time == np.min(self.echo_time)
+                    (self.b < 0.1) & (self.echo_time == np.min(self.echo_time))
                     )
         else:
             self.sigma = sigma
             b0_for_sigma_flag = None
 
-        if b0_for_sigma_flag:
-            std_dev = dwi[:,:,:,self.b0_for_sigma_flag].std(axis=-1)
+        if b0_for_sigma_flag is not None:
+            std_dev = dwi[:,:,:,b0_for_sigma_flag].std(axis=-1)
             self.sigma = snd.gaussian_filter(std_dev, sigma=1)
             warnings.warn('sigma was not an input (not recommended)')
         

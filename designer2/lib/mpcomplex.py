@@ -196,9 +196,11 @@ class MP(object):
         return s, sigma, npars #, nonlocalinds
 
     def patchav(self, wp, signal, temp):
-        Signal = aggregate(temp, wp*signal, func='sum', size=self.dwi.shape[0], dtype=self.dwi.dtype
+        """
+        weighted patch averaging
+        """
+        return aggregate(temp, wp*signal, func='sum', size=self.dwi.shape[0], dtype=self.dwi.dtype
             ).reshape(self.imsize[:3])
-        return Signal
 
     def get_weights(self, temp):
         from skimage.util.shape import view_as_windows
@@ -243,10 +245,20 @@ class MP(object):
         from joblib import Parallel, delayed
         from tqdm import tqdm
         
-        inputs = tqdm(range(self.temp.shape[0]))
+        num_patches = self.temp.shape[0]
+        num_vols = self.dwi.shape[1]
+
+        # Preallocating arrays for signal, sigma, and npars
+        signal = np.empty((num_patches, num_vols), dtype=np.float32)
+        sigma = np.empty(num_patches, dtype=np.float32)
+        npars = np.empty(num_patches, dtype=np.int32)
+
         
-        signal, sigma, npars = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
-            (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in inputs))
+        results = Parallel(n_jobs=self.n_cores, prefer='processes')\
+            (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in tqdm(range(num_patches)))
+        
+        signal, sigma, npars = zip(*results)
+
 
         print('...patch avergaing...')
         wp = self.get_weights(self.temp)
