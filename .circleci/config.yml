@@ -3,9 +3,6 @@ jobs:
   build:
     docker:
       - image: cimg/base:2024.01
-        auth:
-          username: $DOCKERHUB_USERNAME
-          password: $DOCKERHUB_PASSWORD
     steps:
       - checkout
       - setup_remote_docker
