@@ -18,6 +18,7 @@
 				"ms-python.vscode-pylance",
 				"streetsidesoftware.code-spell-checker",
 				"ms-toolsai.jupyter",
+				"CircleCI.circleci",
 				"GitHub.copilot"
 			],
 			"settings": {
