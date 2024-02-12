@@ -1,0 +1,54 @@
+version: 2.1
+jobs:
+  build:
+    parameters:
+      tag:
+        type: string
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build and tag docker container
+          command: |
+            docker build -t $DOCKERHUB_USERNAME/designer:<<parameters.tag>> .
+      - run:
+          name: Test designer command
+          command: |
+            docker run -it twom/designer:<<parameters.tag>> designer -version
+      - run:
+          name: Test fsl command
+          command: |
+            docker run -it twom/designer:<<parameters.tag>> flirt -version
+      - run:
+          name: Test mrtrix command
+          command: |
+            docker run -it twom/designer:<<parameters.tag>> mrconvert -version
+      - run:
+          name: Push docker container to DockerHub
+          command: |
+            echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
+            docker push $DOCKERHUB_USERNAME/designer:<<parameters.tag>>
+workflows:
+  build-and-push-on-commit-to-main:
+    jobs:
+      - build:
+          tag: main
+          filters:
+            branches:
+              only: main
+          context:
+            - DockerHub
+  build-and-push-on-tag:
+    jobs:
+      - build:
+          tag: << pipeline.git.tag >>
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/
+          context:
+            - DockerHub
+    
