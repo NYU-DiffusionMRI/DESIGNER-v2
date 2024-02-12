@@ -16,15 +16,15 @@ jobs:
       - run:
           name: Test designer command
           command: |
-            docker run -it twom/designer:<<parameters.tag>> designer -version
+            docker run -it $DOCKERHUB_USERNAME/designer:<<parameters.tag>> designer -version
       - run:
           name: Test fsl command
           command: |
-            docker run -it twom/designer:<<parameters.tag>> flirt -version
+            docker run -it $DOCKERHUB_USERNAME/designer:<<parameters.tag>> flirt -version
       - run:
           name: Test mrtrix command
           command: |
-            docker run -it twom/designer:<<parameters.tag>> mrconvert -version
+            docker run -it $DOCKERHUB_USERNAME/designer:<<parameters.tag>> mrconvert -version
       - run:
           name: Push docker container to DockerHub
           command: |
