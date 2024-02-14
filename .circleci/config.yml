@@ -47,8 +47,6 @@ workflows:
       - build:
           tag: << pipeline.git.tag >>
           filters:
-            branches:
-              ignore: /.*/
             tags:
               only: /.*/
           context:
