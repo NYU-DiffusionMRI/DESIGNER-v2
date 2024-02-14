@@ -16,8 +16,32 @@ nav_order: 1
 {:toc}
 
 ---
+## Running DESIGNER v2 using Docker (easiest)
 
-## Installing DESIGNER version 2
+We provide convenient docker images to quickly get started with Designer. The lastest versions will be published on [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/general). 
+Official versions will be tagged (nyudiffusionmri/designer2:<tag>), while we also maintain images following our main development branch (nyudiffusionmri/designer2:main).
+
+To get started, install Docker on your machine:
+- https://www.docker.com/products/docker-desktop/
+
+
+Verifying can be done by running `docker run nyudiffusionmri/designer2:main designer -version`
+
+You can also start an interactive terminal in your container by running `docker -it run nyudiffusionmri/designer2:main /bin/bash`
+
+Files can be passed by mounting a local folder into the container: `docker run -it -v <path to local folder>:/data nyudiffusionmri/designer2:main /bin/bash`. In this case you can run commands in the container directly.
+
+ You can also run designer directly on the command line. Any files can be referenced by their absolute path in the container (e.g. `/data/<your file>`). 
+`docker run -it <path to local data folder>:/data nyudiffusionmri/designer2:main designer ...`
+
+Note that you can replace `nyudiffusionmri/designer2:main` by any other tag. You can get the latest version of the Docker image by running `docker pull nyudiffusionmri/designer2:main`
+
+
+## Installing DESIGNER v2 
+
+DESIGNER v2 can be installed as a [Python package](https://pypi.org/project/designer2/). This method requires installation of fsl and mrtrix3 on your local machine.
+
+### PIP install
 
 The new version of designer consists of a number of updates and improvements to the original implementation. Designer version 2 is written in python and c++ and is an external [Mrtrix3](https://www.mrtrix.org) project.
 
@@ -32,7 +56,7 @@ pip install --upgrade designer2
 ```
 
 
-## Requirements and Dependencies
+### Requirements and Dependencies
 Currently, designer requires a source installation of mrtrix3 in order to run. A future update of the mrtrix3 precompiled binaries may eliminate these requirements, however as of today, users must follow the steps [here](https://mrtrix.readthedocs.io/en/latest/installation/build_from_source.html) to configure and build the source mrtrix3 package. 
 
 We recommend installing the `dev` branch as well, as there are additional features in `dwifslpreproc` that have no yet made it to the main codebase. The source mrtrix3 installation can be completed by running the following lines after ensuring that mrtrix3 dependencies are installed properly.
