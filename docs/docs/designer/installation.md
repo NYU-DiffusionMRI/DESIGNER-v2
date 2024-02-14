@@ -25,7 +25,7 @@ To get started, install Docker on your machine:
 - https://www.docker.com/products/docker-desktop/
 
 
-Verifying can be done by running `docker run nyudiffusionmri/designer2:main designer -version`
+Verifying can be done by running `docker run nyudiffusionmri/designer2:main designer`
 
 You can also start an interactive terminal in your container by running `docker -it run nyudiffusionmri/designer2:main /bin/bash`
 
