@@ -37,7 +37,9 @@ workflows:
           tag: main
           filters:
             branches:
-              only: main
+              only: 
+                - main
+                - update-docker-documentation
           context:
             - DockerHub
   build-and-push-on-tag:
