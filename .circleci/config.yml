@@ -24,7 +24,7 @@ jobs:
       - run:
           name: Test mrtrix command
           command: |
-            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrconvert -version
+            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
       - run:
           name: Push docker container to DockerHub
           command: |
@@ -45,7 +45,7 @@ workflows:
   build-and-push-on-tag:
     jobs:
       - build:
-          tag: << pipeline.git.tag >>
+          tag: ${CIRCLE_TAG}
           filters:
             tags:
               only: /.*/
@@ -53,4 +53,4 @@ workflows:
               ignore: /.*/
           context:
             - DockerHub
-    
+  
