@@ -24,7 +24,7 @@ jobs:
       - run:
           name: Test mrtrix command
           command: |
-            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrconvert -version
+            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
       - run:
           name: Push docker container to DockerHub
           command: |
