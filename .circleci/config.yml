@@ -45,7 +45,7 @@ workflows:
   build-and-push-on-tag:
     jobs:
       - build:
-          tag: << pipeline.git.tag >>
+          tag: ${CIRCLE_TAG}
           filters:
             tags:
               only: /.*/
@@ -53,4 +53,4 @@ workflows:
               ignore: /.*/
           context:
             - DockerHub
-    
+  

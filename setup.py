@@ -20,7 +20,6 @@ def change_permissions_recursive(path, mode):
             os.chmod(file, mode)
 
 change_permissions_recursive('rpg_cpp', 0o777)
-print("hello Tom")
 subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
 
 setup(
