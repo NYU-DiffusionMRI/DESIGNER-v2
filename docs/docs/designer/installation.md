@@ -21,13 +21,12 @@ nav_order: 1
 We provide convenient docker images to quickly get started with Designer. The latest version will be published on [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/general). 
 Official versions will be tagged (nyudiffusionmri/designer2:<tag>), while we also maintain images following our main development branch (nyudiffusionmri/designer2:main).
 
-To get started, install Docker on your machine:
-- https://www.docker.com/products/docker-desktop/
+To get started, install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine.
 
 
 Verifying can be done by running `docker run nyudiffusionmri/designer2:main designer`
 
-You can also start an interactive terminal in your container by running `docker -it run nyudiffusionmri/designer2:main /bin/bash`
+You can then start an interactive terminal in your container by running `docker run -it nyudiffusionmri/designer2:main /bin/bash`
 
 Files can be passed by mounting a local folder into the container: `docker run -it -v <path to local folder>:/data nyudiffusionmri/designer2:main /bin/bash`. In this case you can run commands in the container directly.
 
