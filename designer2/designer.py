@@ -94,7 +94,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     rpe_options.add_argument('-rpe_all', metavar=('<reverse PE dwi volume>'), help='Specify that ALL DWIs have been acquired with opposing phase-encoding; this information will be used to perform a recombination of image volumes (each pair of volumes with the same b-vector but different phase encoding directions will be combined together into a single volume). The argument to this option is the set of volumes with reverse phase encoding but the same b-vectors as the input image')
     rpe_options.add_argument('-rpe_header', action='store_true', help='Specify that the phase-encoding information can be found in the image header(s), and that this is the information that the script should use')
     rpe_options.add_argument('-rpe_te', metavar=('<echo time (s)>'), help='Specify the echo time of the reverse phase encoded image, if it is not accompanied by a bids .json sidecar.')
-
+    
 
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
