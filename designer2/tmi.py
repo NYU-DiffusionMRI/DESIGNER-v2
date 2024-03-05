@@ -6,12 +6,29 @@ from lib.designer_fit_wrappers import refit_or_smooth, save_params
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
-    cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
-    cmdline.set_synopsis("""Version 2.0.0\n\n
-                         
 
-                         
-                        1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations \n 
+    cmdline.set_copyright("""Copyright (c) 2016 New York University.\n\n
+                    
+                        
+                    Permission is hereby granted, free of charge, to any non-commercial entity (\'Recipient\') obtaining a copy of this software and associated documentation files (the \'Software\'), to the Software solely for non-commercial research, including the rights to use, copy and modify the Software, subject to the following conditions\n
+                    
+                    1. The above copyright notice and this permission notice shall be included by Recipient in all copies or substantial portions of the Software.\n
+
+                    2. THE SOFTWARE IS PROVIDED \'AS IS\', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIESvOF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF ORIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n
+                    
+                    3. In no event shall NYU be liable for direct, indirect, special, incidental or consequential damages in connection with the Software. Recipient will defend, indemnify and hold NYU harmless from any claims or liability resulting from the use of the Software by recipient.\n
+                    
+                    4. Neither anything contained herein nor the delivery of the Software to recipient shall be deemed to grant the Recipient any right or licenses under any patents or patent application owned by NYU.\n
+                                            
+                    5. The Software may only be used for non-commercial research and may not be used for clinical care.\n
+                    
+                    6. Any publication by Recipient of research involving the Software shall cite the references listed below.\n
+                                                                
+                    """)
+
+
+    cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
+    cmdline.set_synopsis("""1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations \n 
  						
                         2. Run fitting: Available options include DTI (TMI will look for b0 and b1000 images by default.\n
                             DKI (constrained fitting is available using the -fit_constraints option).\n
