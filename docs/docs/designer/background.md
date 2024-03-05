@@ -3,7 +3,7 @@ layout: default
 title: background
 has_children: false
 parent: designer
-nav_order: 2
+nav_order: 1
 ---
 
 # Designer Background
