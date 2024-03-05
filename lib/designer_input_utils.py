@@ -198,7 +198,7 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
     else:
         bshape = [1] * len(dwi_metadata['dwi_list'])
 
-    if (app.ARGS.echo_time) and (TE_bids) and (TE_bids != TE_app):
+    if (app.ARGS.echo_time is not None) and (TE_bids) and (TE_bids != TE_app):
         raise MRtrixError('User defined echo times do not match those found in bids .json, please check input data for consistency')
     
     if np.any(np.array(TE_app) > 0):
@@ -320,7 +320,7 @@ def convert_input_data(dwi_metadata):
         if app.ARGS.phase:
             if len(phase_n_list) == 1:
                 run.command('mrconvert %s%s %s/phase.nii' % 
-                            (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+                            (''.join(phase_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
             else:
                 for idx,i in enumerate(phase_n_list):
                     run.command('mrconvert %s%s %s/phase%s.nii' % 

@@ -1,16 +1,35 @@
 #!/usr/bin/env python3
-__version__ = "2.0.3"
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
-    cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
-    cmdline.set_synopsis("""Version 2.0.0\n\n
+
+    cmdline.set_copyright("""Copyright (c) 2016 New York University.\n\n
+                    
                         
+                    Permission is hereby granted, free of charge, to any non-commercial entity (\'Recipient\') obtaining a copy of this software and associated documentation files (the \'Software\'), to the Software solely for non-commercial research, including the rights to use, copy and modify the Software, subject to the following conditions\n
+                    
+                    1. The above copyright notice and this permission notice shall be included by Recipient in all copies or substantial portions of the Software.\n
+
+                    2. THE SOFTWARE IS PROVIDED \'AS IS\', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIESvOF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF ORIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n
+                    
+                    3. In no event shall NYU be liable for direct, indirect, special, incidental or consequential damages in connection with the Software. Recipient will defend, indemnify and hold NYU harmless from any claims or liability resulting from the use of the Software by recipient.\n
+                    
+                    4. Neither anything contained herein nor the delivery of the Software to recipient shall be deemed to grant the Recipient any right or licenses under any patents or patent application owned by NYU.\n
+                                            
+                    5. The Software may only be used for non-commercial research and may not be used for clinical care.\n
+                    
+                    6. Any publication by Recipient of research involving the Software shall cite the references listed below.\n
+                                                                
+                    """)
+
+
+    cmdline.set_author('Benjamin Ades-Aron (benjamin.ades-aron@nyulangone.org)')
+    cmdline.set_synopsis("""Designer by default, with no optional arguments used:\n
                          
-                        Designer by default, with no optional arguments used "designer <input> <output>" will not perform any preprocessing. Each preprocessing step must be chosen using the appropriate option. For example usage please see the Designer documentation at https://nyu-diffusionmri.github.io/docs/designer/examples/\n
+                        "designer <input> <output>" will not perform any preprocessing. Each preprocessing step must be chosen using the appropriate option. For example usage please see the Designer documentation at https://nyu-diffusionmri.github.io/docs/designer/examples/\n
                         
                         1. pre-check: concatenate all dwi series and make sure the all diffusion AP images and PA image have the same matrix dimensions/orientations. Ensure input parameters are reasonable, perform a check on diffusion gradient scheme.\n
  						
@@ -75,6 +94,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     rpe_options.add_argument('-rpe_all', metavar=('<reverse PE dwi volume>'), help='Specify that ALL DWIs have been acquired with opposing phase-encoding; this information will be used to perform a recombination of image volumes (each pair of volumes with the same b-vector but different phase encoding directions will be combined together into a single volume). The argument to this option is the set of volumes with reverse phase encoding but the same b-vectors as the input image')
     rpe_options.add_argument('-rpe_header', action='store_true', help='Specify that the phase-encoding information can be found in the image header(s), and that this is the information that the script should use')
     rpe_options.add_argument('-rpe_te', metavar=('<echo time (s)>'), help='Specify the echo time of the reverse phase encoded image, if it is not accompanied by a bids .json sidecar.')
+
 
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
