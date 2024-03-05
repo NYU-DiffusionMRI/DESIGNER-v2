@@ -16,7 +16,7 @@ nav_order: 1
 {:toc}
 
 ---
-## Running DESIGNER v2 using Docker (easiest)
+## Running DESIGNER v2 using Docker (most convenient)
 
 We provide convenient docker images to quickly get started with Designer without the need to install and its dependencies. The latest version will be published on [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/general). 
 Official versions will be tagged (nyudiffusionmri/designer2:\<tag\>), while we also maintain images following our main development branch (nyudiffusionmri/designer2:main). See [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/tags?page=1&ordering=last_updated) for an overview of all releases.
@@ -33,12 +33,12 @@ Files can be passed by mounting a local folder into the container: `docker run -
  You can also run designer directly on the command line. Any files can be referenced by their absolute path in the container (e.g. `/data/<your file>`). 
 `docker run -it -v <path to local data folder>:/data nyudiffusionmri/designer2:<tag> designer ...`
 
-Note that you can replace `nyudiffusionmri/designer2:<tag>` by any other tag. You can get the latest version of the Docker image by running `docker pull nyudiffusionmri/designer2:<tag>`
+Note that you can replace `nyudiffusionmri/designer2:<tag>` by any other tag. 
 
 
-## Installing DESIGNER v2 
+## Installing DESIGNER v2 (if you know what you are doing ;))
 
-DESIGNER v2 can be installed as a [Python package](https://pypi.org/project/designer2/). This method requires installation of fsl and mrtrix3 on your local machine.
+If running DESIGNER v2 using Docker is not your preferred method, you can try to install DESIGNER v2 as a [Python package](https://pypi.org/project/designer2/). This method requires installation of fsl and mrtrix3 on your local machine.
 
 ### PIP install
 
@@ -56,15 +56,15 @@ pip install --upgrade designer2
 
 
 ### Requirements and Dependencies
-Currently, designer requires a source installation of mrtrix3 in order to run. A future update of the mrtrix3 precompiled binaries may eliminate these requirements, however as of today, users must follow the steps [here](https://mrtrix.readthedocs.io/en/latest/installation/build_from_source.html) to configure and build the source mrtrix3 package. 
+Currently, installing designer locally requires a source installation of mrtrix3. A future update of the mrtrix3 precompiled binaries may eliminate these requirements, however as of today, users must follow the steps [here](https://mrtrix.readthedocs.io/en/latest/installation/build_from_source.html) to configure and build the source mrtrix3 package. 
 
-We recommend installing the `dev` branch as well, as there are additional features in `dwifslpreproc` that have no yet made it to the main codebase. The source mrtrix3 installation can be completed by running the following lines after ensuring that mrtrix3 dependencies are installed properly.
+Installing the `dev` branch is needed, as there are additional features in `dwifslpreproc` that have no yet made it to the main codebase. The source mrtrix3 installation can be completed by running the following lines after ensuring that mrtrix3 dependencies are installed properly.
 ```
 git clone https://github.com/MRtrix3/mrtrix3.git
-cd mrtrix3
-git checkout dev
-./configure
-./build
+cd mrtrix3/
+cmake -B build -DCMAKE_INSTALL_PREFIX=/path/to/installation/
+cmake --build build
+cmake --install build
 ```
 
 After mrtrix3 has been successfully installed, users should create the `PYTHONPATH` environment variable and link it against the mrtrix3 python libraries:
