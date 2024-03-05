@@ -209,3 +209,6 @@ def execute(): #pylint: disable=unused-variable
 def main():
     import mrtrix3
     mrtrix3.execute() #pylint: disable=no-member
+    
+if __name__ == "__main__":
+    main()

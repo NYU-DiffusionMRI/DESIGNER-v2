@@ -1,0 +1,10 @@
+
+FROM python:3.12.1-bookworm as fslbuilder
+
+WORKDIR /usr/local
+RUN wget https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/releases/fslinstaller.py -O fslinstaller.py -O fslinstaller.py
+RUN python fslinstaller.py -d /usr/local/fsl
+
+
+FROM python:3.12.1-bookworm
+COPY --from=fslbuilder /usr/local/fsl /usr/local/fsl
