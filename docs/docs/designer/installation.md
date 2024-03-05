@@ -18,7 +18,7 @@ nav_order: 1
 ---
 ## Running DESIGNER v2 using Docker (easiest)
 
-We provide convenient docker images to quickly get started with Designer. The latest version will be published on [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/general). 
+We provide convenient docker images to quickly get started with Designer without the need to install and its dependencies. The latest version will be published on [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/general). 
 Official versions will be tagged (nyudiffusionmri/designer2:<tag>), while we also maintain images following our main development branch (nyudiffusionmri/designer2:main).
 
 To get started, install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine.
