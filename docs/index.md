@@ -51,13 +51,13 @@ The easiest source for references on these tools is right here. In addition, con
      <a href="https://med.nyu.edu/faculty/els-d-fieremans"><img src="https://avatars.githubusercontent.com/u/1108725?v=4" width="90" height="90" alt="https://med.nyu.edu/faculty/els-d-fieremans"></a>
   </li>
   <li class="d-inline-block mr-1">
-     <a href="https://github.com/jchen33344"><img src="https://www.diffusion-mri.com/wp-content/uploads/2023/01/Screen-Shot-2023-01-07-at-10.59.32-PM.png" height="90" alt="https://github.com/jchen33344"></a>
+     <a href="https://github.com/jchen33344"><img src="https://www.diffusion-mri.com/wp-content/uploads/2023/01/Screen-Shot-2023-01-07-at-10.59.32-PM.png" height="90px" alt="https://github.com/jchen33344"></a>
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/jelleveraart"><img src="https://avatars.githubusercontent.com/u/6860257?v=4" width="90" height="90" alt="https://github.com/jelleveraart"></a>
   </li>
   <li class="d-inline-block mr-1">
-     <a href="https://github.com/leehhtw"><img src="https://www.diffusion-mri.com/wp-content/uploads/2021/05/Hong-Hsi-Lee.png)" height="90" alt="https://github.com/leehhtw"></a>    
+     <a href="https://github.com/leehhtw"><img src="https://www.diffusion-mri.com/wp-content/uploads/2021/05/Hong-Hsi-Lee.png)" height="90px" alt="https://github.com/leehhtw"></a>    
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/rcleija"><img src="https://avatars.githubusercontent.com/u/44007271?v=4" width="90" height="90" alt="https://github.com/rcleija"></a>
