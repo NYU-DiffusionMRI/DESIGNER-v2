@@ -26,8 +26,7 @@ This webpage is still under development! Please excuse us for any missing inform
 All toolboxes are subject to specific referencing. Each project is accompanied by at least one article for citation.
 
 {: .ref }
-> Chen, J.,  Ades-Aron, B., Lee, H.H., Pang, M., Novikov, D. S., Veraart, J., & Fieremans, E. (2024). Optimization and Validation of the DESIGNER dMRI preprocessing pipeline in white matter aging. arXiv:2305.14445
->
+
 > Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., ... & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. Neuroimage, 183, 532-543.
 >
 > Veraart, J., Novikov, D. S., Christiaens, D., Ades-Aron, B., Sijbers, J., & Fieremans, E. (2016). Denoising of diffusion MRI using random matrix theory. Neuroimage, 142, 394-406.
@@ -35,7 +34,8 @@ All toolboxes are subject to specific referencing. Each project is accompanied b
 > Lee, H. H., Novikov, D. S., & Fieremans, E. (2021). Removal of partial Fourier‐induced Gibbs (RPG) ringing artifacts in MRI. Magnetic resonance in medicine, 86(5), 2733-2750.
 >
 > Coelho, S., Baete, S. H., Lemberskiy, G., Ades-Aron, B., Barrol, G., Veraart, J., ... & Fieremans, E. (2022). Reproducibility of the Standard Model of diffusion in white matter on clinical MRI systems. Neuroimage, 257, 119290.
-
+>
+> Chen, J.,  Ades-Aron, B., Lee, H.H., Pang, M., Novikov, D. S., Veraart, J., & Fieremans, E. (2024). Optimization and Validation of the DESIGNER dMRI preprocessing pipeline in white matter aging. arXiv:2305.14445
 
 
 # Getting Help
@@ -51,13 +51,13 @@ The easiest source for references on these tools is right here. In addition, con
      <a href="https://med.nyu.edu/faculty/els-d-fieremans"><img src="https://avatars.githubusercontent.com/u/1108725?v=4" width="90" height="90" alt="https://med.nyu.edu/faculty/els-d-fieremans"></a>
   </li>
   <li class="d-inline-block mr-1">
-     <a href="https://github.com/jchen33344"><img src="https://www.diffusion-mri.com/wp-content/uploads/2023/01/Screen-Shot-2023-01-07-at-10.59.32-PM.png" width="90" height="90" alt="https://github.com/jchen33344"></a>
+     <a href="https://github.com/jchen33344"><img src="https://www.diffusion-mri.com/wp-content/uploads/2023/01/Screen-Shot-2023-01-07-at-10.59.32-PM.png" height="90" alt="https://github.com/jchen33344"></a>
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/jelleveraart"><img src="https://avatars.githubusercontent.com/u/6860257?v=4" width="90" height="90" alt="https://github.com/jelleveraart"></a>
   </li>
   <li class="d-inline-block mr-1">
-     <a href="https://github.com/leehhtw"><img src="https://www.diffusion-mri.com/wp-content/uploads/2021/05/Hong-Hsi-Lee.png)" width="90" height="90" alt="https://github.com/leehhtw"></a>    
+     <a href="https://github.com/leehhtw"><img src="https://www.diffusion-mri.com/wp-content/uploads/2021/05/Hong-Hsi-Lee.png)" height="90" alt="https://github.com/leehhtw"></a>    
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/rcleija"><img src="https://avatars.githubusercontent.com/u/44007271?v=4" width="90" height="90" alt="https://github.com/rcleija"></a>
