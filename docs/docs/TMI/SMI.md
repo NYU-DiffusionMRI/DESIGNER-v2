@@ -17,7 +17,7 @@ nav_order: 3
 
 ---
 
-## Standard Model Imaging (SMI) MATLAB toolbox
+## Standard Model Imaging (SMI)
 
 In addition to the python implementation as a part of TMI, SMI is offered as a standalone matlab toolbox. [This MATLAB toolbox](https://github.com/NYU-DiffusionMRI/SMI/blob/master/SMI.m) contains all necessary functions for parameter estimation of the Standard Model (SM) of diffusion in white matter. Check [our recent paper](https://arxiv.org/pdf/2202.02399.pdf) for details on this implementation and on the Standard Model in general. Below we provide instructions on how to run the toolbox. See the [example.m](https://github.com/NYU-DiffusionMRI/SMI/blob/master/example.m) script that performs the parameter estimation in an [example dataset](https://cai2r.net/resources/standard-model-of-diffusion-in-white-matter-the-smi-toolbox/).
 
