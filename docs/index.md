@@ -39,18 +39,11 @@ All toolboxes are subject to specific referencing. Each project is accompanied b
 
 
 # Getting Help
-The easiest source for references on these tools is right here. For additional questions, users can reach out via email to [Jenny Chen](mailto:Jenny.Chen@nyulangone.org).
+The easiest source for references on these tools is right here. In addition, concerns raised in the [issues section](https://github.com/NYU-DiffusionMRI/DESIGNER-v2/issues) will reach the developers.
 
-In addition, concerns raised in the *issues* section of any of our github repositories will reach the developers.
 
 # Contributors
 <ul class="list-style-none">
-  <li class="d-inline-block mr-1">
-     <a href="https://github.com/d-novikov"><img src="https://avatars.githubusercontent.com/u/29991818?v=4" width="90" height="90" alt="https://github.com/d-novikov"></a>
-  </li>
-  <li class="d-inline-block mr-1">
-     <a href="https://github.com/aAbdz"><img src="https://avatars.githubusercontent.com/u/29164686?v=4" width="90" height="90" alt="https://github.com/aAbdz"></a>
-  </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/badesar1"><img src="https://avatars.githubusercontent.com/u/11949335?v=4" width="90" height="90" alt="https://github.com/badesar1"></a>
   </li>
@@ -58,22 +51,22 @@ In addition, concerns raised in the *issues* section of any of our github reposi
      <a href="https://med.nyu.edu/faculty/els-d-fieremans"><img src="https://avatars.githubusercontent.com/u/1108725?v=4" width="90" height="90" alt="https://med.nyu.edu/faculty/els-d-fieremans"></a>
   </li>
   <li class="d-inline-block mr-1">
-     <a href="https://www.linkedin.com/in/gregory-lemberskiy/"><img src="https://avatars.githubusercontent.com/u/1512844?v=4" width="90" height="90" alt="https://www.linkedin.com/in/gregory-lemberskiy/"></a>
-  </li>
-  <li class="d-inline-block mr-1">
-     <a href="https://github.com/jchen33344"><img src="https://avatars.githubusercontent.com/u/32804483?v=4" width="90" height="90" alt="https://github.com/jchen33344"></a>
+     <a href="https://github.com/jchen33344"><img src="https://www.diffusion-mri.com/wp-content/uploads/2023/01/Screen-Shot-2023-01-07-at-10.59.32-PM.png" width="90" height="90" alt="https://github.com/jchen33344"></a>
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/jelleveraart"><img src="https://avatars.githubusercontent.com/u/6860257?v=4" width="90" height="90" alt="https://github.com/jelleveraart"></a>
   </li>
   <li class="d-inline-block mr-1">
-     <a href="https://github.com/leehhtw"><img src="https://avatars.githubusercontent.com/u/26494518?v=4" width="90" height="90" alt="https://github.com/leehhtw"></a>
+     <a href="https://github.com/leehhtw"><img src="https://www.diffusion-mri.com/wp-content/uploads/2021/05/Hong-Hsi-Lee.png)" width="90" height="90" alt="https://github.com/leehhtw"></a>    
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/rcleija"><img src="https://avatars.githubusercontent.com/u/44007271?v=4" width="90" height="90" alt="https://github.com/rcleija"></a>
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://santiagocoelho.github.io"><img src="https://avatars.githubusercontent.com/u/54751227?v=4" width="90" height="90" alt="https://santiagocoelho.github.io"></a>
+  </li><!--
+<li class="d-inline-block mr-1">
+     <a href="https://www.linkedin.com/in/gregory-lemberskiy/"><img src="https://avatars.githubusercontent.com/u/1512844?v=4" width="90" height="90" alt="https://www.linkedin.com/in/gregory-lemberskiy/"></a>
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://www.linkedin.com/in/valentinmri/"><img src="https://media.licdn.com/dms/image/C4E03AQFQ9Bs9qvt2Hg/profile-displayphoto-shrink_400_400/0/1644721673667?e=1691625600&v=beta&t=qMzM60JbWuY3VqxWjF6H0K2fbw-cQRncVTfLK654qog" width="90" height="90" alt="https://www.linkedin.com/in/valentinmri/"></a>
@@ -81,6 +74,12 @@ In addition, concerns raised in the *issues* section of any of our github reposi
   <li class="d-inline-block mr-1">
      <a href="https://www.linkedin.com/in/ying-liao-nyu/"><img src="https://media.licdn.com/dms/image/C4E03AQEfT0sPV34ImQ/profile-displayphoto-shrink_400_400/0/1627317717468?e=1691625600&v=beta&t=eqAZqafA7ZusHRkVzBwwkA4r6yAcZMC0lbRhlCmU8Ig" width="90" height="90" alt="https://www.linkedin.com/in/ying-liao-nyu/"></a>
   </li>
+  <li class="d-inline-block mr-1">
+     <a href="https://github.com/d-novikov"><img src="https://avatars.githubusercontent.com/u/29991818?v=4" width="90" height="90" alt="https://github.com/d-novikov"></a>
+  </li>
+  <li class="d-inline-block mr-1">
+     <a href="https://github.com/aAbdz"><img src="https://avatars.githubusercontent.com/u/29164686?v=4" width="90" height="90" alt="https://github.com/aAbdz"></a>
+  </li>-->
 </ul>
 
 
