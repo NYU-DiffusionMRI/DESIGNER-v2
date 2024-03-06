@@ -26,6 +26,8 @@ This webpage is still under development! Please excuse us for any missing inform
 All toolboxes are subject to specific referencing. Each project is accompanied by at least one article for citation.
 
 {: .ref }
+> Chen, J.,  Ades-Aron, B., Lee, H.H., Pang, M., Novikov, D. S., Veraart, J., & Fieremans, E. (2024). Optimization and Validation of the DESIGNER dMRI preprocessing pipeline in white matter aging. arXiv:2305.14445
+>
 > Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., ... & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. Neuroimage, 183, 532-543.
 >
 > Veraart, J., Novikov, D. S., Christiaens, D., Ades-Aron, B., Sijbers, J., & Fieremans, E. (2016). Denoising of diffusion MRI using random matrix theory. Neuroimage, 142, 394-406.
@@ -37,7 +39,7 @@ All toolboxes are subject to specific referencing. Each project is accompanied b
 
 
 # Getting Help
-The easiest source for references on these tools is right here. For additional questions, users can reach out via email to the toolbox maintainers using the email [designer@gmail.com](mailto:Benjamin.Ades-Aron@nyulangone.org) or by emailing the maintainers directly [Ben Aron](mailto:Benjamin.Ades-Aron@nyulangone.org), [Santiago Coelho](mailto:Santiago.Coelho@nyulangone.org), [Jelle Veraart](mailto:Jelle.Veraart@nyulangone.org), and [Jenny Chen](mailto:Jenny.Chen@nyulangone.org).
+The easiest source for references on these tools is right here. For additional questions, users can reach out via email to [Jenny Chen](mailto:Jenny.Chen@nyulangone.org).
 
 In addition, concerns raised in the *issues* section of any of our github repositories will reach the developers.
 
