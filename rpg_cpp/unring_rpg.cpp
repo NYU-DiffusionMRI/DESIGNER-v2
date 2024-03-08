@@ -627,6 +627,105 @@ template
 void GetNiftiData(void *nii, double *data, int N, short int datatype);
 // ===== end nifti functionality ===== //
 
+// ===== start string operations ===== //
+
+// convert any uppercase chars to lowercase
+int MakeLowerCase(char *str){
+   int c;
+
+   if(!str || !*str) return 0;
+
+   for(c = 0; c < strlen(str); c++)
+      if( isupper(str[c]) ) str[c] = tolower(str[c]);
+
+   return 0;
+}
+
+// Run strcmp against of list of strings
+// return index of equality, if found
+// else return -1 
+int CompareStringList(const char *str, char **strlist, int len){
+   int c;
+   if(len <= 0 || !str || !strlist) return -1;
+   for(c = 0; c < len; c++)
+      if(strlist[c] && !strcmp(str, strlist[c])) return c;
+   return -1;
+   }
+
+// Duplicate the given string (alloc length+1)
+// return allocated pointer (or NULL on failure)
+char *StringDuplicate(const char *str){
+   char *dup;
+
+   // allow calls passing NULL
+   if(!str) return NULL;        
+   
+   dup = (char *)malloc(strlen(str) + 1);
+   // check for failure
+   if(dup) strcpy(dup,str);
+   else    fprintf(stderr,"StringDuplicate() ERROR: failed to alloc %u bytes\n", 
+                   (unsigned int)strlen(str)+1);
+
+   return dup;
+   }
+
+// Check the end of the filename for a valid file extension
+//    Valid extensions are currently .nii, .hdr, .img, .nia,
+//    or any of them followed by .gz.  Note that '.' is part of
+//    the extension.
+//
+//    Uppercase extensions are also valid, but not mixed case.
+//
+//    \return a pointer to the extension (within the filename), or NULL
+char *FindFileExtension(const char *name){
+   char *ext, extcopy[8];
+   int    len;
+   char   extnii[8] = ".nii";   // modifiable, for possible uppercase
+   char   exthdr[8] = ".hdr";   
+   char   extimg[8] = ".img";
+   char   extnia[8] = ".nia";
+   char   exttxt[8] = ".txt";
+   char   extdat[8] = ".dat";
+   char *elist[6]  = { NULL, NULL, NULL, NULL, NULL, NULL};
+
+   // stupid compiler... 
+   elist[0] = extnii; elist[1] = exthdr; elist[2] = extimg; elist[3] = extnia;
+   elist[4] = exttxt; elist[5] = extdat;
+
+   if (!name) return NULL;
+
+   len = (int)strlen(name);
+   if (len < 4) return NULL;
+
+   ext = (char *)name + len - 4;
+
+   // make manipulation copy, and possibly convert to lowercase
+   strcpy(extcopy,ext); 
+   MakeLowerCase(extcopy);
+
+   // if it look like a basic extensionreturn it
+   if(CompareStringList(extcopy, elist, 6) >= 0){
+      return ext;
+      }
+
+   return NULL;
+   }
+
+//Duplicate the filename, while clearing any extension
+//This allocates memory for basename which should eventually be freed.
+char *MakeBaseName(const char* fname){
+   char *basename, *ext;
+
+   basename = StringDuplicate(fname);
+
+   ext = FindFileExtension(basename);
+   if ( ext ) *ext = '\0';  // clear out extension
+   
+   return basename;  // in either case
+   }
+
+// ===== end string operations ===== //
+
 // ===== start useful functions ===== //
 template <typename T>
 T **Matrix(unsigned int nr, unsigned int nc){
@@ -696,6 +795,7 @@ scale_x = onx/(double)inx;
 scale_y = ony/(double)iny;
 // cout << scale_x << " " << scale_y << endl;
 
+// imresize.m -> contributions.m
 // Input-space coordinates. Calculate the inverse mapping such that 0.5
 // in output space maps to 0.5 in input space, and 0.5+scale in output
 // space maps to 1.5 in input space.
@@ -718,23 +818,36 @@ void NN(double *I, double *O, unsigned int ini , unsigned int inr, unsigned int 
 
 
 template <typename T>
-void UnringScale(T *I, unsigned int nx, unsigned int ny, unsigned int scale, double yfact, unsigned int minW, unsigned int maxW, unsigned int nsh){
+void UnringScale(T *I, T *Ii, unsigned int nx, unsigned int ny, unsigned int scale, double yfact, unsigned int minW, unsigned int maxW, unsigned int nsh){
 
 T *O;
-bool pf7_8 = fabs(yfact - 1) > 1e-6;
+T *Oi;
+bool pf7_8 = fabs(yfact - 1) > 1e-6; // here yfact should be 1 (5/8) or 3 (7/8)
+bool fimag = (Ii != 0);
+printf("UnringScale: yfact = %f, pf7_8 =  %d, fimag =  %d\n",yfact,pf7_8,fimag);
 unsigned int i, nyy;
-if(pf7_8){
+if(pf7_8){ // 7/8
 nyy = (int)round(yfact*ny);    
 O   = new T[nx*nyy];    
 NN(I,O,0,nx,ny,0,nx,nyy);
-} // NN
-else{
+if(fimag){
+Oi  = new T[nx*nyy];    
+NN(Ii,Oi,0,nx,ny,0,nx,nyy);
+} // fimag
+} // 7/8 => NN
+else{ // 5/8
 nyy = ny;    
 O   = new T[nx*ny];    
 for(i = 0; i < nx*ny; i++){
 O[i] = I[i];
 } // i  
-}
+if(fimag){
+Oi  = new T[nx*ny];    
+for(i = 0; i < nx*ny; i++){
+Oi[i] = Ii[i];
+} // i      
+} // fimag
+} // 5/8
 // WriteImage(O,nx,nyy,(char*)"image.pgm");
 
 unsigned int j, x, y, nys, pfo, ndim;
@@ -746,12 +859,24 @@ ndim = 2;
 
 double **Is = Matrix<double>(scale,nx*nys);
 double **Os = Matrix<double>(scale,nx*nys);
+double **Isi, **Osi;
+if(fimag){
+Isi = Matrix<double>(scale,nx*nys);
+Osi = Matrix<double>(scale,nx*nys);
+}// fimag
+else{
+Isi = 0;
+Osi = 0;    
+}
 
 for(i = 0; i < scale; i++){    
 j = 0;    
 for(y = i; y < nyy; y+=scale){  
 for(x = 0; x < nx;  x++){  
 Is[i][j*nx+x] = O[y*nx+x];
+if(fimag){
+Isi[i][j*nx+x] = Oi[y*nx+x];
+} // fimag
 } // x
 j++;
 } // y
@@ -759,12 +884,20 @@ j++;
 nys_[i]   = j; 
 dim_sz[0] = nx; 
 dim_sz[1] = nys_[i];
+if(fimag){
+Unring(Is[i],Isi[i],Os[i],Osi[i],dim_sz,ndim,pfo,minW,maxW,nsh);    
+}
+else{
 Unring(Is[i],0,Os[i],0,dim_sz,ndim,pfo,minW,maxW,nsh);    
+}
 
 j = 0;    
 for(y = i; y < nyy; y+=scale){  
 for(x = 0; x < nx;  x++){  
 O[y*nx+x] = Os[i][j*nx+x];
+if(fimag){
+Oi[y*nx+x] = Osi[i][j*nx+x];
+} // fimag
 } // x
 j++;
 } // y
@@ -774,10 +907,15 @@ j++;
 
 if(pf7_8){   
 NN(O,I,0,nx,nyy,0,nx,ny);
+if(fimag){
+NN(Oi,Ii,0,nx,nyy,0,nx,ny);    
+} // fimag
 } // NN
 else{
 for(i = 0; i < nx*ny; i++){
-I[i] = O[i];
+if(fimag){    
+Ii[i] = Oi[i];
+} // fimag
 } // i   
 }
 
@@ -785,9 +923,14 @@ delete[] O;
 delete[] dim_sz;
 FreeMatrix(Is,scale,nx*nys);
 FreeMatrix(Os,scale,nx*nys);
+if(fimag){
+delete[] Oi;    
+FreeMatrix(Isi,scale,nx*nys);
+FreeMatrix(Osi,scale,nx*nys);
+} // fimag
 } // UnringScale
 template
-void UnringScale(double *I, unsigned int nx, unsigned int ny, unsigned int scale, double yfact, unsigned int minW, unsigned int maxW, unsigned int nsh);
+void UnringScale(double *I, double *Ii, unsigned int nx, unsigned int ny, unsigned int scale, double yfact, unsigned int minW, unsigned int maxW, unsigned int nsh);
 
 // ===== end useful functions ===== //
 
@@ -806,6 +949,8 @@ printf(
 // === Optional Arguments === //
 "Options:\n"
 "\n"
+"\t -phase file\n"
+"\t\tname for the input phase volume file .nii(.gz). Should be in the range [-pi,pi] radians.\n" 
 "\t -pf option\n"
 "\t\tpartial Fourier factor, support only for PF = 5/8, 6/8, 7/8, and 1 (no PF). Default: 6/8\n" 
 "\t -dim option\n"
@@ -837,7 +982,8 @@ int main(int argc, char** argv){
 int option_index; // getopt_long_only stores the option index here.
 int goloval;      // getopt_long_only returns the option value here
 
-bool help_flag     = false;  
+bool help_flag      = false;
+bool phase_flag     = false;  
 // Parameters for local subvoxel shifts
 unsigned int minW   = 1;
 unsigned int maxW   = 3;
@@ -846,22 +992,24 @@ unsigned int nsh    = 20;
 double       pfv    = 6.0/8.0; // partial fourier value
 unsigned int pfo    = 2;       // partial fourier option (1=5/8, 2=6/8, 3=7/8, anyother=1) 
 bool         pfdimf = true;    // partal fourier dimension false = x(or 0), true = y(or 1)
+char namePhase[500];
 
-   // options
-   struct option long_options[] = {
-      // These options don’t set a flag. We distinguish them by their indices.
-      {"minw", required_argument, 0, 'w'},
-      {"maxw", required_argument, 0, 'W'},      
-      {"nsh",  required_argument, 0, 's'},
-      {"pf",   required_argument, 0, 'p'},
-      {"dim",  required_argument, 0, 'd'},
-      {"help",       no_argument, 0, 'h'},
-      {0, 0, 0, 0}
-      };
+// options
+struct option long_options[] = {
+  // These options don’t set a flag. We distinguish them by their indices.
+  {"minw", required_argument, 0, 'w'},
+  {"maxw", required_argument, 0, 'W'},      
+  {"nsh",  required_argument, 0, 's'},
+  {"pf",   required_argument, 0, 'p'},
+  {"dim",  required_argument, 0, 'd'},
+  {"phase",required_argument, 0, 'a'},
+  {"help",       no_argument, 0, 'h'},
+  {0, 0, 0, 0}
+  };
 
 while(true){
   // Detecting the next option
-  goloval = getopt_long_only (argc, argv, "w:W:s:p:d:h", long_options, &option_index);
+  goloval = getopt_long_only (argc, argv, "w:W:s:p:d:a:h", long_options, &option_index);
   
   // Detect the end of the options and break the while. 
   if (goloval == -1) break;
@@ -907,6 +1055,10 @@ while(true){
          }
          // cout << optarg << " " << pfdimf << endl;
          break; 
+      case 'a':
+         phase_flag = true;
+         strcpy(namePhase,optarg); 
+         break;         
       case 'h':
          help_flag = true;
          break;
@@ -940,26 +1092,50 @@ sprintf(nameDataOut,"%s" ,argv[optind++]);
 
 // ======================================================================= //
 
- if( fabs(pfv - 5.0/8.0) < 1e-6){
- pfo = 1;
- }
- else if(fabs(pfv - 6.0/8.0) < 1e-6){
- pfo = 2; 
- }
- else if(fabs(pfv - 7.0/8.0) < 1e-6){
- pfo = 3; 
- }
- else if(fabs(pfv - 1.0) < 1e-6){
- pfo = 0; 
- }
- else{
- cout << "Error: this command only supports Full Fourier and PF = 5/8, 6/8, and 7/8." << endl; 
- exit(1);
- }
+// PF option selected (int)
+if( fabs(pfv - 5.0/8.0) < 1e-6){
+pfo = 1;
+}
+else if(fabs(pfv - 6.0/8.0) < 1e-6){
+pfo = 2; 
+}
+else if(fabs(pfv - 7.0/8.0) < 1e-6){
+pfo = 3; 
+}
+else if(fabs(pfv - 1.0) < 1e-6){
+pfo = 0; 
+}
+else{
+cout << "Error: this command only supports Full Fourier and PF = 5/8, 6/8, and 7/8." << endl; 
+exit(1);
+}
 
+// if phase is provided create a basename from output filename, as there will be two outputs
+char *nameDataOutNew, *extOut;
+char nameDataOutMag[300], nameDataOutPha[300];
+if(phase_flag){
+extOut = FindFileExtension(nameDataOut);
+nameDataOutNew = MakeBaseName(nameDataOut);    
+sprintf(nameDataOutMag,"%s_mag%s",nameDataOutNew,extOut);
+sprintf(nameDataOutPha,"%s_phase%s",nameDataOutNew,extOut);
+}
+
+// print options
 printf("RPG\n");
+if(phase_flag){
+printf("Inputs:\n");    
+printf("Magnitude: %s\n",nameDataIn);  
+printf("Phase: %s\n",namePhase);    
+}
+else{
 printf("Input: %s\n",nameDataIn);
+}
+if(phase_flag){
+printf("Outputs:\nMag=%s\nPhase=%s\n",nameDataOutMag,nameDataOutPha);
+}
+else{
 printf("Output: %s\n",nameDataOut);
+}
 printf("Options:\n");
 printf("pfdim = %s, pf = %.3f(option %d)\n",(pfdimf ? "y" : "x"),pfv,pfo);
 printf("minw = %d, maxw =  %d, nsh =  %d\n",minW,maxW,nsh);
@@ -975,8 +1151,10 @@ unsigned int i, j, x, y, z, c, d, idx, idxnii, scale;
 // read input volume
 nifti_image    *imin = nifti_image_read(nameDataIn,true);
 nifti_1_header spec  = nifti_convert_nim2nhdr(imin);
-spec.datatype        = NIFTI_TYPE_FLOAT64;
-spec.bitpix          = 64;
+// spec.datatype        = NIFTI_TYPE_FLOAT64;
+// spec.bitpix          = 64;
+spec.datatype        = NIFTI_TYPE_FLOAT32;
+spec.bitpix          = 32;
 spec.scl_slope       = 1.0; 
 spec.scl_inter       = 0.0; 
 
@@ -991,6 +1169,7 @@ nelem = nx*ny*nz*ndwi;
 
 printf("ndim = %d : nx = %d, ny = %d, nz = %d, ndwi = %d\n",ndim,nx,ny,nz,ndwi);
 
+// get data
 double *volumein  = new double[nelem];
 double *volumeout = new double[nelem];
 GetNiftiData<double>(imin->data,volumein,nelem,imin->datatype); 
@@ -1002,8 +1181,59 @@ volumein[i] = fabs((imin->scl_slope)*volumein[i]+(imin->scl_inter));
 else{
 volumein[i] = fabs(volumein[i]+(imin->scl_inter));    
 }
-}
+} // i
 nifti_image_free(imin);
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
+// if phase is provided set complex data (real/imag)
+
+double mag_, pha_, re_, im_;
+bool flag_norad = false;
+double *phasein;
+double *phaseout;
+
+if(phase_flag){
+// read phase volume   
+nifti_image *pmin = nifti_image_read(namePhase,true);
+// check same size
+if(ndim!=pmin->dim[0] || nx!=pmin->dim[1] || ny!=pmin->dim[2] || nz!=pmin->dim[3] || ndwi!=pmin->dim[4]){
+printf("RPG ERROR: Phase should have the same dimensions as input");
+exit(1);    
+}
+
+// get data
+phasein  = new double[nelem];
+phaseout = new double[nelem];
+GetNiftiData<double>(pmin->data,phasein,nelem,pmin->datatype); 
+// absolute and rescaling
+for(i = 0; i < nelem; i++){
+if(fabs(pmin->scl_slope) > 1e-12){    
+phasein[i] = fabs((pmin->scl_slope)*phasein[i]+(pmin->scl_inter));    
+}
+else{
+phasein[i] = fabs(phasein[i]+(pmin->scl_inter));    
+}
+// check phase in radians
+if(fabs(phasein[i]) > 3.1416){
+flag_norad = true;
+} // if
+} // i
+if(flag_norad){
+printf("RPG WARNING: Phase contains values outside the range [-pi,pi];");
+} //
+nifti_image_free(pmin);
+
+// compute complex (replace magnitude/phase)
+for(i = 0; i < nelem; i++){
+mag_ = volumein[i];
+pha_ = phasein[i];
+re_  = mag_*cos(pha_);
+im_  = mag_*sin(pha_);
+volumein[i] = re_;
+phasein[i]  = im_;
+} // i
+
+} // phase 
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
 
@@ -1020,10 +1250,25 @@ dim_sz[0] = ny;
 dim_sz[1] = nx;    
 }
 
-// divide volume into slices
+// divide volume (real) into slices
 double **slicesin  = Matrix<double>(nz*ndwi,nx*ny);
 double **slicesout = Matrix<double>(nz*ndwi,nx*ny);
 Reshape<double>(volumein,slicesin,nx,ny,nz,ndwi,pfdimf,1);
+delete[] volumein;
+
+double **slicesin_i;
+double **slicesout_i;
+if(phase_flag){
+// divide volume (imag) into slices    
+slicesin_i  = Matrix<double>(nz*ndwi,nx*ny);
+slicesout_i = Matrix<double>(nz*ndwi,nx*ny);
+Reshape<double>(phasein,slicesin_i,nx,ny,nz,ndwi,pfdimf,1);
+delete[] phasein;
+} // phase
+else{
+slicesin_i = 0;
+slicesout_i = 0;    
+}
 
 // apply unringing
 scale = 4;
@@ -1031,29 +1276,80 @@ ndim  = 2;
 for(i = 0; i < nz*ndwi; i++){
 if(pfo == 1 || pfo == 3){ // just for these cases ifact can be equal to pfo
 if(pfdimf){ // y    
-UnringScale(slicesin[i],nx,ny,scale,pfo,minW,maxW,nsh);
+if(phase_flag) // complex   
+UnringScale<double>(slicesin[i],slicesin_i[i],nx,ny,scale,pfo,minW,maxW,nsh);
+else // real
+UnringScale<double>(slicesin[i],0,nx,ny,scale,pfo,minW,maxW,nsh);    
 }
 else{ // x
-UnringScale(slicesin[i],ny,nx,scale,pfo,minW,maxW,nsh);    
-}
-}
-Unring(slicesin[i],0,slicesout[i],0,dim_sz,ndim,pfo,minW,maxW,nsh);
+if(phase_flag) // complex       
+UnringScale<double>(slicesin[i],slicesin_i[i],ny,nx,scale,pfo,minW,maxW,nsh);    
+else // real
+UnringScale<double>(slicesin[i],0,ny,nx,scale,pfo,minW,maxW,nsh);    
+} // dim
+} // pfo
+if(phase_flag) // complex
+Unring(slicesin[i],slicesin_i[i],slicesout[i],slicesout_i[i],dim_sz,ndim,pfo,minW,maxW,nsh);
+else // real
+Unring(slicesin[i],0,slicesout[i],0,dim_sz,ndim,pfo,minW,maxW,nsh);    
 // slicesout = slicesin;
 } // i
 
-// put slices into volume
-Reshape<double>(volumeout,slicesout,nx,ny,nz,ndwi,pfdimf,0);
+// put slices into volume (real)
+Reshape<double>(volumeout,slicesout  ,nx,ny,nz,ndwi,pfdimf,0);
 FreeMatrix(slicesin ,nz*ndwi,nx*ny);
 FreeMatrix(slicesout,nz*ndwi,nx*ny);
+if(phase_flag){ // (imag)
+Reshape<double>(phaseout ,slicesout_i,nx,ny,nz,ndwi,pfdimf,0);
+FreeMatrix(slicesin_i ,nz*ndwi,nx*ny);
+FreeMatrix(slicesout_i,nz*ndwi,nx*ny);
+} //  phase
+
+// compute magnitude/phase (replace real/imag)
+for(i = 0; i < nelem; i++){
+re_  = volumeout[i];
+im_  = phaseout[i];
+mag_ = sqrt(re_*re_ + im_*im_);
+pha_ = atan2(im_,re_);
+volumeout[i] = mag_;
+phaseout[i]  = pha_;
+} // i
+
 delete[] dim_sz;
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
+// to make output volume smaller in size (double -> float)
+float *volumeoutF = new float[nelem];
+for(i = 0; i < nelem; i++){
+volumeoutF[i] = (float)(volumeout[i]);     
+}
+delete[] volumeout; 
+
+float *volumeoutF_i;
+if(phase_flag){
+volumeoutF_i = new float[nelem];
+for(i = 0; i < nelem; i++){
+volumeoutF_i[i] = (float)(phaseout[i]);     
+}
+delete[] phaseout; 
+}
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
 // create output nifti image
-nifti_image *imout = nifti_convert_nhdr2nim(spec,nameDataOut);
+nifti_image *imout;
+if(phase_flag){ imout = nifti_convert_nhdr2nim(spec,nameDataOutMag); }
+else{           imout = nifti_convert_nhdr2nim(spec,nameDataOut);    }
 free(imout->data);
-imout->data = reinterpret_cast<void*> (volumeout);
+imout->data = reinterpret_cast<void*> (volumeoutF);
 nifti_image_write( imout ); 
 nifti_image_free( imout );
-delete[] volumein;
-// delete[] volumeout; 
+
+nifti_image *phout;
+if(phase_flag){
+phout = nifti_convert_nhdr2nim(spec,nameDataOutPha);
+free(phout->data);
+phout->data = reinterpret_cast<void*> (volumeoutF_i);
+nifti_image_write( phout ); 
+nifti_image_free( phout );
+} // phase
+
 return 0;
 }
