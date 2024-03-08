@@ -950,7 +950,7 @@ printf(
 "Options:\n"
 "\n"
 "\t -phase file\n"
-"\t\tname for the input phase volume file .nii(.gz). Should be in the range [-pi,pi] radians.\n" 
+"\t\tname for the input phase volume file .nii(.gz), if available. Should be in the range [-pi,pi] radians.\n" 
 "\t -pf option\n"
 "\t\tpartial Fourier factor, support only for PF = 5/8, 6/8, 7/8, and 1 (no PF). Default: 6/8\n" 
 "\t -dim option\n"
