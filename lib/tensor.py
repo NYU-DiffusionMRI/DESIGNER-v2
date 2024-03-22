@@ -213,7 +213,11 @@ class TensorFitting(object):
             parameters['trace'] = trace
 
         if extract_dki:
-            dirs = np.array(self.fibonacci_sphere(256, True))
+            #dirs = np.array(self.fibonacci_sphere(256, True))
+            dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+            dirs = mat['dirs']
+            
             
             if fit_w:
                 akc = self.w_kurtosis_coeff(dt, dirs)
