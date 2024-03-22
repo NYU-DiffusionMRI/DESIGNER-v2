@@ -952,16 +952,15 @@ class SMI(object):
             )
     
         sigma_noise_norm_levels_ids[sigma_normalized < sigma_noise_norm_levels_edges[0]] = 0
-        sigma_noise_norm_levels_ids[sigma_normalized > sigma_noise_norm_levels_edges[-1]] = self.n_levels + 1
+        sigma_noise_norm_levels_ids[sigma_normalized >= sigma_noise_norm_levels_edges[-1]] = self.n_levels
         sigma_noise_norm_levels_mean = 1/2 * (
-            sigma_noise_norm_levels_edges[1:] + sigma_noise_norm_levels_edges[:-1]
-            )
-        
+           sigma_noise_norm_levels_edges[1:] + sigma_noise_norm_levels_edges[:-1]
+           )
+                
         degree_kernel = 3
         x_fit_norm = self.compute_extended_moments(
             rot_invs_normalized[:, keep_rot_invs_kernel], degree_kernel
             )
-        
         
         n_voxels_masked = rot_invs_normalized.shape[0]
         f_ml_fit = np.zeros(n_voxels_masked)
@@ -1021,7 +1020,8 @@ class SMI(object):
             
             x_train = self.compute_extended_moments(
                 meas_rotinvs_train[:, keep_rot_invs_kernel], degree=degree_kernel)
-            
+        
+
             pinv_x = scl.pinv(x_train)
             coeffs_f = pinv_x @ f
             coeffs_da = pinv_x @ da
@@ -1034,7 +1034,6 @@ class SMI(object):
             f_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_f
                 )
-            
             f_ml_fit[f_ml_fit < 0] = 0
             f_ml_fit[f_ml_fit > 1] = 1
             da_ml_fit[flag_current_noise_level] = (
