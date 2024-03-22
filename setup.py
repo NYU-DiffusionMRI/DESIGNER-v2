@@ -24,7 +24,7 @@ subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
 
 setup(
         name ='designer2',
-        version ='2.0.6',
+        version ='2.0.6-tmp',
         author ='Benjamin Ades-Aron',
         author_email ='benjamin.ades-aron@nyulangone.org',
         url ='https://github.com/NYU-DiffusionMRI/DESIGNER-v2',
