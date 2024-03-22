@@ -1313,10 +1313,11 @@ class SMI(object):
                 output['p4'] = kernel[:,:,:,6]
             if self.rotinv_lmax == 6:
                 output['p6'] = kernel[:,:,:,7]
+        output['rotinvs'] = rot_invs
 
 
         if self.flag_fit_fodf:
-            s0 = Sl[:,:,:,[0],0]
+            s0 = rot_invs[:,:,:,0]
             dwi_norm = np.divide(dwi, s0, where=s0 != 0)
             (plm, pl) = self.get_plm_from_s_and_kernel(dwi_norm, kernel)
             output['plm'] = plm
@@ -1328,7 +1329,7 @@ class SMI(object):
             epsilon = self.vectorize(epsilon, mask)
             output['epsilon'] = epsilon
 
-        return output, rot_invs
+        return output
         
 if __name__ == "__main__":
     sys.exit()
