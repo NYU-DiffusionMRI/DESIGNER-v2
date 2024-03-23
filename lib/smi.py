@@ -1021,8 +1021,8 @@ class SMI(object):
             x_train = self.compute_extended_moments(
                 meas_rotinvs_train[:, keep_rot_invs_kernel], degree=degree_kernel)
         
-
-            pinv_x = scl.pinv(x_train)
+            # pinv_x = scl.pinv(x_train)
+            pinv_x = np.linalg.pinv(x_train)
             coeffs_f = pinv_x @ f
             coeffs_da = pinv_x @ da
             coeffs_depar = pinv_x @ depar
