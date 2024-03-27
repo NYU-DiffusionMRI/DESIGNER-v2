@@ -52,11 +52,12 @@ class TensorFitting(object):
         # compute AKC
         wcnt, wind = self.create_tensor_order(4)
         ndir = dir.shape[0]
+        T = np.tile(wcnt,(ndir, 1)) * dir[:,wind[:, 0]] * dir[:,wind[:, 1]] * dir[:,wind[:, 2]] * dir[:,wind[:, 3]]
+        akc = T @ dt[6:]
+
         adc = self.diffusion_coeff(dt[:6], dir)
         md = np.sum(dt[np.array([0,3,5])], 0)/3
-        bW = np.tile(wcnt,(ndir, 1)) * dir[:,wind[:, 0]] * dir[:,wind[:, 1]] * dir[:,wind[:, 2]] * dir[:,wind[:, 3]]
-        akc = bW @ dt[6:]
-        akc = (akc * np.tile(md**2, (adc.shape[0], 1))) / (adc**2)
+        akc = (akc * md[np.newaxis]**2) / (adc**2)
         return akc
 
     def w_kurtosis_coeff(self, dt, dir):
@@ -95,8 +96,9 @@ class TensorFitting(object):
         """
         # get the radial component of a set of directions
         dt = 2*np.pi/n
-        theta = np.arange(0,2*np.pi-dt,dt)
+        theta = np.arange(0,2*np.pi,dt)
         dirs = np.vstack((np.cos(theta), np.sin(theta), 0*theta))
+        
         v = np.hstack((-dir[1], dir[0], 0))
         s = np.sqrt(np.sum(v**2))
         c = dir[2]
@@ -232,7 +234,7 @@ class TensorFitting(object):
                 akc = self.kurtosis_coeff(dt, dirs)
                 mk = np.mean(akc, axis=0)
                 ak, rk = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
-                    (delayed(self.dki_tensor_params)(vectors[i,:,0], dt[:,i], fit_w=False) for i in inputs))
+                   (delayed(self.dki_tensor_params)(vectors[i,:,0], dt[:,i], fit_w=False) for i in inputs))
                 ak = np.reshape(ak, (nvox))
                 rk = np.reshape(rk, (nvox))
                 ak = vectorize(ak, mask)
@@ -247,7 +249,7 @@ class TensorFitting(object):
 
     def dki_fit(self, dwi, mask, constraints=None):
         """ 
-        Diffusion parameter estimation using weightel linear least squares fitting
+        Diffusion parameter estimation using weighted linear least squares fitting
         Outputs the 6 parameter diffusion tensor and 21 parameter kurtosis tensor in dt[diffusion,kurtosis]
         Outputs S0 the true quantitative mean signal at zero gradient strength
         the gradient tensor b
@@ -311,10 +313,23 @@ class TensorFitting(object):
 
         # for i in inputs:
         #     self.wlls(shat[:,i], dwi_[:,i], b, C)
-         
-        dt = Parallel(n_jobs=self.n_cores,prefer='processes')\
-            (delayed(self.wlls)(shat[:,i], dwi_[:,i], b, C) for i in inputs)
-        dt = np.reshape(dt, (dwi_.shape[1], b.shape[1])).T
+        
+        V = 0
+        if V == 1:
+            # vectorized fit is slow
+            import timeit
+            starting_time = timeit.default_timer()
+            shat_vw = shat.T[:, :, np.newaxis] * np.eye(b.shape[0])
+            wb = np.einsum('ijk,kl->ijl',shat_vw, b)
+            pinvwb = np.linalg.pinv(wb)
+            wlogdwi = np.einsum('ijk,ji->ij',shat_vw, np.log(dwi_))
+            dt = np.einsum('ijk,ik->ji',pinvwb, wlogdwi)
+            print("Time difference :", timeit.default_timer() - starting_time)
+        else:
+            dt = Parallel(n_jobs=self.n_cores,prefer='processes')\
+                (delayed(self.wlls)(shat[:,i], dwi_[:,i], b, C) for i in inputs)
+            dt = np.reshape(dt, (dwi_.shape[1], b.shape[1])).T
+        
 
         s0 = np.exp(dt[0,:])
         dt = dt[1:,:]

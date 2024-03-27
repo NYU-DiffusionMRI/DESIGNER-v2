@@ -207,7 +207,7 @@ class SMI(object):
         prior for each parameter
         Inputs:
         -------
-        training bounds: (inhereted from self)
+        training bounds: (inherited from self)
 
         Outputs:
         --------
@@ -291,7 +291,6 @@ class SMI(object):
         - If the input is 1D or 2D: unpatch it to 3D or 4D using a mask.
         - If the input is 3D or 4D: vectorize to 2D using a mask.
         """
-        import numpy.ma as ma
         if mask is None:
             mask = np.ones((image.shape[0], image.shape[1], image.shape[2]))
 
@@ -1008,21 +1007,27 @@ class SMI(object):
         rotinvs_train_norm = rotinvs_train / rotinvs_train[:,[0]]
 
         for i in range(1, len(sigma_noise_norm_levels_edges)):
-            flag_current_noise_level = sigma_noise_norm_levels_ids == i
+            flag_current_noise_level = (sigma_noise_norm_levels_ids == i)
 
             if not np.any(flag_current_noise_level):
                 continue
             
             sigma_rotinvs_training = sigma_noise_norm_levels_mean[i-1] / sigma_ndirs_factor
             meas_rotinvs_train = (rotinvs_train_norm + 
-                sigma_rotinvs_training * np.random.standard_normal((rotinvs_train_norm.shape))
+                sigma_rotinvs_training * np.random.standard_normal(size=rotinvs_train_norm.shape)
                 )
+            #import scipy.io as sio
+            #seedmat = sio.loadmat('/Users/benaron/Desktop/subj_1/randomseed.mat')
+            #seedsigma = seedmat['randomseed']
+            #meas_rotinvs_train = (rotinvs_train_norm + 
+            #    sigma_rotinvs_training * seedsigma)
+           # import pdb; pdb.set_trace()
             
             x_train = self.compute_extended_moments(
                 meas_rotinvs_train[:, keep_rot_invs_kernel], degree=degree_kernel)
         
-            # pinv_x = scl.pinv(x_train)
-            pinv_x = np.linalg.pinv(x_train)
+            pinv_x = scl.pinv(x_train)
+            # pinv_x = np.linalg.pinv(x_train)
             coeffs_f = pinv_x @ f
             coeffs_da = pinv_x @ da
             coeffs_depar = pinv_x @ depar
@@ -1034,38 +1039,24 @@ class SMI(object):
             f_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_f
                 )
-            f_ml_fit[f_ml_fit < 0] = 0
-            f_ml_fit[f_ml_fit > 1] = 1
             da_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_da
-                )
-            da_ml_fit[da_ml_fit < 0] = 0
-            da_ml_fit[da_ml_fit > 3] = 3
+                )            
             depar_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_depar
                 )
-            depar_ml_fit[depar_ml_fit < 0] = 0
-            depar_ml_fit[depar_ml_fit > 3] = 3
             deperp_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_deperp
                 )
-            deperp_ml_fit[deperp_ml_fit < 0] = 0
-            deperp_ml_fit[deperp_ml_fit > 3] = 3
             f_fw_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_f_fw
                 )
-            f_fw_ml_fit[f_fw_ml_fit < 0] = 0
-            f_fw_ml_fit[f_fw_ml_fit > 1] = 1
             t2a_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_t2a
                 )
-            t2a_ml_fit[t2a_ml_fit < 30] = 30
-            t2a_ml_fit[t2a_ml_fit > 150] = 150
             t2e_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_t2e
                 )
-            t2e_ml_fit[t2e_ml_fit < 30] = 30
-            t2e_ml_fit[t2e_ml_fit > 150] = 150  
 
             if self.rotinv_lmax >= 2:
                 p2 = self.prior[:, 7]
@@ -1091,6 +1082,21 @@ class SMI(object):
                     )
                 p6_ml_fit[p6_ml_fit < 0] = 0 
                 p6_ml_fit[p6_ml_fit > 1] = 1
+
+        f_ml_fit[f_ml_fit < 0] = 0
+        f_ml_fit[f_ml_fit > 1] = 1
+        da_ml_fit[da_ml_fit < 0] = 0
+        da_ml_fit[da_ml_fit > 3] = 3
+        depar_ml_fit[depar_ml_fit < 0] = 0
+        depar_ml_fit[depar_ml_fit > 3] = 3
+        deperp_ml_fit[deperp_ml_fit < 0] = 0
+        deperp_ml_fit[deperp_ml_fit > 3] = 3
+        f_fw_ml_fit[f_fw_ml_fit < 0] = 0
+        f_fw_ml_fit[f_fw_ml_fit > 1] = 1
+        t2a_ml_fit[t2a_ml_fit < 30] = 30
+        t2a_ml_fit[t2a_ml_fit > 150] = 150
+        t2e_ml_fit[t2e_ml_fit < 30] = 30
+        t2e_ml_fit[t2e_ml_fit > 150] = 150 
     
         if self.rotinv_lmax == 2:
             pn_ml_fit = p2_ml_fit
