@@ -1,0 +1,2 @@
+# Do not allow the binary to be checked in, as the architecture may be variable and cause issues
+rpg
