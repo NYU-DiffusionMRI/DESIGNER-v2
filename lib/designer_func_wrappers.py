@@ -315,6 +315,7 @@ def run_eddy(shell_table, dwi_metadata):
     import glob
 
     print("...Eddy current, EPI, motion correction...")
+    run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
 
     eddyopts = '" --cnr_maps --repol --data_is_shelled "'
 
@@ -335,9 +336,30 @@ def run_eddy(shell_table, dwi_metadata):
         flag_variable_bshape = True
 
     if flag_variable_TE or flag_variable_bshape:
-        if app.ARGS.eddy_groups is None:
+        if app.ARGS.eddy_groups is None and app.ARGS.eddy_fakeb is None:
             raise MRtrixError('for variable TE data, the user must supply the \
-                            -eddy_groups command line argument')
+                            -eddy_groups or -eddy_fakeb command line argument')
+
+        # scale b-value by the fake_b scaling factors
+        if app.ARGS.eddy_fakeb is not None:
+            eddy_fakeb = [float(i) for i in app.ARGS.eddy_fakeb.rsplit(',')]
+            if len(dwi_metadata['bvals']) != len(eddy_fakeb):
+                raise ValueError("The number of bval directories does not match the length of the eddy_fakeb array.")
+
+            fake_bvals = np.array([])
+            for i, bval_path in enumerate(dwi_metadata['bvals']):
+                bvals = np.loadtxt(bval_path)
+                scaled_bvals = bvals * eddy_fakeb[i]
+                fake_bvals = np.concatenate((fake_bvals, scaled_bvals))
+
+            all_concatenated_bvecs = np.empty((0, 3))
+            for bvec_path in dwi_metadata['bvecs']:
+                bvecs = np.transpose(np.loadtxt(bvec_path))
+                all_concatenated_bvecs = np.vstack((all_concatenated_bvecs, bvecs))
+
+            fakeb_grad = np.hstack((all_concatenated_bvecs, fake_bvals[:, np.newaxis]))
+            np.savetxt(path.to_scratch('fakeb_grad.txt'), fakeb_grad, fmt='%0.8f')
+            print("Scaled b-values and concatenated b-vectors have been saved to fakeb_grad.txt")
         
          # get TE of the PA
         if app.ARGS.rpe_pair:
@@ -483,7 +505,7 @@ def run_eddy(shell_table, dwi_metadata):
                 
             elif app.ARGS.rpe_none:
 
-                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -pe_dir %s %s %s' % 
+                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -pe_dir %s %s %s' % 
                     (path.to_scratch('eddy_processing_' + str(i)), 
                     eddyopts, 
                     pe_dir,
@@ -586,14 +608,25 @@ def run_eddy(shell_table, dwi_metadata):
                 (path.to_scratch('topup_corrected_mean.nii'), 
                 path.to_scratch('topup_corrected_brain')))
             
-            run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -topup_files %s -pe_dir %s %s %s' % 
-                    (path.to_scratch('eddy_processing'), 
-                    eddyopts, 
-                    path.to_scratch('topup_corrected_brain_mask' + fsl_suffix),
-                    path.to_scratch('topup_results'),
-                    pe_dir,
-                    path.to_scratch('working.mif'),
-                    path.to_scratch('dwiec.mif')))
+            if app.ARGS.eddy_fakeb is None:
+                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -topup_files %s -pe_dir %s %s %s' % 
+                        (path.to_scratch('eddy_processing'), 
+                        eddyopts, 
+                        path.to_scratch('topup_corrected_brain_mask' + fsl_suffix),
+                        path.to_scratch('topup_results'),
+                        pe_dir,
+                        path.to_scratch('working.mif'),
+                        path.to_scratch('dwiec.mif')))
+            else:
+                run.command('dwifslpreproc -nocleanup -scratch %s -grad %s -eddy_options %s -rpe_none -eddy_mask %s -topup_files %s -pe_dir %s %s %s' % 
+                        (path.to_scratch('eddy_processing'),
+                        path.to_scratch('fakeb_grad.txt'), 
+                        eddyopts, 
+                        path.to_scratch('topup_corrected_brain_mask' + fsl_suffix),
+                        path.to_scratch('topup_results'),
+                        pe_dir,
+                        path.to_scratch('working.mif'),
+                        path.to_scratch('dwiec.mif')))
 
         elif app.ARGS.rpe_none:
 
@@ -602,13 +635,23 @@ def run_eddy(shell_table, dwi_metadata):
                 (path.to_scratch('b0pe.nii'), 
                 path.to_scratch('b0_pe_brain')))
             
-            run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -pe_dir %s %s %s' % 
-                    (path.to_scratch('eddy_processing'), 
-                    eddyopts, 
-                    path.to_scratch('b0_pe_brain_mask' + fsl_suffix),
-                    pe_dir,
-                    path.to_scratch('working.mif'),
-                    path.to_scratch('dwiec.mif')))
+            if app.ARGS.eddy_fakeb is None:
+                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -pe_dir %s %s %s' % 
+                        (path.to_scratch('eddy_processing'), 
+                        eddyopts, 
+                        path.to_scratch('b0_pe_brain_mask' + fsl_suffix),
+                        pe_dir,
+                        path.to_scratch('working.mif'),
+                        path.to_scratch('dwiec.mif')))
+            else:
+                run.command('dwifslpreproc -nocleanup -scratch %s -grad %s -eddy_options %s -rpe_none -eddy_mask %s -pe_dir %s %s %s' % 
+                        (path.to_scratch('eddy_processing'), 
+                        path.to_scratch('fakeb_grad.txt'), 
+                        eddyopts, 
+                        path.to_scratch('b0_pe_brain_mask' + fsl_suffix),
+                        pe_dir,
+                        path.to_scratch('working.mif'),
+                        path.to_scratch('dwiec.mif')))
             
         elif app.ARGS.rpe_all:
             # run an initial topup to create a brain mask
@@ -664,23 +707,34 @@ def run_eddy(shell_table, dwi_metadata):
                 path.to_scratch('topup_corrected_brain')))
 
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-            run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir %s -eddy_mask %s dwipe_rpe.mif dwiec.mif' %
-                        (eddyopts, 
-                        pe_dir,
-                        path.to_scratch('topup_corrected_brain_mask' + fsl_suffix)
-                        ))
+            if app.ARGS.eddy_fakeb is None:
+                run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir %s -eddy_mask %s dwipe_rpe.mif dwiec.mif' %
+                            (eddyopts, 
+                            pe_dir,
+                            path.to_scratch('topup_corrected_brain_mask' + fsl_suffix)
+                            ))
+            else:
+                run.command('dwifslpreproc -nocleanup -grad %s -eddy_options %s -rpe_all -pe_dir %s -eddy_mask %s dwipe_rpe.mif dwiec.mif' %
+                            (path.to_scratch('fakeb_grad.txt'),
+                            eddyopts, 
+                            pe_dir,
+                            path.to_scratch('topup_corrected_brain_mask' + fsl_suffix)
+                            ))
             run.function(os.remove,'tmp.mif')
 
         elif app.ARGS.rpe_header:
-
-            cmd = ('dwifslpreproc -nocleanup -eddy_options %s -rpe_header working.mif dwiec.mif' % 
-                (eddyopts))
+            if app.ARGS.eddy_fakeb is None: 
+                cmd = ('dwifslpreproc -nocleanup -eddy_options %s -rpe_header working.mif dwiec.mif' % 
+                    (eddyopts))
+            else:
+                cmd = ('dwifslpreproc -nocleanup -grad %s -eddy_options %s -rpe_header working.mif dwiec.mif' % 
+                    (path.to_scratch('fakeb_grad.txt'), eddyopts))
             run.command(cmd)
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
 
-    run.command('mrconvert -force dwiec.mif working.mif', show=False)
+    run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)
 
 def run_b1correct(dwi_metadata):
     from mrtrix3 import run
