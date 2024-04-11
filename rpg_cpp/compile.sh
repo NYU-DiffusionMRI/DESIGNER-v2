@@ -8,7 +8,7 @@ if [ $# -eq 0 ]; then
 echo "Compile third party librares"
 
 # get current path and append rpg_cpp
-rpg_path=`pwd`/rpg_cpp
+rpg_path=`pwd`
 
 # Entering folder with compressed third party (fftw and nifti) libraries
 cd $rpg_path/thirdparty/

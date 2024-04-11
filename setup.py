@@ -19,12 +19,13 @@ def change_permissions_recursive(path, mode):
     for file in [os.path.join(root, f) for f in files]:
             os.chmod(file, mode)
 
+
 change_permissions_recursive('rpg_cpp', 0o777)
-subprocess.run(['./rpg_cpp/compile.sh'], shell=True)
+subprocess.run(['./compile.sh'], shell=True, cwd='rpg_cpp')
 
 setup(
         name ='designer2',
-        version ='2.0.5',
+        version ='2.0.7',
         author ='Benjamin Ades-Aron',
         author_email ='benjamin.ades-aron@nyulangone.org',
         url ='https://github.com/NYU-DiffusionMRI/DESIGNER-v2',

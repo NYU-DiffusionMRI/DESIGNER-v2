@@ -1,0 +1,4 @@
+# Do not allow the binaries to be checked in, as the architecture may be variable and cause issues
+rpg
+thirdparty/fftw-3.3.10
+thirdparty/nifticlib-2.0.0

@@ -20,7 +20,7 @@ class SMI(object):
 
     def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
-        noise_bias=None, training_bounds=None, training_prior=None, n_training=4e4, 
+        noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
         l_max_training = None):
         """
         Setting some default values and initialization required for class functions
@@ -207,7 +207,7 @@ class SMI(object):
         prior for each parameter
         Inputs:
         -------
-        training bounds: (inhereted from self)
+        training bounds: (inherited from self)
 
         Outputs:
         --------
@@ -291,7 +291,6 @@ class SMI(object):
         - If the input is 1D or 2D: unpatch it to 3D or 4D using a mask.
         - If the input is 3D or 4D: vectorize to 2D using a mask.
         """
-        import numpy.ma as ma
         if mask is None:
             mask = np.ones((image.shape[0], image.shape[1], image.shape[2]))
 
@@ -314,7 +313,7 @@ class SMI(object):
             for i in range(0, image.shape[-1]):
                 tmp = image[:,:,:,i]
                 s[i,:] = tmp[mask.astype(bool)]
-
+             
         return np.squeeze(s)
 
     def cart_to_sph(self, x, y, z):
@@ -391,7 +390,7 @@ class SMI(object):
         return y_lm.T
 
 
-    def fit2D4D_LLS_RealSphHarm_wSorting_norm_var(self, dwi, mask):
+    def fit2D4D_LLS_RealSphHarm_wSorting_norm_var(self, dwi, mask, rank1sl=True):
         """
         This function performs the linear fit of Slm on each shell using real spherical
         harmonics as defined in https://cs.dartmouth.edu/~wjarosz/publications/dissertation/appendixB.pdf
@@ -474,7 +473,7 @@ class SMI(object):
             )
             if abs(len(ids_current_cluster) - bb[2,i]) > 0.1:
                 raise Exception('count of elements in current cluster failed, check shell table and B inputs')
-
+    
             if (abs(bb[1,i]) > 0.045) & (bb[0,i] > 0.05):
                 ids_current_lm = np.arange(n_sh_coeffs[i])
                 y_lm_current_cluster = y_lm_matrix[ids_current_cluster,:]
@@ -511,6 +510,22 @@ class SMI(object):
             ids_current_cluster_all.append(
                 np.vstack((ids_current_cluster * 0 + i, ids_current_cluster))
                 )
+        
+        if rank1sl:
+            sl_dn = s_l_clusters_all.copy()
+            slm_dn = s_lm_clusters_all.copy()
+            id_shells = np.arange(n_shells)
+            for ll in range(2, int(np.max(l_max)) + 2, 2):
+                if np.sum(l_max >= ll) > 1:
+                    id_useful_shells = id_shells[l_max>=ll]
+                    id_current_band = (l_all == ll)
+                    slm_voxels_raw = s_lm_clusters_all[id_current_band, :, :][:, :, id_useful_shells]
+                    slm_voxels_dn = self.low_rank_denoising(slm_voxels_raw.transpose(1,0,2), 1).transpose(1,0,2)
+                    slm_dn[id_current_band, :, :][:, :, id_useful_shells]
+                    sl_dn[int(ll/2),:,id_useful_shells] = np.sqrt(np.sum(slm_voxels_dn**2, axis=0)).T
+                  
+            s_lm_clusters_all = slm_dn.copy()
+            s_l_clusters_all = sl_dn.copy()            
 
         if flag_4D:
             sl = np.zeros((sz_dwi[0], sz_dwi[1], sz_dwi[2], int(np.max(l_max)/2+1), n_shells))
@@ -548,6 +563,14 @@ class SMI(object):
         else:
 
             return sl.reshape(sl.shape[0], sl.shape[1], sl.shape[2], -1)
+        
+    def low_rank_denoising(self, X, p):
+        u,s,v = np.linalg.svd(X, full_matrices=False)
+        s_dn = np.zeros((s.shape[0], s.shape[1], s.shape[1]))
+        diag_inds = np.diag_indices(X.shape[2])
+        s_dn[:,diag_inds[0][:p],diag_inds[1][:p]] = s[:,:p]
+        u_s = np.einsum('ijk,ikl->ijl', u, s_dn)
+        return np.einsum('ijk,ikl->ijl', u_s, v)
         
 
     def group_dwi_in_shells_b_beta_te(self):
@@ -884,7 +907,8 @@ class SMI(object):
             rot_invs_normalized = rot_invs
             sigma_normalized = self.sigma
         
-        s0_lowest_te = rot_invs_normalized[0,:]
+        s0_lowest_te = rot_invs_normalized[0,:].copy()
+        
         np.divide(
             rot_invs_normalized, s0_lowest_te, out=rot_invs_normalized, where=s0_lowest_te != 0
             )
@@ -892,27 +916,27 @@ class SMI(object):
         np.divide(
             sigma_normalized, s0_lowest_te, out=sigma_normalized, where=s0_lowest_te != 0
             )
-        #rot_invs_normalized = (rot_invs_normalized / s0_lowest_te).T
-        #sigma_normalized = (sigma_normalized / s0_lowest_te).T
-
+        
         shells = self.table_4d[0,:]
         beta = self.table_4d[1,:]
         n_dirs = self.table_4d[2,:]
         
         keep_non_zero_s0 = np.ones(self.table_4d.shape[1], dtype=bool)
-        if self.rotinv_lmax == 2:
-            keep_non_zero_s2 = (abs(beta) > 0.2) & (shells > 0.1)
+        if self.rotinv_lmax == 0:
+            keep_rot_invs_kernel = keep_non_zero_s0.copy()
+        elif self.rotinv_lmax == 2:
+            keep_non_zero_s2 = (abs(beta) > 0.2) & (shells > 0.1) & (self.l_max >=2)
             keep_rot_invs_kernel = np.hstack((
                 keep_non_zero_s0, keep_non_zero_s2)
                 )
         elif self.rotinv_lmax == 4:
-            keep_non_zero_s2 = (abs(beta) > 0.2) & (shells > 0.1)
+            keep_non_zero_s2 = (abs(beta) > 0.2) & (shells > 0.1) & (self.l_max >=2)
             keep_non_zero_s4 = (abs(beta) > 0.2) & (shells > 0.1) & (self.l_max >= 4)
             keep_rot_invs_kernel = np.hstack((
                 keep_non_zero_s0, keep_non_zero_s2, keep_non_zero_s4)
                 )
         elif self.rotinv_lmax == 6:
-            keep_non_zero_s2 = (abs(beta) > 0.2) & (shells > 0.1)
+            keep_non_zero_s2 = (abs(beta) > 0.2) & (shells > 0.1) & (self.l_max >=2)
             keep_non_zero_s4 = (abs(beta) > 0.2) & (shells > 0.1) & (self.l_max >= 4)
             keep_non_zero_s6 = (abs(beta) > 0.2) & (shells > 0.1) & (self.l_max >= 6)
             keep_rot_invs_kernel = np.hstack((
@@ -924,13 +948,14 @@ class SMI(object):
             )
         sigma_noise_norm_levels_ids = np.digitize(
             sigma_normalized, sigma_noise_norm_levels_edges
-            ) - 1
-        sigma_noise_norm_levels_ids[sigma_normalized < sigma_noise_norm_levels_edges[0]] = 0
-        sigma_noise_norm_levels_ids[sigma_normalized > sigma_noise_norm_levels_edges[-1]] = self.n_levels - 1
-        sigma_noise_norm_levels_mean = 1/2 * (
-            sigma_noise_norm_levels_edges[1:] + sigma_noise_norm_levels_edges[:-1]
             )
-
+    
+        sigma_noise_norm_levels_ids[sigma_normalized < sigma_noise_norm_levels_edges[0]] = 0
+        sigma_noise_norm_levels_ids[sigma_normalized >= sigma_noise_norm_levels_edges[-1]] = self.n_levels
+        sigma_noise_norm_levels_mean = 1/2 * (
+           sigma_noise_norm_levels_edges[1:] + sigma_noise_norm_levels_edges[:-1]
+           )
+                
         degree_kernel = 3
         x_fit_norm = self.compute_extended_moments(
             rot_invs_normalized[:, keep_rot_invs_kernel], degree_kernel
@@ -961,7 +986,11 @@ class SMI(object):
             f = 1 - f_fw
 
         rotinvs_train = self.generate_sm_wfw_b_beta_te_ws0_training_data()
-        
+
+        if self.rotinv_lmax == 0:
+            p2_ml_fit = np.zeros(n_voxels_masked)
+            sigma_ndirs_factor = np.sqrt(n_dirs)
+            rotinvs_train = rotinvs_train[:,:-1//2]
         if self.rotinv_lmax == 2:
             p2_ml_fit = np.zeros(n_voxels_masked)
             sigma_ndirs_factor = np.sqrt(np.hstack((n_dirs, n_dirs * 5)))
@@ -977,21 +1006,28 @@ class SMI(object):
         
         rotinvs_train_norm = rotinvs_train / rotinvs_train[:,[0]]
 
-        for i in range(self.n_levels):
-            flag_current_noise_level = sigma_noise_norm_levels_ids == i
+        for i in range(1, len(sigma_noise_norm_levels_edges)):
+            flag_current_noise_level = (sigma_noise_norm_levels_ids == i)
 
             if not np.any(flag_current_noise_level):
                 continue
             
-            sigma_rotinvs_training = sigma_noise_norm_levels_mean[i] / sigma_ndirs_factor
+            sigma_rotinvs_training = sigma_noise_norm_levels_mean[i-1] / sigma_ndirs_factor
             meas_rotinvs_train = (rotinvs_train_norm + 
-                sigma_rotinvs_training * np.random.standard_normal((rotinvs_train_norm.shape))
+                sigma_rotinvs_training * np.random.standard_normal(size=rotinvs_train_norm.shape)
                 )
-
+            #import scipy.io as sio
+            #seedmat = sio.loadmat('/Users/benaron/Desktop/subj_1/randomseed.mat')
+            #seedsigma = seedmat['randomseed']
+            #meas_rotinvs_train = (rotinvs_train_norm + 
+            #    sigma_rotinvs_training * seedsigma)
+           # import pdb; pdb.set_trace()
+            
             x_train = self.compute_extended_moments(
                 meas_rotinvs_train[:, keep_rot_invs_kernel], degree=degree_kernel)
-            
+        
             pinv_x = scl.pinv(x_train)
+            # pinv_x = np.linalg.pinv(x_train)
             coeffs_f = pinv_x @ f
             coeffs_da = pinv_x @ da
             coeffs_depar = pinv_x @ depar
@@ -999,42 +1035,28 @@ class SMI(object):
             coeffs_f_fw = pinv_x @ f_fw
             coeffs_t2a = pinv_x @ t2a
             coeffs_t2e = pinv_x @ t2e
-
+            
             f_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_f
                 )
-            f_ml_fit[f_ml_fit < 0] = 0
-            f_ml_fit[f_ml_fit > 1] = 1
             da_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_da
-                )
-            da_ml_fit[da_ml_fit < 0] = 0
-            da_ml_fit[da_ml_fit > 3] = 3
+                )            
             depar_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_depar
                 )
-            depar_ml_fit[depar_ml_fit < 0] = 0
-            depar_ml_fit[depar_ml_fit > 3] = 3
             deperp_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_deperp
                 )
-            deperp_ml_fit[deperp_ml_fit < 0] = 0
-            deperp_ml_fit[deperp_ml_fit > 3] = 3
             f_fw_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_f_fw
                 )
-            f_fw_ml_fit[f_fw_ml_fit < 0] = 0
-            f_fw_ml_fit[f_fw_ml_fit > 1] = 1
             t2a_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_t2a
                 )
-            t2a_ml_fit[t2a_ml_fit < 30] = 30
-            t2a_ml_fit[t2a_ml_fit > 150] = 150
             t2e_ml_fit[flag_current_noise_level] = (
                 x_fit_norm[flag_current_noise_level, :] @ coeffs_t2e
                 )
-            t2e_ml_fit[t2e_ml_fit < 30] = 30
-            t2e_ml_fit[t2e_ml_fit > 150] = 150  
 
             if self.rotinv_lmax >= 2:
                 p2 = self.prior[:, 7]
@@ -1060,6 +1082,21 @@ class SMI(object):
                     )
                 p6_ml_fit[p6_ml_fit < 0] = 0 
                 p6_ml_fit[p6_ml_fit > 1] = 1
+
+        f_ml_fit[f_ml_fit < 0] = 0
+        f_ml_fit[f_ml_fit > 1] = 1
+        da_ml_fit[da_ml_fit < 0] = 0
+        da_ml_fit[da_ml_fit > 3] = 3
+        depar_ml_fit[depar_ml_fit < 0] = 0
+        depar_ml_fit[depar_ml_fit > 3] = 3
+        deperp_ml_fit[deperp_ml_fit < 0] = 0
+        deperp_ml_fit[deperp_ml_fit > 3] = 3
+        f_fw_ml_fit[f_fw_ml_fit < 0] = 0
+        f_fw_ml_fit[f_fw_ml_fit > 1] = 1
+        t2a_ml_fit[t2a_ml_fit < 30] = 30
+        t2a_ml_fit[t2a_ml_fit > 150] = 150
+        t2e_ml_fit[t2e_ml_fit < 30] = 30
+        t2e_ml_fit[t2e_ml_fit > 150] = 150 
     
         if self.rotinv_lmax == 2:
             pn_ml_fit = p2_ml_fit
@@ -1280,10 +1317,11 @@ class SMI(object):
                 output['p4'] = kernel[:,:,:,6]
             if self.rotinv_lmax == 6:
                 output['p6'] = kernel[:,:,:,7]
+        output['rotinvs'] = rot_invs
 
 
         if self.flag_fit_fodf:
-            s0 = Sl[:,:,:,[0],0]
+            s0 = rot_invs[:,:,:,0]
             dwi_norm = np.divide(dwi, s0, where=s0 != 0)
             (plm, pl) = self.get_plm_from_s_and_kernel(dwi_norm, kernel)
             output['plm'] = plm

@@ -21,8 +21,7 @@ nav_order: 3
 We provide convenient docker images to quickly get started with Designer without the need to install and its dependencies. The latest version will be published on [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/general). 
 Official versions will be tagged (nyudiffusionmri/designer2:\<tag\>), while we also maintain images following our main development branch (nyudiffusionmri/designer2:main). See [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/tags?page=1&ordering=last_updated) for an overview of all releases.
 
-To get started, install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine. If you are using an Apple M1 device, navigate to the Docker app's general settings and enable the "Use Rosetta for x86/amd64 emulation on Apple Silicon" option for compatibility. We recommend setting the memory limit to at least 15GB for optimal performance.
-
+To get started, install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine. If you are using an Apple Silicon device, navigate to the Docker app's general settings and enable the "Use Rosetta for x86/amd64 emulation on Apple Silicon" option for compatibility. We recommend setting the memory limit to at least 15GB for optimal performance.
 
 Verifying can be done by running `docker run nyudiffusionmri/designer2:<tag> designer`
 

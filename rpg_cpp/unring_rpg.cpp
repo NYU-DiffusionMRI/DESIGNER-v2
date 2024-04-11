@@ -1303,7 +1303,6 @@ if(phase_flag){ // (imag)
 Reshape<double>(phaseout ,slicesout_i,nx,ny,nz,ndwi,pfdimf,0);
 FreeMatrix(slicesin_i ,nz*ndwi,nx*ny);
 FreeMatrix(slicesout_i,nz*ndwi,nx*ny);
-} //  phase
 
 // compute magnitude/phase (replace real/imag)
 for(i = 0; i < nelem; i++){
@@ -1314,6 +1313,7 @@ pha_ = atan2(im_,re_);
 volumeout[i] = mag_;
 phaseout[i]  = pha_;
 } // i
+} //  phase	
 
 delete[] dim_sz;
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //

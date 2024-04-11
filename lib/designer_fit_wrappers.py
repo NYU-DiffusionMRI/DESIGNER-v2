@@ -76,7 +76,7 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores
 
     return dwi_new
 
-def save_params(paramDict, nii, model, outdir):
+def save_params(paramDict, niiex, model, outdir):
     from ants import from_numpy, image_write
     import os
 
@@ -87,6 +87,6 @@ def save_params(paramDict, nii, model, outdir):
         ndims = vol.ndim
 
         out = from_numpy(
-        paramDict[key], origin=nii.origin[:ndims], spacing=nii.spacing[:ndims], direction=nii.direction[:ndims,:])
+        paramDict[key], origin=niiex.origin[:ndims], spacing=niiex.spacing[:ndims], direction=niiex.direction[:ndims,:])
         image_write(out, outpath)
 
