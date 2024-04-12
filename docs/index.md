@@ -6,11 +6,7 @@ description: "Temp description"
 permalink: /
 ---
 
-# DESIGNER-v2 (Diffusion MRI data pre-processing)
-# TMI (Diffusion MRI data analysis)
----
-
-# Diffusion MRI pre-processing and parameter estimation
+# Diffusion MRI pre-processing (DESIGNER) and parameter estimation (TMI)
 
 Welcome to the [NYU diffusion biophysics group](https://diffusion-mri.com) documentation page. The group is led by Els Fieremans and Dmitry Novikov, and has developed a number of tools for preprocessing and extracting parameters from diffusion MRI data. Features include denoising using MPPCA [(Veraart 2016)](https://www.sciencedirect.com/science/article/pii/S1053811916303949?via%3Dihub), gibbs artifact correction using RPG [(Lee 2021)](https://onlinelibrary.wiley.com/doi/10.1002/mrm.28830), the DESIGNER preprocessing pipeline [(Ades-Aron 2018)](https://www.sciencedirect.com/science/article/pii/S1053811918306827?via%3Dihub), the standard model imaging toolbox [(Coelho 2022)](https://www.sciencedirect.com/science/article/pii/S1053811922004104), and more!
 
