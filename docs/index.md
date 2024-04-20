@@ -23,15 +23,15 @@ All toolboxes are subject to specific referencing. Each project is accompanied b
 
 {: .ref }
 
-> Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., ... & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. Neuroimage, 183, 532-543.
+> Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., Novikov, D.S. & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. Neuroimage, 183, 532-543.
 >
 > Veraart, J., Novikov, D. S., Christiaens, D., Ades-Aron, B., Sijbers, J., & Fieremans, E. (2016). Denoising of diffusion MRI using random matrix theory. Neuroimage, 142, 394-406.
 >
 > Lee, H. H., Novikov, D. S., & Fieremans, E. (2021). Removal of partial Fourier‐induced Gibbs (RPG) ringing artifacts in MRI. Magnetic resonance in medicine, 86(5), 2733-2750.
 >
-> Coelho, S., Baete, S. H., Lemberskiy, G., Ades-Aron, B., Barrol, G., Veraart, J., ... & Fieremans, E. (2022). Reproducibility of the Standard Model of diffusion in white matter on clinical MRI systems. Neuroimage, 257, 119290.
+> Coelho, S., Baete, S. H., Lemberskiy, G., Ades-Aron, B., Barrol, G., Veraart, J., Novikov, D.S. & Fieremans, E. (2022). Reproducibility of the Standard Model of diffusion in white matter on clinical MRI systems. Neuroimage. 2022 Aug 15, 257:119290
 >
-> Chen, J.,  Ades-Aron, B., Lee, H.H., Pang, M., Novikov, D. S., Veraart, J., & Fieremans, E. (2024). Optimization and Validation of the DESIGNER dMRI preprocessing pipeline in white matter aging. arXiv:2305.14445
+> Chen, J.,  Ades-Aron, B., Lee, H.H., Mehrin, S., Pang, M., Novikov, D. S., Veraart, J., & Fieremans, E. (2024). Optimization and validation of the DESIGNER preprocessing pipeline for clinical diffusion MRI in white matter aging. Imaging Neuroscience, 2 1–17
 
 
 # Getting Help
