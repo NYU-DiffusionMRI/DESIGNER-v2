@@ -23,7 +23,6 @@ Official versions will be tagged (nyudiffusionmri/designer2:\<tag\>), while we a
 
 To get started, install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine. If you are using an Apple Silicon device, navigate to the Docker app's general settings and enable the "Use Rosetta for x86/amd64 emulation on Apple Silicon" option for compatibility. We recommend setting the memory limit to at least 15GB for optimal performance.
 
-
 Verifying can be done by running `docker run nyudiffusionmri/designer2:<tag> designer`
 
 You can then start an interactive terminal in your container by running `docker run -it nyudiffusionmri/designer2:<tag> /bin/bash`
