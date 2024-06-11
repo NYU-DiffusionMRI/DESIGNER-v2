@@ -13,14 +13,13 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: "3.x"
-    - name: Install pypa/build
-      run: >-
-        python3 -m
-        pip install
-        build
-        --user
-    - name: Build a binary wheel and a source tarball
-      run: python3 -m build
+    - name: Install build tools
+      run: |
+        python3 -m pip install --upgrade pip setuptools wheel
+    - name: Build a source distribution and a binary wheel
+      run: |
+        python3 setup.py sdist
+        python3 setup.py bdist_wheel --universal
     - name: Store the distribution packages
       uses: actions/upload-artifact@v3
       with:
@@ -36,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/designer2  # Replace <package-name> with your PyPI project name
+      url: https://pypi.org/p/designer2  
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
