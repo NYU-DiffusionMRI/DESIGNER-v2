@@ -16,13 +16,16 @@ jobs:
     - name: Install build tools
       run: |
         python3 -m pip install --upgrade pip setuptools wheel
-        python3 -m pip install pybind11
+        python3 -m pip install pybind11 auditwheel
     - name: Build a source distribution and a binary wheel
       run: |
         python3 setup.py sdist
         python3 setup.py bdist_wheel --universal
+    - name: Repair the wheel with auditwheel
+      run: |
+        auditwheel repair dist/*.whl -w dist/
     - name: Store the distribution packages
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: python-package-distributions
         path: dist/

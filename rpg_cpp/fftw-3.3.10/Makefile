@@ -468,11 +468,11 @@ CHICKEN_EGG = . threads
 # (threads, Windows, and shared libraries).
 #
 #CHICKEN_EGG = threads .
-#DOCDIR = 
+DOCDIR = 
 
 # Only build in doc/ if not disabled by user (i.e. not all
 # tools are available, such as fig2dev in maintainer mode)
-DOCDIR = doc
+#DOCDIR = doc
 SUBDIRS = support $(GENFFT) kernel simd-support dft rdft reodft api	\
 libbench2 $(CHICKEN_EGG) tests mpi $(DOCDIR) tools m4
 

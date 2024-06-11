@@ -28,7 +28,7 @@ class CustomBuildExt(build_ext):
         env = os.environ.copy()
         env['CFLAGS'] = '-fPIC'
         subprocess.check_call(
-            ["./configure", "--prefix=" + fftw_build_dir, "--enable-shared", "CFLAGS=-fPIC"],
+            ["./configure", "--prefix=" + fftw_build_dir, "--enable-shared", "--disable-doc", "CFLAGS=-fPIC"],
             cwd=fftw_source_dir,
             env=env
         )
