@@ -39,7 +39,7 @@ Using `.mif` format is helpful overall as gradient information is automatically 
 
 A more complex call to designer, applying MPPCA denoising on complex valued data (including phase images called `phase.nii`) with custom optional arguments to perform denoising using the `jespersen` PCA cutoff and singular value shrinkage looks like:
 ```
-designer -denoise -shrinkage frob -algorithm jespersen -adaptive_patch -phase phase.nii dwi.nii dwi_designer.nii
+designer -denoise -shrinkage frob -algorithm jespersen -phase phase.nii dwi.nii dwi_designer.nii
 ```
 
 ---

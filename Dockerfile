@@ -5,11 +5,24 @@ FROM python:3.12.1-bookworm
 COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
 COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3
 
-RUN apt-get -qq update \
-    && apt-get install -yq --no-install-recommends \
+# RUN apt-get -qq update \
+#     && apt-get install -yq --no-install-recommends \
+#     libgl1-mesa-dev \
+#     cmake \
+#     && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get -qq update && \
+    apt-get install -yq --no-install-recommends \
     libgl1-mesa-dev \
     cmake \
-    && rm -rf /var/lib/apt/lists/*
+    gcc \
+    g++ \
+    libopenblas-dev \
+    liblapack-dev \
+    pkg-config \
+    libhdf5-serial-dev \
+    hdf5-tools && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 # Install any needed packages specified in requirements.txt
@@ -24,7 +37,7 @@ WORKDIR /app
 # Add the current directory contents into the container at /app
 ADD . /app
 
-RUN /app/rpg_cpp/compile.sh 
+# RUN /app/rpg_cpp/compile.sh 
 # Run setup.py
 RUN python -m pip install .
 

@@ -75,9 +75,6 @@ def get_input_info(input, fslbval, fslbvec, bids):
         phase_flist = [splitext_(i) for i in phase_list]
         phase_nlist = [i[0] for i in phase_flist]
         phase_ext = [i[1] for i in phase_flist]
-
-        if not '.nii' in phase_ext:
-            raise MRtrixError('phases must be in .nii format')
     except:
         phase_nlist = None
         phase_ext = None
@@ -328,7 +325,8 @@ def convert_input_data(dwi_metadata):
                     phaselist.append('%s/phase%s.nii' % (app.SCRATCH_DIR, str(idx)))
                 run.command('mrcat -axis 3 %s %s/phase.nii' % (' '.join(phaselist), app.SCRATCH_DIR))
     except:
-        pass
+        raise MRtrixError('No phase files found or phases are in an incompatible format')
+        
 
     # get diffusion header info - check to make sure all values are valid for processing
     dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))
@@ -381,6 +379,10 @@ def create_shell_table(dwi_metadata):
 
     bshape = dwi_metadata['bshape_per_volume']
     echo_time = dwi_metadata['echo_time_per_volume']
+
+    if max(echo_time) < 1:
+        echo_time *= 1000
+        
     smi.set_bshape(bshape)
     smi.set_echotime(echo_time)
 

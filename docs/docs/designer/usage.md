@@ -32,9 +32,9 @@ Main usage:
 ## Options relating to denoising
 
 ### `-denoise`
-- Performs MPPCA denoising using default parameters on input data
+- Performs MPPCA magnitude or complex (see -phase option) denoising using default parameters on input data
 - Note that designer always performs MPPCA denoising as the first step in the processing pipeline (if the `-denoise` option is used) in order to best preserve the independent noise statistics of input data.
-- By default designer chooses the smallest isotropic cube shaped patch where N voxels in the cube is greater than the number of measurements
+- By default designer chooses 5x5x5 cube shaped patch.
 - When using the `-denoise` option please use the following citation:
 
 {: .ref}
@@ -75,14 +75,15 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 ### `-extent <x,y,z>`
 - Manually specify the patch extent for MPPCA.
 - Used in conjunction with `denoise` option.
-- By default designer chooses the smallest isotropic cube shaped patch where N voxels in the cube is greater than the number of measurements.
 - Inputs should be 3 integers separated by commas, e.g. `5,5,5` for a patch size of $5 \times 5 \times 5$, or `11,11,1` for a two dimensional $11 \times 11$ patch. 
 - Users should ensure that their chosen patch size is not larger than the total image size in any dimension.
 
 ### `-adaptive_patch`
 - Run MPPCA with adaptive patching as described [here]({{ site.baseurl }}{% link docs/designer/background.md %}#adaptive-patching).
 - used in conjunction with the `-denoise` option.
-- When this option is used an adaptive patch is chosen where N=100 (TODO: make N an input parameter)
+- When this option is used an adaptive patch is chosen where N=100
+- Note when this argument is used, the patch size will be chosen based on the extent, where the total number of voxels in the adaptive patch is 80% of the total voxels in a patch.
+- Without the `-adaptive_patch` option, the patches are chosen as blocks with a step size of floor(extent/2), this increases speed at the expense of accuracy in noise estimation.
 
 ### `-phase <phase_image1,phase_image2,...>`
 - Include a volume (or volumes) of phase images corresponding to the input(s) to Designer. For example, if two series are input to Designer with a total of 100 directions, there should be two phase series with 100 total volumes.

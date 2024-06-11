@@ -249,7 +249,7 @@ class MP(object):
         num_vols = self.dwi.shape[1]
 
         # Preallocating arrays for signal, sigma, and npars
-        signal = np.empty((num_patches, num_vols), dtype=np.float32)
+        signal = np.empty((num_patches, num_vols), dtype=complex)
         sigma = np.empty(num_patches, dtype=np.float32)
         npars = np.empty(num_patches, dtype=np.int32)
 
@@ -260,7 +260,7 @@ class MP(object):
         signal, sigma, npars = zip(*results)
 
 
-        print('...patch avergaing...')
+        print('...patch averaging...')
         wp = self.get_weights(self.temp)
         signal = self.im_reconstruct(wp, signal)
         sigma = self.im_reconstruct(wp, sigma)
@@ -268,7 +268,7 @@ class MP(object):
 
         return signal, sigma, npars
 
-def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0, phase=None, n_cores=-3):
+def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0, phase=None, n_cores=-1):
     ''' 
     denoising of complex data is implimented as a 2-pass procedure
     first denoise the phase using a large 2D patch,
@@ -278,6 +278,7 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
     if phase is not None:
         mag = img.copy()
         img_phi = ants.image_read(phase).numpy()
+        nii = ants.image_read(phase)
         minphi = np.min(img_phi)
         maxphi = np.max(img_phi)
         
@@ -285,22 +286,37 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
             print('rescaling phase from -pi to pi')
             phi = (img_phi - minphi) / (maxphi - minphi) * 2 * np.pi - np.pi
         
-        kernel_phase = [img.shape[0]//10, img.shape[1]//10, 1]
+        kernel_phase = [15, 15, 1]
         step_phase = [kernel_phase[0]//2-1, kernel_phase[1]//2-1, 1]
         
         print('phase denoising')
         img = mag*np.exp(1j*phi)
         mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', phi.shape[-1]//2, n_cores)
-        img_dn1, _, _ = mp_phase.process()
+        img_dn1, sigma1, npars1 = mp_phase.process()
         phi_dn = np.angle(img_dn1)
+        
+        # out = ants.from_numpy(abs(npars1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
+        # ants.image_write(out, 'phase_npars.nii')        
+        # img_phase = np.angle(img * np.exp(-1j*phi_dn))
+        # out = ants.from_numpy(img_phase, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+        # ants.image_write(out, 'phase_dn.nii')
+        out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+        ants.image_write(out, 'phase_dn.nii')
+        # import pdb; pdb.set_trace()
 
         print('magnitude denoising')
         img_np = np.real(img*np.exp(-1j*phi_dn))
         mp = MP(img_np, kernel, step, shrinkage, algorithm, crop, n_cores)
         Signal, Sigma, Npars = mp.process()
     else:
+        zeroinds = np.where(img==0)
+        img[zeroinds] = np.finfo(img.dtype).eps
+
         mp = MP(img, kernel, step, shrinkage, algorithm, crop, n_cores)
         Signal, Sigma, Npars = mp.process()
+        Signal[zeroinds] = 0
+
+
 
     return Signal, Sigma, Npars
 
@@ -393,7 +409,7 @@ def main():
    
     (Signal, Sigma, Npars) = denoise(img_mag, kernel=extent, step=extent//2,  shrinkage=args.shrinkage, algorithm=args.algorithm, crop=0, phase=img_phi)
     
-    Signal_ants = ants.from_numpy(Signal, origin=img_mag_ants.origin, spacing=img_mag_ants.spacing, direction=img_mag_ants.direction)
+    Signal_ants = ants.from_numpy(abs(Signal), origin=img_mag_ants.origin, spacing=img_mag_ants.spacing, direction=img_mag_ants.direction)
     ants.image_write(Signal_ants, args.output)
 
     if args.noisemap:

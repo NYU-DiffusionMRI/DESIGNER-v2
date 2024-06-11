@@ -100,6 +100,7 @@ def usage(cmdline): #pylint: disable=unused-variable
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
     import pandas as pd
+    import numpy as np
     import os
 
     # create a temporary directory to store processing files
@@ -206,6 +207,15 @@ def execute(): #pylint: disable=unused-variable
             os.path.join(head, oname + '.bval'),
             path.to_scratch('working.mif', True), 
             outpath))
+
+    bshapes = dwi_metadata['bshape_per_volume']
+    tes = dwi_metadata['echo_time_per_volume']
+    if len(set(bshapes)) > 1:
+        np.savetxt(os.path.join(head, oname + '.bshape'), bshapes, fmt='%s', delimiter=' ', newline=' ')
+
+    if len(set(tes)) > 1:
+        np.savetxt(os.path.join(head, oname + '.echotime'), tes, fmt='%s', delimiter=' ', newline=' ')
+
 
 def main():
     import mrtrix3

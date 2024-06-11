@@ -27,7 +27,7 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
     import numpy as np
 
     if app.ARGS.adaptive_patch:
-        import lib.mpdenoise_sj as mp
+        import lib.mpdenoise_adaptive as mp
     else:
         import lib.mpcomplex as mp
 
@@ -48,8 +48,8 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
     print('...denoising...')
     if app.ARGS.adaptive_patch:
         Signal, Sigma, Nparameters = mp.denoise(
-            dwi, patchtype='nonlocal', shrinkage=args_shrinkage, algorithm=args_algorithm)
-        Sigma[np.isnan(Sigma)] = 0
+            dwi, phase=args_phase, patchtype='nonlocal', shrinkage=args_shrinkage, algorithm=args_algorithm
+            )
     else:    
         Signal, Sigma, Nparameters = mp.denoise(
             dwi, phase=args_phase, kernel=extent, shrinkage=args_shrinkage, algorithm=args_algorithm, n_cores=n_cores
@@ -101,54 +101,48 @@ def run_degibbs(pf, pe_dir):
     wrapper for rpg degibbs
     """
 
-    import lib.gibbs_removal_rpg as rpg
-    from mrtrix3 import run, app
+    import lib.rpg as rpg
+    from mrtrix3 import run, app, MRtrixError
     from ants import image_read, image_write, from_numpy
-    import os
+    from tqdm import tqdm
+    # import os
 
-    rpg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'rpg_cpp')
+    # rpg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'rpg_cpp')
 
     # convert working.mif to nii
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     nii = image_read('working.nii')
     dwi = nii.numpy()
     print("...RPG degibbsing...")
-
-    if pe_dir[0] == 'i':
-        pe_rpg = 0
-    elif pe_dir[0] == 'j':
-        pe_rpg = 1
-    elif pe_dir[0] == 'k':
-        pe_rpg = 2
     
     n_cores = app.ARGS.n_cores
 
     print('Gibbs correction with parameters:')
-    print('phase-encoding direction = %s' % (pe_dir))
-    print('partial-fourier factor   = %s' % (pf))
-
+    #print('phase-encoding direction = %s' % (pe_dir))
+    #print('partial-fourier factor   = %s' % (pf))
 
     if 'i' in pe_dir:
-        pe_dir = 'x'
+        pe_dir = 0
     elif 'j' in pe_dir:
-        pe_dir = 'y'
+        pe_dir = 1
     elif 'k' in pe_dir:
-        pe_dir = 'z'
+        raise MRtrixError('k direction partial Fourier is not supported, check input data')
     else:
-        pe_dir = 'y'
+        pe_dir = 1
 
-    run.command('%s -pf %s -dim %s %s %s' %
-                (os.path.join(rpg_path,'rpg'),
-                pf, 
-                pe_dir,
-                'working.nii',
-                'working_rpg.nii'
-                ), show=False)
+    dwi_t = dwi.transpose(3,2,1,0)
+    progress_bar = tqdm(total=100)
+    def progress_callback(progress):
+        progress_bar.n = progress
+        progress_bar.refresh()
 
-    # img_dg = rpg.gibbs_removal(dwi, pf_fact=pf, pe_dim=pe_rpg, nproc=n_cores)
-    # out = from_numpy(
-    #     img_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
-    # image_write(out, 'working_rpg.nii')
+    dwi_dg_t = rpg.unring(dwi_t, minW=1, maxW=3, nsh=20, pfv=float(pf), pfdimf=pe_dir, phase_flag=False, progress_callback=progress_callback)
+    progress_bar.close()
+    dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0)
+
+    out = from_numpy(
+        dwi_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+    image_write(out, 'working_rpg.nii')
 
     #convert gibbs corrected nii to .mif
     run.command('mrconvert -force -fslgrad working.bvec working.bval working_rpg.nii working.mif', show=False)
@@ -376,6 +370,10 @@ def run_eddy(shell_table, dwi_metadata):
                 pa_bids = json.load(open(pa_bids_path))
                 te_pa = float(pa_bids['echo_time'])
 
+            if (te_pa > 1) and (min(echo_times_per_series) < 1):
+                te_pa /= 1000
+            elif (te_pa < 1) and (min(echo_times_per_series) > 1):
+                te_pa *= 1000
 
             id_dwi_match_pa = np.where(te_pa == np.array(echo_times_per_series))[0][0]
             if id_dwi_match_pa.size == 0:

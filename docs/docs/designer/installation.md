@@ -43,7 +43,7 @@ If running DESIGNER v2 using Docker is not your preferred method, you can try to
 
 The new version of designer consists of a number of updates and improvements to the original implementation. Designer version 2 is written in python and c++ and is an external [Mrtrix3](https://www.mrtrix.org) project.
 
-Designer its dependencies can be installed in one line using pip: 
+Designer can be installed in one line using pip: 
 ```
 pip install designer2
 ```
@@ -80,20 +80,20 @@ Designer also relies on FSL tools for EPI distortion correction and eddy current
 ---
 
 In addition to Mrtrix3 and FSL, designer should automatically install a number of additional python dependencies including:
-- numpy
-- scipy
-- numpy_groupies
-- antspyx (for MRI image i/o)
-- dipy (diffusion denoising using patch2self)
-- tqdm
-- joblib
-- cvxpy
-- pandas
+- numpy (>=1.21.0,<2.0.0)
+- scipy (>=1.9.0)
+- numpy_groupies (>=0.9.0)
+- antspyx (>=0.3)
+- dipy (>=1.4)
+- tqdm (>=4.62.3)
+- joblib (>=1.2)
+- cvxpy (>=1.2)
+- pandas (>=1.5)
 
-We recommend that users keep python and pip as up-to-date as possible to ensure that Designer runs smoothly. Designer was originally written in Python 3.9 and is known to be compatible with versions as low as Python 3.7 and up to 3.11. We also recommend that users run Designer within a python environment such as [conda](https://www.anaconda.com), [pyenv](https://github.com/pyenv/pyenv), or whichever you prefer. The choice of environment is up to the user, however environments are useful to manage potential dependency conflict.
+We recommend that users keep python and pip as up-to-date as possible to ensure that Designer runs smoothly. Designer was originally written in Python 3.9 and is known to be compatible with versions as low as Python 3.7 and up to 3.12. We also recommend that users run Designer within a python environment such as [conda](https://www.anaconda.com), [pyenv](https://github.com/pyenv/pyenv), or whichever you prefer. The choice of environment is up to the user, however environments are useful to manage potential dependency conflict.
 
 {: .warning }
-There is a known [issue](https://github.com/conda/conda/issues/12051) in conda environments on windows and Ubuntu that can prevent the installation of `designer`. The fix is to install `numpy-base` before running the `pip install designer2` command.
+There is a known [issue](https://github.com/conda/conda/issues/12051) in conda environments on windows and Ubuntu that can prevent the installation of `designer`. The fix is to install `numpy-base` before running the `pip install designer2` command. Additionally, there is a known conflict with numpy 2.0.0 and cvxpy. If you have numpy 2.0.0 installed, try uninstalling it and installing numpy 1.21.0 before running the `pip install designer2` command.
 
 
 
