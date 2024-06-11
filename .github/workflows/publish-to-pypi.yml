@@ -16,6 +16,7 @@ jobs:
     - name: Install build tools
       run: |
         python3 -m pip install --upgrade pip setuptools wheel
+        python3 -m pip install pybind11
     - name: Build a source distribution and a binary wheel
       run: |
         python3 setup.py sdist
