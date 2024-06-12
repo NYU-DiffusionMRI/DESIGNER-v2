@@ -1,0 +1,105 @@
+name: Build and Upload Wheels
+
+on: [push]
+
+permissions:
+  id-token: write  # Grant the workflow permissions to use the id-token
+
+jobs:
+  build-linux-wheels:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12]
+        architecture: [x86_64, i686, aarch64]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Install QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Set up Docker image
+        run: |
+          docker pull quay.io/pypa/manylinux2014_${{ matrix.architecture }}
+      - name: Build wheels
+        run: |
+          docker run --rm -v $GITHUB_WORKSPACE:/project quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash -c "
+          yum install -y fftw-devel && \
+          for PYBIN in /opt/python/cp${{ matrix.python-version }}*/bin; do
+            \$PYBIN/python -m ensurepip && \
+            \$PYBIN/pip install -U pip setuptools wheel auditwheel pybind11 && \
+            cd /project && \
+            \$PYBIN/python setup.py bdist_wheel && \
+            \$PYBIN/auditwheel repair dist/*.whl -w dist/
+          done
+          "
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          repository_url: https://upload.pypi.org/legacy/
+          username: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  build-macos-wheels:
+    runs-on: macos-11
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12]
+        architecture: [x86_64, arm64]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pybind11
+          brew install fftw
+      - name: Build wheels
+        run: |
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            arch -arm64 python setup.py bdist_wheel
+          else
+            python setup.py bdist_wheel
+          fi
+      - name: Repair wheels
+        run: |
+          pip install delocate
+          delocate-listdeps dist/*.whl  # lists library dependencies
+          delocate-wheel dist/*.whl  # copies library dependencies into the wheel
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          repository_url: https://upload.pypi.org/legacy/
+          username: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  build-windows-wheels:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pybind11
+          choco install fftw
+      - name: Build wheels
+        run: |
+          python setup.py bdist_wheel
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          repository_url: https://upload.pypi.org/legacy/
+          username: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}

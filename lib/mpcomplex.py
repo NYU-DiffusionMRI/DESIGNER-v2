@@ -49,6 +49,7 @@
     10.1002/mrm.26059
     """
 
+import gc
 import numpy as np
 from scipy.linalg import svd
 from numpy_groupies import aggregate
@@ -110,6 +111,7 @@ class MP(object):
         print('step        = ' + str(self.step))
         print('shrinkage   = ' + str(self.shrink))
         print('algorithm   = ' + str(self.algo))
+        gc.collect()
             
 
     def unpad(self, x, pad_width):
@@ -233,11 +235,19 @@ class MP(object):
             rec_img = self.patchav(wp, image.flatten(), self.temp.flatten())
             rec_img = self.unpad(rec_img, self.pwidth[:][:-1])
         elif image.ndim == 3:
-            S = Parallel(n_jobs=-3, prefer='threads')\
-            (delayed(self.patchav)(
-                wp, image[:,:,i].flatten(), self.temp.flatten()
-                ) for i in range(self.imsize[-1]))
-            rec_img = np.array(S).transpose(1,2,3,0)
+            # Process in chunks to manage memory usage
+            chunk_size = max(1, image.shape[2] // 10)
+            rec_img_chunks = []
+            for i in range(0, image.shape[2], chunk_size):
+                end = min(i + chunk_size, image.shape[2])
+                S = Parallel(n_jobs=self.n_cores, prefer='threads')\
+                    (delayed(self.patchav)(
+                        wp, image[:, :, j].flatten(), self.temp.flatten()
+                        ) for j in range(i, end))
+                rec_img_chunks.append(np.array(S).transpose(1, 2, 0))
+                del S
+                gc.collect()
+            rec_img = np.concatenate(rec_img_chunks, axis=2)
             rec_img = self.unpad(rec_img, self.pwidth)
         return rec_img
 
@@ -265,6 +275,8 @@ class MP(object):
         signal = self.im_reconstruct(wp, signal)
         sigma = self.im_reconstruct(wp, sigma)
         npars = self.im_reconstruct(wp, npars)
+
+        gc.collect()
 
         return signal, sigma, npars
 

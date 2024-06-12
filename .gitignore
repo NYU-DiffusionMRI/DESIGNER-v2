@@ -10,3 +10,4 @@ build.sh
 meta.yaml
 
 lib/rpg*
+build-wheels.sh

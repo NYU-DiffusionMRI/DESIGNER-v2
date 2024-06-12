@@ -312,9 +312,9 @@ def convert_input_data(dwi_metadata):
         DWImif = ' '.join(miflist)
         cmd = ('mrcat -axis 3 %s %s/dwi.mif' % (DWImif, app.SCRATCH_DIR))
         run.command(cmd)
-
+        
     try:
-        if app.ARGS.phase:
+        if phase_n_list:
             if len(phase_n_list) == 1:
                 run.command('mrconvert %s%s %s/phase.nii' % 
                             (''.join(phase_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
