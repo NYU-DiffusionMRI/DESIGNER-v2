@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12]
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
         architecture: [x86_64, i686, aarch64]
     steps:
       - uses: actions/checkout@v2
@@ -45,10 +45,10 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
 
   build-macos-wheels:
-    runs-on: macos-11
+    runs-on: macos-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12]
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
         architecture: [x86_64, arm64]
     steps:
       - uses: actions/checkout@v2
@@ -83,7 +83,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10, 3.11, 3.12]
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -93,7 +93,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel pybind11
-          choco install fftw
+      - name: Download and install FFTW
+        run: |
+          curl -L -o fftw.zip https://www.fftw.org/fftw-3.3.10-dll64.zip
+          unzip fftw.zip -d fftw
+          copy fftw/*.dll C:\Windows\System32
       - name: Build wheels
         run: |
           python setup.py bdist_wheel

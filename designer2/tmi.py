@@ -67,8 +67,8 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
 
-    wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
-    wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
+    #wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
+    #wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
 
 
 def execute(): #pylint: disable=unused-variable
@@ -210,23 +210,23 @@ def execute(): #pylint: disable=unused-variable
         params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=False, extract_dki=True, fit_w=True)
         save_params(params_dwi, nii, model='wdki', outdir=outdir)
 
-    if app.ARGS.WMTI:
-        import dipy.reconst.dki as dki
-        import dipy.reconst.dki_micro as dki_micro
-        from dipy.core.gradients import gradient_table
+    # if app.ARGS.WMTI:
+    #     import dipy.reconst.dki as dki
+    #     import dipy.reconst.dki_micro as dki_micro
+    #     from dipy.core.gradients import gradient_table
 
-        print('...WMTI fit...')
-        gtab = gradient_table(bval*1000, bvec)
-        dki_micro_model = dki_micro.KurtosisMicrostructureModel(gtab)
-        dki_micro_fit = dki_micro_model.fit(dwi, mask=mask)
+    #     print('...WMTI fit...')
+    #     gtab = gradient_table(bval*1000, bvec)
+    #     dki_micro_model = dki_micro.KurtosisMicrostructureModel(gtab)
+    #     dki_micro_fit = dki_micro_model.fit(dwi, mask=mask)
         
-        params_wmti = {}
-        params_wmti['awf'] = dki_micro_fit.awf
-        params_wmti['tort'] = dki_micro_fit.tortuosity
-        params_wmti['had'] = dki_micro_fit.hindered_ad
-        params_wmti['hrd'] = dki_micro_fit.hindered_rd
-        params_wmti['axd'] = dki_micro_fit.axonal_diffusivity
-        save_params(params_wmti, nii, model='wmti', outdir=outdir)
+    #     params_wmti = {}
+    #     params_wmti['awf'] = dki_micro_fit.awf
+    #     params_wmti['tort'] = dki_micro_fit.tortuosity
+    #     params_wmti['had'] = dki_micro_fit.hindered_ad
+    #     params_wmti['hrd'] = dki_micro_fit.hindered_rd
+    #     params_wmti['axd'] = dki_micro_fit.axonal_diffusivity
+    #     save_params(params_wmti, nii, model='wmti', outdir=outdir)
 
     if app.ARGS.SMI:
         from lib.smi import SMI
