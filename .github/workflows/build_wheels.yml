@@ -29,12 +29,14 @@ jobs:
         run: |
           docker run --rm -v $GITHUB_WORKSPACE:/project quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash -c "
           yum install -y fftw-devel && \
-          for PYBIN in /opt/python/cp${{ matrix.python-version }}*/bin; do
-            \$PYBIN/python -m ensurepip && \
-            \$PYBIN/pip install -U pip setuptools wheel auditwheel pybind11 && \
-            cd /project && \
-            \$PYBIN/python setup.py bdist_wheel && \
-            \$PYBIN/auditwheel repair dist/*.whl -w dist/
+          for PYBIN in /opt/python/*${{ matrix.python-version }}*/bin; do
+            if [ -d \$PYBIN ]; then
+              \$PYBIN/python -m ensurepip && \
+              \$PYBIN/pip install -U pip setuptools wheel auditwheel pybind11 && \
+              cd /project && \
+              \$PYBIN/python setup.py bdist_wheel && \
+              \$PYBIN/auditwheel repair dist/*.whl -w dist/
+            fi
           done
           "
       - name: Upload to PyPI
@@ -62,7 +64,7 @@ jobs:
           brew install fftw
       - name: Build wheels
         run: |
-          if [[ "$(uname -m)" == "arm64" ]]; then
+          if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
             arch -arm64 python setup.py bdist_wheel
           else
             python setup.py bdist_wheel
@@ -70,8 +72,13 @@ jobs:
       - name: Repair wheels
         run: |
           pip install delocate
-          delocate-listdeps dist/*.whl  # lists library dependencies
-          delocate-wheel dist/*.whl  # copies library dependencies into the wheel
+          if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
+            arch -arm64 delocate-listdeps dist/*.whl  # lists library dependencies
+            arch -arm64 delocate-wheel dist/*.whl  # copies library dependencies into the wheel
+          else
+            delocate-listdeps dist/*.whl  # lists library dependencies
+            delocate-wheel dist/*.whl  # copies library dependencies into the wheel
+          fi
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@master
         with:
@@ -95,8 +102,16 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel pybind11
       - name: Download and install FFTW
         run: |
-          curl -L -o fftw.zip https://www.fftw.org/fftw-3.3.10-dll64.zip
-          unzip fftw.zip -d fftw
+          curl -L -o fftw.zip http://www.fftw.org/fftw-3.3.10-dll64.zip
+          if (-not (Test-Path fftw.zip)) {
+            Write-Error "Failed to download fftw.zip"
+            exit 1
+          }
+          Expand-Archive fftw.zip -DestinationPath fftw
+          if (-not (Test-Path fftw)) {
+            Write-Error "Failed to unzip fftw.zip"
+            exit 1
+          }
           copy fftw/*.dll C:\Windows\System32
       - name: Build wheels
         run: |

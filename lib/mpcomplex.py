@@ -236,19 +236,14 @@ class MP(object):
             rec_img = self.unpad(rec_img, self.pwidth[:][:-1])
         elif image.ndim == 3:
             # Process in chunks to manage memory usage
-            chunk_size = max(1, image.shape[2] // 10)
-            rec_img_chunks = []
-            for i in range(0, image.shape[2], chunk_size):
-                end = min(i + chunk_size, image.shape[2])
-                S = Parallel(n_jobs=self.n_cores, prefer='threads')\
-                    (delayed(self.patchav)(
-                        wp, image[:, :, j].flatten(), self.temp.flatten()
-                        ) for j in range(i, end))
-                rec_img_chunks.append(np.array(S).transpose(1, 2, 0))
-                del S
-                gc.collect()
-            rec_img = np.concatenate(rec_img_chunks, axis=2)
+            S = Parallel(n_jobs=-3, prefer='threads')\
+            (delayed(self.patchav)(
+                wp, image[:,:,i].flatten(), self.temp.flatten()
+                ) for i in range(self.imsize[-1]))
+            rec_img = np.array(S).transpose(1,2,3,0)
             rec_img = self.unpad(rec_img, self.pwidth)
+
+        gc.collect()
         return rec_img
 
     def process(self):
