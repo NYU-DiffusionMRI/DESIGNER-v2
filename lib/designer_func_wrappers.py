@@ -17,6 +17,9 @@ run_rice_bias_correct:
 run_normalization:
 """
 
+import time
+import shutil
+
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
     """
     wrapper for complex or magnitude, adatpive or local mppca
@@ -45,7 +48,13 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
 
     # note adaptive patch does not include mpcomplex
     n_cores = app.ARGS.n_cores
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
     print('...denoising...')
+    start_time = time.time()
+
     if app.ARGS.adaptive_patch:
         Signal, Sigma, Nparameters = mp.denoise(
             dwi, phase=args_phase, patchtype='nonlocal', shrinkage=args_shrinkage, algorithm=args_algorithm
@@ -75,6 +84,17 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
     #run.command('dwidenoise -noise fullnoisemap.mif -estimator Exp2 working.mif dwidn.mif')
     run.command('mrconvert -force dwidn.mif working.mif', show=False)
 
+    # End timer
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to hours and minutes
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"Denoising completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
+    print(separator + "\n")
+
 def run_patch2self():
     """
     wrapper for patch2self
@@ -83,6 +103,13 @@ def run_patch2self():
     from dipy.denoise.patch2self import patch2self
     from ants import image_read, image_write, from_numpy
     import numpy as np
+
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print('...denoising...')
+    start_time = time.time()
 
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     nii = image_read('working.nii')
@@ -95,6 +122,16 @@ def run_patch2self():
     image_write(out, 'working_p2s.nii')
     run.command('mrconvert -force -fslgrad working.bvec working.bval working_p2s.nii working.mif', show=False)
 
+    # End timer
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to hours and minutes
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"Denoising completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
+    print(separator + "\n")
 
 def run_degibbs(pf, pe_dir):
     """
@@ -104,7 +141,7 @@ def run_degibbs(pf, pe_dir):
     import lib.rpg as rpg
     from mrtrix3 import run, app, MRtrixError
     from ants import image_read, image_write, from_numpy
-    from tqdm import tqdm
+    # from tqdm import tqdm
     # import os
 
     # rpg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'rpg_cpp')
@@ -113,7 +150,13 @@ def run_degibbs(pf, pe_dir):
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     nii = image_read('working.nii')
     dwi = nii.numpy()
-    print("...RPG degibbsing...")
+
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print('...RPG degibbsing...')
+    start_time = time.time()
     
     n_cores = app.ARGS.n_cores
 
@@ -131,13 +174,13 @@ def run_degibbs(pf, pe_dir):
         pe_dir = 1
 
     dwi_t = dwi.transpose(3,2,1,0)
-    progress_bar = tqdm(total=100)
-    def progress_callback(progress):
-        progress_bar.n = progress
-        progress_bar.refresh()
+    #progress_bar = tqdm(total=100)
+    #def progress_callback(progress):
+    #    progress_bar.n = progress
+    #    progress_bar.refresh()
 
-    dwi_dg_t = rpg.unring(dwi_t, minW=1, maxW=3, nsh=20, pfv=float(pf), pfdimf=pe_dir, phase_flag=False, progress_callback=progress_callback)
-    progress_bar.close()
+    dwi_dg_t = rpg.unring(dwi_t, minW=1, maxW=3, nsh=20, pfv=float(pf), pfdimf=pe_dir, phase_flag=False)
+    #progress_bar.close()
     dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0)
 
     out = from_numpy(
@@ -147,6 +190,16 @@ def run_degibbs(pf, pe_dir):
     #convert gibbs corrected nii to .mif
     run.command('mrconvert -force -fslgrad working.bvec working.bval working_rpg.nii working.mif', show=False)
 
+    # End timer
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to hours and minutes
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"RPG gibbs correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
+    print(separator + "\n")
 
 def group_alignment(group_list):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
@@ -154,7 +207,12 @@ def group_alignment(group_list):
 
     fsl_suffix = fsl.suffix()
 
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
     print('... Rigidly aligning groups...')
+    start_time = time.time()
 
     # 1) find the longest series and extract the b0
     group_len = []
@@ -218,6 +276,17 @@ def group_alignment(group_list):
                 show=False)
     run.command('mrconvert -force dwi_align_series_aligned.mif working.mif', show=False)
 
+    # End timer
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to hours and minutes
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"rigid alignment completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
+    print(separator + "\n")
+
 
 def convert_ants_xform(mat, i):
     import scipy.io as sio
@@ -242,6 +311,13 @@ def pre_eddy_ants_moco(dwi_metadata):
     import ants
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
     import numpy as np
+
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print('... ANTS motion correction...')
+    start_time = time.time()
     
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     nii = ants.image_read('working.nii')
@@ -280,6 +356,17 @@ def pre_eddy_ants_moco(dwi_metadata):
     np.savetxt('working_antsmoco.bvec', dirs_rot.T, delimiter=' ', fmt='%4.10f')
     run.command('mrconvert -force -fslgrad working_antsmoco.bvec working.bval working_antsmoco.nii working.mif', show=False)
 
+    # End timer
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to hours and minutes
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"motion correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
+    print(separator + "\n")
+
 def run_pre_align(dwi_metadata):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
 
@@ -308,7 +395,13 @@ def run_eddy(shell_table, dwi_metadata):
     import os
     import glob
 
-    print("...Eddy current, EPI, motion correction...")
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print('... Eddy current, EPI, motion correction...')
+    start_time = time.time()
+
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
 
     eddyopts = '" --cnr_maps --repol --data_is_shelled "'
@@ -733,6 +826,16 @@ def run_eddy(shell_table, dwi_metadata):
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
 
     run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)
+    # End timer
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to hours and minutes
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"Eddy current, EPI, motion correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
+    print(separator + "\n")
 
 def run_b1correct(dwi_metadata):
     from mrtrix3 import run
@@ -740,8 +843,14 @@ def run_b1correct(dwi_metadata):
     DWInlist = dwi_metadata['dwi_list']
     idxlist = dwi_metadata['idxlist']
 
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print('... B1 correction...')
+    start_time = time.time()
+
     # b1 bias field correction
-    print("...B1 correction...")
     if len(DWInlist) == 1:
         run.command('dwibiascorrect ants -bias biasfield.mif working.mif dwibc.mif')
     else:
@@ -758,6 +867,17 @@ def run_b1correct(dwi_metadata):
             DWImif = ' '.join(miflist)
         run.command('mrcat -axis 3 ' + DWImif + ' dwibc.mif')
     run.command('mrconvert -force dwibc.mif working.mif', show=False)
+
+    # End timer
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    # Convert elapsed time to hours and minutes
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"Eddy current, EPI, motion correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
+    print(separator + "\n")
 
 def create_brainmask(fsl_suffix):
     import os, gzip, shutil

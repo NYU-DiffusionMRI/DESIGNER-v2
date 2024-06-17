@@ -53,7 +53,6 @@ import os, sys
 import numpy as np
 import multiprocessing
 from joblib import Parallel, delayed
-from tqdm import tqdm
 import scipy.linalg
 import warnings
 
@@ -347,7 +346,7 @@ class MP(object):
         xsize = int(x.size)
         coords = np.vstack((x,y,z))
         
-        inputs = tqdm(range(0, xsize))
+        inputs = range(0, xsize)
         num_cores = multiprocessing.cpu_count()
         
         # # parallel

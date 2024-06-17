@@ -39,8 +39,11 @@ jobs:
             fi
           done
           "
+      - name: Verify wheels
+        run: |
+          ls -al dist/
       - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@master
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository_url: https://upload.pypi.org/legacy/
           username: __token__
@@ -79,8 +82,11 @@ jobs:
             delocate-listdeps dist/*.whl  # lists library dependencies
             delocate-wheel dist/*.whl  # copies library dependencies into the wheel
           fi
+      - name: Verify wheels
+        run: |
+          ls -al dist/
       - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@master
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository_url: https://upload.pypi.org/legacy/
           username: __token__
@@ -100,24 +106,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel pybind11
-      - name: Download and install FFTW
+      - name: Install FFTW
         run: |
-          curl -L -o fftw.zip http://www.fftw.org/fftw-3.3.10-dll64.zip
-          if (-not (Test-Path fftw.zip)) {
-            Write-Error "Failed to download fftw.zip"
-            exit 1
-          }
-          Expand-Archive fftw.zip -DestinationPath fftw
-          if (-not (Test-Path fftw)) {
-            Write-Error "Failed to unzip fftw.zip"
-            exit 1
-          }
-          copy fftw/*.dll C:\Windows\System32
+          conda install -c conda-forge fftw
       - name: Build wheels
         run: |
           python setup.py bdist_wheel
+      - name: Verify wheels
+        run: |
+          ls -al dist/
       - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@master
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository_url: https://upload.pypi.org/legacy/
           username: __token__

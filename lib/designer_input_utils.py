@@ -68,6 +68,21 @@ def get_input_info(input, fslbval, fslbvec, bids):
         UserBidspath = bids.resplit(',')
         bidslist = [os.path.realpath(i) for i in UserBidspath]
 
+    bshapelist = [i + '.bshape' for i in DWInlist]
+    telist = [i + '.echotime' for i in DWInlist]
+    try:
+        for i in bshapelist:
+            if not os.path.exists(i):
+                bshapelist = None
+                break
+        for i in telist:
+            if not os.path.exists(i):
+                telist = None
+                break
+    except:
+        bshapelist = None
+        telist = None
+
     # if the user provides the path to phases
     try:
         phase_cpath = app.ARGS.phase.rsplit(',')
@@ -87,7 +102,10 @@ def get_input_info(input, fslbval, fslbvec, bids):
         'dwi_list': DWInlist,
         'phase_list': phase_nlist,
         'phase_ext': phase_ext,
-        'bidslist': bidslist}
+        'bidslist': bidslist,
+        'bshapelist': bshapelist,
+        'telist': telist
+        }
 
     return dwi_metadata
 
@@ -205,6 +223,10 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
     else:
         TE = TE_app
 
+    #if TE is not None:
+    if (len(set(TE)) > 1) and (not app.ARGS.rpe_te):
+        raise MRtrixError('If data has variable echo time and no RPE TE is specified, please use the -rpe_te flag to specify the RPE TE')
+
     # if no partial fourier information is found, assume full sampling
     if not args_pf and not pf_bids:
         args_pf = 1
@@ -268,6 +290,8 @@ def convert_input_data(dwi_metadata):
     bshape_per_series = dwi_metadata['bshape']
     phase_n_list = dwi_metadata['phase_list']
     phase_ext = dwi_metadata['phase_ext']
+    bshapelist_input = dwi_metadata['bshapelist']
+    telist_input = dwi_metadata['telist']
 
     if len(dwi_n_list) == 1:
         if not isdicom:
@@ -312,7 +336,7 @@ def convert_input_data(dwi_metadata):
         DWImif = ' '.join(miflist)
         cmd = ('mrcat -axis 3 %s %s/dwi.mif' % (DWImif, app.SCRATCH_DIR))
         run.command(cmd)
-        
+
     try:
         if phase_n_list:
             if len(phase_n_list) == 1:
@@ -355,6 +379,11 @@ def convert_input_data(dwi_metadata):
 
     telist = [item for sublist in telist for item in sublist]
     bshapelist = [item for sublist in bshapelist for item in sublist]
+
+    if telist_input is not None:
+        telist = np.hstack([np.loadtxt(i) for i in telist_input])
+    if bshapelist_input is not None:
+        bshapelist = np.hstack([np.loadtxt(i) for i in bshapelist_input])
 
     dwi_metadata['idxlist'] = idxlist
     dwi_metadata['echo_time_per_volume'] = np.array(telist)

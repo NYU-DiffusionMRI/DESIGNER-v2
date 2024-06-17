@@ -248,7 +248,6 @@ class MP(object):
 
     def process(self):
         from joblib import Parallel, delayed
-        from tqdm import tqdm
         
         num_patches = self.temp.shape[0]
         num_vols = self.dwi.shape[1]
@@ -260,7 +259,7 @@ class MP(object):
 
         
         results = Parallel(n_jobs=self.n_cores, prefer='processes')\
-            (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in tqdm(range(num_patches)))
+            (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in range(num_patches))
         
         signal, sigma, npars = zip(*results)
 

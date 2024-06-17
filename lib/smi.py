@@ -20,8 +20,8 @@ class SMI(object):
 
     def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
-        noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
-        l_max_training = None):
+        noise_bias=None, training_bounds=None, training_prior=None, n_training=5e5, 
+        l_max_training = None, seed=42):
         """
         Setting some default values and initialization required for class functions
         """
@@ -68,6 +68,9 @@ class SMI(object):
             self.flag_rician_bias = False
         elif noise_bias == 'rician':
             self.flag_rician_bias = True
+
+        if seed is not None:
+            self.seed = seed
 
         # set up required inputs
         self.set_bvals_bvecs(bval, bvec)
@@ -128,10 +131,13 @@ class SMI(object):
         else:
             self.beta = beta
         
-        if self.flag_microstructure_units:
-            self.beta[self.b < 0.05] = 1
-        else:
-            self.beta[self.b < 50] = 1
+        try:
+            if self.flag_microstructure_units:
+                self.beta[self.b < 0.05] = 1
+            else:
+                self.beta[self.b < 50] = 1
+        except:
+            raise Exception('something wrong with input bshapes, check input data')
 
         if not self.merge_distance:
             if self.flag_microstructure_units:
@@ -1006,6 +1012,9 @@ class SMI(object):
         
         rotinvs_train_norm = rotinvs_train / rotinvs_train[:,[0]]
 
+        if self.seed is not None:
+            np.random.seed(self.seed)
+
         for i in range(1, len(sigma_noise_norm_levels_edges)):
             flag_current_noise_level = (sigma_noise_norm_levels_ids == i)
 
@@ -1016,12 +1025,6 @@ class SMI(object):
             meas_rotinvs_train = (rotinvs_train_norm + 
                 sigma_rotinvs_training * np.random.standard_normal(size=rotinvs_train_norm.shape)
                 )
-            #import scipy.io as sio
-            #seedmat = sio.loadmat('/Users/benaron/Desktop/subj_1/randomseed.mat')
-            #seedsigma = seedmat['randomseed']
-            #meas_rotinvs_train = (rotinvs_train_norm + 
-            #    sigma_rotinvs_training * seedsigma)
-           # import pdb; pdb.set_trace()
             
             x_train = self.compute_extended_moments(
                 meas_rotinvs_train[:, keep_rot_invs_kernel], degree=degree_kernel)

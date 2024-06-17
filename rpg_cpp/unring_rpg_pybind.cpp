@@ -831,8 +831,7 @@ void UnringScale(double *I, double *Ii, unsigned int nx, unsigned int ny, unsign
 
 py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array_t<double>(), 
                   unsigned int minW = 1, unsigned int maxW = 3, unsigned int nsh = 20, 
-                  double pfv = 6.0 / 8.0, bool pfdimf = true, bool phase_flag = false,
-                  const std::function<void(int)>& progress_callback = nullptr) {
+                  double pfv = 6.0 / 8.0, bool pfdimf = true, bool phase_flag = false) {
     py::buffer_info data_info = data.request();
     py::buffer_info phase_info = phase_flag ? phase.request() : py::buffer_info();
 
@@ -935,15 +934,6 @@ py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array
         } else { // real
             Unring(slicesin[i], 0, slicesout[i], 0, dim_sz, 2, pfo, minW, maxW, nsh);
         }
-
-        // Call the progress callback periodically
-        if (progress_callback && i % (nz * ndwi / 100) == 0) {
-            progress_callback(static_cast<int>((100 * i) / (nz * ndwi)));
-        }
-    }
-
-    if (progress_callback) {
-        progress_callback(100);
     }
 
     // Put slices into volume (real)
@@ -976,6 +966,5 @@ PYBIND11_MODULE(rpg, m) {
     m.def("unring", &unring, "Process data with given parameters",
           py::arg("data"), py::arg("phase") = py::array_t<double>(),
           py::arg("minW") = 1, py::arg("maxW") = 3, py::arg("nsh") = 20,
-          py::arg("pfv") = 6.0 / 8.0, py::arg("pfdimf") = true, py::arg("phase_flag") = false,
-          py::arg("progress_callback") = nullptr);
+          py::arg("pfv") = 6.0 / 8.0, py::arg("pfdimf") = true, py::arg("phase_flag") = false);
 }
