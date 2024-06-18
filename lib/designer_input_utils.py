@@ -224,8 +224,11 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
         TE = TE_app
 
     #if TE is not None:
-    if (len(set(TE)) > 1) and (not app.ARGS.rpe_te):
-        raise MRtrixError('If data has variable echo time and no RPE TE is specified, please use the -rpe_te flag to specify the RPE TE')
+    try:
+        if (len(set(TE)) > 1) and (not app.ARGS.rpe_te):
+            raise MRtrixError('If data has variable echo time and no RPE TE is specified, please use the -rpe_te flag to specify the RPE TE')
+    except:
+        pass
 
     # if no partial fourier information is found, assume full sampling
     if not args_pf and not pf_bids:

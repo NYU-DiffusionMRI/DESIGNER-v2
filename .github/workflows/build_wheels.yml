@@ -34,11 +34,14 @@ jobs:
               \$PYBIN/python -m ensurepip && \
               \$PYBIN/pip install -U pip setuptools wheel auditwheel pybind11 && \
               cd /project && \
-              \$PYBIN/python setup.py bdist_wheel && \
-              \$PYBIN/auditwheel repair dist/*.whl -w dist/
+              \$PYBIN/python setup.py bdist_wheel 2>&1 | tee /project/build.log && \
+              \$PYBIN/auditwheel repair dist/*.whl -w dist/ 2>&1 | tee -a /project/build.log
             fi
           done
           "
+      - name: Output build logs
+        run: |
+          cat build.log
       - name: Verify wheels
         run: |
           ls -al dist/
@@ -66,6 +69,8 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel pybind11
           brew install fftw
       - name: Build wheels
+        env:
+          ARCHFLAGS: "-arch ${{ matrix.architecture }}"
         run: |
           if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
             arch -arm64 python setup.py bdist_wheel
@@ -103,12 +108,18 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel pybind11
+      - name: Install Miniconda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: myenv
       - name: Install FFTW
         run: |
           conda install -c conda-forge fftw
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pybind11
       - name: Build wheels
         run: |
           python setup.py bdist_wheel

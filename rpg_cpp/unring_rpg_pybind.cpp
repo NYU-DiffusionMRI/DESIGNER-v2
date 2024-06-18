@@ -59,8 +59,8 @@
 #include "fftw3.h"     // fast fourier transform
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-#include <pybind11/functional.h> 
-#include <functional>
+// #include <pybind11/functional.h> 
+// #include <functional>
 
 #define PI  3.1416
 

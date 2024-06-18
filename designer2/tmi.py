@@ -113,11 +113,6 @@ def execute(): #pylint: disable=unused-variable
     if order >= 2:
         bval = bval / 1000
 
-    maxb = 3.2
-    dwi = dwi[:,:,:,bval < maxb]
-    bvec = bvec[:,bval < maxb]
-    bval = bval[bval < maxb]
-
     if app.ARGS.mask:
         mask = image_read(path.from_user(app.ARGS.mask)).numpy()
     else:
@@ -134,81 +129,212 @@ def execute(): #pylint: disable=unused-variable
     else:
         constraints = [0,0,0]
 
-    if app.ARGS.DTI:
-        print('...Single shell DTI fit...')
-        dtishell = (bval <= 0.1) | ((bval > .5) & (bval <= 1.5))
-        dwi_dti = dwi[:,:,:,dtishell]
-        bval_dti = bval[dtishell]
-        bvec_dti = bvec[:,dtishell]
-        grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
-        dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
-        dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
-
-    if app.ARGS.DKI or app.ARGS.WDKI:
-        print('...Multi shell DKI fit with constraints = ' + str(constraints))
-        grad = np.hstack((bvec.T, bval[None,...].T))
-        dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
-        dt_dki, s0_dki, b_dki = dki.dki_fit(dwi, mask, constraints=constraints)
-
-    if app.ARGS.polyreg and app.ARGS.DKI:
-        dt_poly = dki.train_rotated_bayes_fit(dwi, dt_dki, s0_dki, b_dki, mask)
-
-    if app.ARGS.akc_outliers:
-        from lib.mpunits import vectorize
-        import scipy.io as sio
-
-        dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
-        dir = mat['dir']
-
-        print('...Outlier detection...')
-        if not app.ARGS.DKI:
-            raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
-        else:
-            akc_mask = dki.outlierdetection(dt_dki, mask, dir)
-            
-        akc_mask = vectorize(akc_mask, mask).astype(bool)
-        print('N outliers = %s' % (np.sum(akc_mask)))
-
-        dwi_new = refit_or_smooth(akc_mask, dwi, n_cores=int(app.ARGS.n_cores))
-        dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
-
-        x,y,z = np.where(akc_mask == 1)
-        DT = vectorize(dt_dki, mask)
-        DT[x,y,z,:] = dt_new.T
-        dt_dki = vectorize(DT, mask)
-        akc_mask = dki.outlierdetection(dt_dki, mask, dir)
-        akc_mask = vectorize(akc_mask, mask).astype(bool)
-        print('N outliers = %s' % (np.sum(akc_mask)))
+    if (len(set(dwi_metadata['bshape_per_volume'])) > 1) or (len(set(dwi_metadata['echo_time_per_volume'])) > 1):
+        multi_te_beta = True
+        dwi_orig = dwi.copy()
+        bval_orig = bval.copy()
+        bvec_orig = bvec.copy()
     else:
-        akc_mask = np.zeros_like(mask)
+        multi_te_beta = False
 
-    if app.ARGS.fit_smoothing:
-        print('...Nonlocal smoothing...')
-        dwi_new = refit_or_smooth(akc_mask, dwi, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+
+    if len(set(dwi_metadata['bshape_per_volume'])) > 1:
+        if (app.ARGS.DTI) or (app.ARGS.DKI) or (app.ARGS.WDKI):
+            print('For variable b-shape data DTI/DKI are run only on LTE part')
+            lte_idx = (dwi_metadata['bshape_per_volume'] == 1)
+
+            if np.sum(lte_idx) < 6:
+                raise MRtrixError("Not enough LTE measurements for DTI/DKI")
+            dwi = dwi_orig[:,:,:,lte_idx]
+            bval = bval_orig[lte_idx]
+            bvec = bvec_orig[:,lte_idx]
+
+
+    if len(set(dwi_metadata['echo_time_per_volume'])) == 1:
+
         if app.ARGS.DTI:
-            dt_dti,_,_ = dti.dti_fit(dwi_new[:,:,:,dtishell], mask)
-        if (app.ARGS.DKI or app.ARGS.WDKI):
-            dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+            print('...Single shell DTI fit...')
+            dtishell = (bval <= 0.1) | ((bval > .5) & (bval <= 1.5))
+            dwi_dti = dwi[:,:,:,dtishell]
+            bval_dti = bval[dtishell]
+            bvec_dti = bvec[:,dtishell]
+            grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
+            dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
+            dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
 
-    if app.ARGS.DTI:
-        print('...extracting and saving DTI maps...')
-        params_dti = dti.extract_parameters(dt_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
-        save_params(params_dti, nii, model='dti', outdir=outdir)
+        if app.ARGS.DKI or app.ARGS.WDKI:
+            print('...Multi shell DKI fit with constraints = ' + str(constraints))
 
-    if app.ARGS.DKI:
-        print('...extracting and saving DKI maps...')
-        params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-        save_params(params_dki, nii, model='dki', outdir=outdir)
+            maxb = 2.5
+            dwi_dki = dwi[:,:,:,bval < maxb]
+            bvec_dki = bvec[:,bval < maxb]
+            bval_dki = bval[bval < maxb]
 
-    if app.ARGS.polyreg:
-        params_dki_poly = dki.extract_parameters(dt_poly, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-        save_params(params_dki_poly, nii, model='dki_poly', outdir=outdir)
+            grad = np.hstack((bvec_dki.T, bval_dki[None,...].T))
+            dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
+            dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
 
-    if app.ARGS.WDKI:
-        print('...extracting and saving WDKI maps...')
-        params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=False, extract_dki=True, fit_w=True)
-        save_params(params_dwi, nii, model='wdki', outdir=outdir)
+        if app.ARGS.polyreg and app.ARGS.DKI:
+            dt_poly = dki.train_rotated_bayes_fit(dwi_dki, dt_dki, s0_dki, b_dki, mask)
+
+        if app.ARGS.akc_outliers:
+            from lib.mpunits import vectorize
+            import scipy.io as sio
+
+            dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+            dir = mat['dir']
+
+            print('...Outlier detection...')
+            if not app.ARGS.DKI:
+                raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+            else:
+                akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                
+            akc_mask = vectorize(akc_mask, mask).astype(bool)
+            print('N outliers = %s' % (np.sum(akc_mask)))
+
+            dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
+            dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
+
+            x,y,z = np.where(akc_mask == 1)
+            DT = vectorize(dt_dki, mask)
+            DT[x,y,z,:] = dt_new.T
+            dt_dki = vectorize(DT, mask)
+            akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+            akc_mask = vectorize(akc_mask, mask).astype(bool)
+            print('N outliers = %s' % (np.sum(akc_mask)))
+        else:
+            akc_mask = np.zeros_like(mask)
+
+        if app.ARGS.fit_smoothing:
+            print('...Nonlocal smoothing...')
+            if app.ARGS.DTI:
+                dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                dt_dti,_,_ = dti.dti_fit(dwi_new[:,:,:,dtishell], mask)
+            if (app.ARGS.DKI or app.ARGS.WDKI):
+                dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+
+        if app.ARGS.DTI:
+            print('...extracting and saving DTI maps...')
+            params_dti = dti.extract_parameters(dt_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
+            save_params(params_dti, nii, model='dti', outdir=outdir)
+
+        if app.ARGS.DKI:
+            print('...extracting and saving DKI maps...')
+            params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+            save_params(params_dki, nii, model='dki', outdir=outdir)
+
+        if app.ARGS.polyreg:
+            params_dki_poly = dki.extract_parameters(dt_poly, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+            save_params(params_dki_poly, nii, model='dki_poly', outdir=outdir)
+
+        if app.ARGS.WDKI:
+            print('...extracting and saving WDKI maps...')
+            params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=False, extract_dki=True, fit_w=True)
+            save_params(params_dwi, nii, model='wdki', outdir=outdir)
+
+    else:
+
+        for te in set(dwi_metadata['echo_time_per_volume']):
+
+            te_idx = (dwi_metadata['echo_time_per_volume'] == te) & (dwi_metadata['bshape_per_volume'] == 1)
+            dwi = dwi_orig[:,:,:,te_idx]
+            bval = bval_orig[te_idx]
+            bvec = bvec_orig[:,te_idx]
+
+            if app.ARGS.DTI:
+
+                if np.sum(te_idx) < 6:
+                    continue
+
+                print('...Single shell DTI fit for TE=' + str(te) + '...')
+                dtishell = (bval <= 0.1) | ((bval > .5) & (bval <= 1.5))
+                dwi_dti = dwi[:,:,:,dtishell]
+                bval_dti = bval[dtishell]
+                bvec_dti = bvec[:,dtishell]
+                grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
+                dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
+                dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+
+            if app.ARGS.DKI or app.ARGS.WDKI:
+
+                if np.sum(te_idx) < 21:
+                    continue
+
+                print('...Multi shell DKI fit  for TE=' + str(te) +  ' with constraints = ' + str(constraints))
+
+                maxb = 2.5
+                dwi_dki = dwi[:,:,:,bval < maxb]
+                bvec_dki = bvec[:,bval < maxb]
+                bval_dki = bval[bval < maxb]
+
+                grad = np.hstack((bvec_dki.T, bval_dki[None,...].T))
+                dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
+                dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+
+            if app.ARGS.polyreg and app.ARGS.DKI:
+                dt_poly = dki.train_rotated_bayes_fit(dwi_dki, dt_dki, s0_dki, b_dki, mask)
+
+            if app.ARGS.akc_outliers:
+                from lib.mpunits import vectorize
+                import scipy.io as sio
+
+                dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+                dir = mat['dir']
+
+                print('...Outlier detection...')
+                if not app.ARGS.DKI:
+                    raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+                else:
+                    akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                    
+                akc_mask = vectorize(akc_mask, mask).astype(bool)
+                print('N outliers = %s' % (np.sum(akc_mask)))
+
+                dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
+                dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
+
+                x,y,z = np.where(akc_mask == 1)
+                DT = vectorize(dt_dki, mask)
+                DT[x,y,z,:] = dt_new.T
+                dt_dki = vectorize(DT, mask)
+                akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                akc_mask = vectorize(akc_mask, mask).astype(bool)
+                print('N outliers = %s' % (np.sum(akc_mask)))
+            else:
+                akc_mask = np.zeros_like(mask)
+
+            if app.ARGS.fit_smoothing:
+                print('...Nonlocal smoothing...')
+                if app.ARGS.DTI:
+                    dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    dt_dti,_,_ = dti.dti_fit(dwi_new[:,:,:,dtishell], mask)
+                if (app.ARGS.DKI or app.ARGS.WDKI):
+                    dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+
+            if app.ARGS.DTI:
+                print('...extracting and saving DTI maps...')
+                params_dti = dti.extract_parameters(dt_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
+                save_params(params_dti, nii, model='dti_te'+str(te), outdir=outdir)
+
+            if app.ARGS.DKI:
+                print('...extracting and saving DKI maps...')
+                params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                save_params(params_dki, nii, model='dki_te'+str(te), outdir=outdir)
+
+            if app.ARGS.polyreg:
+                params_dki_poly = dki.extract_parameters(dt_poly, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                save_params(params_dki_poly, nii, model='dki_poly_te'+str(te), outdir=outdir)
+
+            if app.ARGS.WDKI:
+                print('...extracting and saving WDKI maps...')
+                params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=False, extract_dki=True, fit_w=True)
+                save_params(params_dwi, nii, model='wdki_te'+str(te), outdir=outdir)
+
 
     # if app.ARGS.WMTI:
     #     import dipy.reconst.dki as dki
@@ -250,12 +376,20 @@ def execute(): #pylint: disable=unused-variable
             compartments = ['IAS', 'EAS']
 
         print('...SMI fit...')
-        smi = SMI(bval=bval, bvec=bvec)
-        smi.set_compartments(compartments)
-        smi.set_echotime(dwi_metadata['echo_time_per_volume'])
-        smi.set_bshape(dwi_metadata['bshape_per_volume'])
-        params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
-        save_params(params_smi, nii, model='smi', outdir=outdir)
+        if multi_te_beta:
+            smi = SMI(bval=bval_orig, bvec=bvec_orig)
+            smi.set_compartments(compartments)
+            smi.set_echotime(dwi_metadata['echo_time_per_volume'])
+            smi.set_bshape(dwi_metadata['bshape_per_volume'])
+            params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
+            save_params(params_smi, nii, model='smi', outdir=outdir)
+        else:
+            smi = SMI(bval=bval, bvec=bvec)
+            smi.set_compartments(compartments)
+            smi.set_echotime(dwi_metadata['echo_time_per_volume'])
+            smi.set_bshape(dwi_metadata['bshape_per_volume'])
+            params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
+            save_params(params_smi, nii, model='smi', outdir=outdir)
 
 def main():
     import mrtrix3

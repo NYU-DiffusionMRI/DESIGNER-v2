@@ -20,7 +20,7 @@ class SMI(object):
 
     def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
-        noise_bias=None, training_bounds=None, training_prior=None, n_training=5e5, 
+        noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
         l_max_training = None, seed=42):
         """
         Setting some default values and initialization required for class functions
@@ -71,6 +71,9 @@ class SMI(object):
 
         if seed is not None:
             self.seed = seed
+            np.random.seed(self.seed)
+        else:
+            self.seed = None
 
         # set up required inputs
         self.set_bvals_bvecs(bval, bvec)
@@ -137,7 +140,7 @@ class SMI(object):
             else:
                 self.beta[self.b < 50] = 1
         except:
-            raise Exception('something wrong with input bshapes, check input data')
+            raise Exception('mismatch between input bshape and gradients, please check')
 
         if not self.merge_distance:
             if self.flag_microstructure_units:
@@ -516,7 +519,7 @@ class SMI(object):
             ids_current_cluster_all.append(
                 np.vstack((ids_current_cluster * 0 + i, ids_current_cluster))
                 )
-        
+
         if rank1sl:
             sl_dn = s_l_clusters_all.copy()
             slm_dn = s_lm_clusters_all.copy()
@@ -562,13 +565,13 @@ class SMI(object):
                     signal[ids_current_cluster,:] = n_l_all[0] * (y_lm_matrix[[ids_current_cluster],0].T @ s_lm_current_cluster[[0],:])
                 else:
                     signal[ids_current_cluster,:] = y_lm_matrix[ids_current_cluster,:] @ (np.tile(n_l_all, (n_voxels,1)).T * s_lm_current_cluster)
-            signal_4d = self.vectorize(signal, self.mask)
+            self.signal_4d = self.vectorize(signal, self.mask)
 
-            return sl, signal_4d
-        
-        else:
-
-            return sl.reshape(sl.shape[0], sl.shape[1], sl.shape[2], -1)
+        num_elements = self.rotinv_lmax // 2 + 1
+        slices = [np.squeeze(sl[:, :, :, i, :]) for i in range(num_elements)]
+        sl = np.concatenate(slices, axis=3)
+    
+        return sl.reshape(sz_dwi[0],sz_dwi[1],sz_dwi[2],-1)
         
     def low_rank_denoising(self, X, p):
         u,s,v = np.linalg.svd(X, full_matrices=False)
@@ -961,7 +964,7 @@ class SMI(object):
         sigma_noise_norm_levels_mean = 1/2 * (
            sigma_noise_norm_levels_edges[1:] + sigma_noise_norm_levels_edges[:-1]
            )
-                
+
         degree_kernel = 3
         x_fit_norm = self.compute_extended_moments(
             rot_invs_normalized[:, keep_rot_invs_kernel], degree_kernel
@@ -1011,9 +1014,6 @@ class SMI(object):
             sigma_ndirs_factor = np.sqrt(np.hstack((n_dirs, n_dirs * 5, n_dirs * 9, n_dirs * 13)))
         
         rotinvs_train_norm = rotinvs_train / rotinvs_train[:,[0]]
-
-        if self.seed is not None:
-            np.random.seed(self.seed)
 
         for i in range(1, len(sigma_noise_norm_levels_edges)):
             flag_current_noise_level = (sigma_noise_norm_levels_ids == i)

@@ -4,7 +4,7 @@ from setuptools.command.build_ext import build_ext
 import subprocess
 from glob import glob
 
-with open('requirements.txt') as f:
+with open('requirements.in') as f:
     requirements = f.read().splitlines()
 
 long_description = '''designer and TMI package for use with brain 
