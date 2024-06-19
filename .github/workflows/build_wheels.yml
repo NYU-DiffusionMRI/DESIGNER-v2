@@ -41,15 +41,13 @@ jobs:
           "
       - name: Output build logs
         run: |
-          cat build.log
+          cat /project/build.log
       - name: Verify wheels
         run: |
           ls -al dist/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository_url: https://upload.pypi.org/legacy/
-          username: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
 
   build-macos-wheels:
@@ -61,9 +59,18 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
+        run: |
+          if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
+            arch -arm64 brew install pyenv
+            arch -arm64 pyenv install ${{ matrix.python-version }}
+            arch -arm64 pyenv global ${{ matrix.python-version }}
+            echo "Python version set to $(python --version)"
+          else
+            brew install pyenv
+            pyenv install ${{ matrix.python-version }}
+            pyenv global ${{ matrix.python-version }}
+            echo "Python version set to $(python --version)"
+          fi
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel pybind11
@@ -78,6 +85,8 @@ jobs:
             python setup.py bdist_wheel
           fi
       - name: Repair wheels
+        env:
+          ARCHFLAGS: "-arch ${{ matrix.architecture }}"
         run: |
           pip install delocate
           if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
@@ -86,15 +95,12 @@ jobs:
           else
             delocate-listdeps dist/*.whl  # lists library dependencies
             delocate-wheel dist/*.whl  # copies library dependencies into the wheel
-          fi
       - name: Verify wheels
         run: |
           ls -al dist/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository_url: https://upload.pypi.org/legacy/
-          username: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
 
   build-windows-wheels:
@@ -120,15 +126,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel pybind11
+      - name: Ensure Visual C++ Build Tools are Installed
+        run: |
+          choco install visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --includeOptional"
       - name: Build wheels
         run: |
-          python setup.py bdist_wheel
+          python setup.py bdist_wheel 2>&1 | tee build.log
+      - name: Output build logs
+        run: |
+          cat build.log
       - name: Verify wheels
         run: |
           ls -al dist/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository_url: https://upload.pypi.org/legacy/
-          username: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
