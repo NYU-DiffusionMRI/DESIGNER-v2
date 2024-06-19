@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.12.1-bookworm
+FROM python:3.12.4-bookworm
 
 # Multi stage build from existing dependencies
 COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
