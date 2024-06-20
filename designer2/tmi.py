@@ -186,7 +186,7 @@ def execute(): #pylint: disable=unused-variable
             dir = mat['dir']
 
             print('...Outlier detection...')
-            if not app.ARGS.DKI:
+            if not (app.ARGS.DKI or app.ARGS.WDKI):
                 raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
             else:
                 akc_mask = dki.outlierdetection(dt_dki, mask, dir)
@@ -211,7 +211,7 @@ def execute(): #pylint: disable=unused-variable
             print('...Nonlocal smoothing...')
             if app.ARGS.DTI:
                 dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dti,_,_ = dti.dti_fit(dwi_new[:,:,:,dtishell], mask)
+                dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
             if (app.ARGS.DKI or app.ARGS.WDKI):
                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
@@ -286,7 +286,7 @@ def execute(): #pylint: disable=unused-variable
                 dir = mat['dir']
 
                 print('...Outlier detection...')
-                if not app.ARGS.DKI:
+                if not (app.ARGS.DKI or app.ARGS.WDKI):
                     raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
                 else:
                     akc_mask = dki.outlierdetection(dt_dki, mask, dir)
@@ -311,7 +311,7 @@ def execute(): #pylint: disable=unused-variable
                 print('...Nonlocal smoothing...')
                 if app.ARGS.DTI:
                     dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dti,_,_ = dti.dti_fit(dwi_new[:,:,:,dtishell], mask)
+                    dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
                 if (app.ARGS.DKI or app.ARGS.WDKI):
                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                     dt_dki,_,_ = dki.dki_fit(dwi_new, mask)

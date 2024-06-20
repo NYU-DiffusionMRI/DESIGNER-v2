@@ -1,4 +1,4 @@
-prefix=/Users/benaron/Documents/designer_v2_dev/rpg_cpp/fftw-3.3.10/build
+prefix=/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/build
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include

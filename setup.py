@@ -4,7 +4,7 @@ from setuptools.command.build_ext import build_ext
 import subprocess
 from glob import glob
 
-with open('requirements.in') as f:
+with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
 long_description = '''designer and TMI package for use with brain 
@@ -15,8 +15,16 @@ long_description = '''designer and TMI package for use with brain
 
 class CustomBuildExt(build_ext):
     def run(self):
+        self.clean_fftw()  # Ensure previous builds are cleaned
         self.build_fftw()
         super().run()
+
+    def clean_fftw(self):
+        fftw_source_dir = os.path.abspath("rpg_cpp/fftw-3.3.10")
+        fftw_build_dir = os.path.join(fftw_source_dir, "build")
+
+        if os.path.exists(fftw_build_dir):
+            subprocess.check_call(["make", "clean"], cwd=fftw_source_dir)
 
     def build_fftw(self):
         fftw_source_dir = os.path.abspath("rpg_cpp/fftw-3.3.10")  # Adjusted path
@@ -93,18 +101,8 @@ setup(
         ext_modules = ext_modules,
         cmdclass={"build_ext": CustomBuildExt},
         keywords = 'python diffusion mri mppca gibbs preprocessing dki smi DESIGNER TMI',
-        python_requires = '>=3',
-        install_requires = ['numpy>=1.21.0,<2.0.0',
-                            'scipy>=1.9', 
-                            'numpy_groupies>=0.9',
-                            'antspyx>=0.3',
-                            'scikit-image>=0.19', 
-                            'dipy>=1.5', 
-                            'tqdm', 
-                            'joblib>=1.2', 
-                            'cvxpy>=1.2', 
-                            'pandas>=1.5',
-                            'pybind11>=2.12.0'],
+        python_requires = '>=3.9',
+        install_requires = requirements,
         zip_safe = False,
 )
     
