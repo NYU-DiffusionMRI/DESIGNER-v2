@@ -17,7 +17,7 @@ joblib==1.4.2
 kiwisolver==1.4.5
 lazy_loader==0.4
 matplotlib==3.9.0
-networkx==3.2
+networkx==3.3
 nibabel==5.2.1
 numba==0.60.0
 numpy==1.26.4
