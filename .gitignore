@@ -11,3 +11,22 @@ meta.yaml
 
 lib/rpg*
 build-wheels.sh
+
+# Ignore FFTW build artifacts
+rpg_cpp/fftw-3.3.10/build/
+rpg_cpp/fftw-3.3.10/*.o
+rpg_cpp/fftw-3.3.10/*.lo
+rpg_cpp/fftw-3.3.10/*.la
+rpg_cpp/fftw-3.3.10/*.al
+rpg_cpp/fftw-3.3.10/.libs/
+rpg_cpp/fftw-3.3.10/.deps/
+rpg_cpp/fftw-3.3.10/*.dirstamp
+rpg_cpp/fftw-3.3.10/*.in
+rpg_cpp/fftw-3.3.10/*.log
+rpg_cpp/fftw-3.3.10/*.status
+rpg_cpp/fftw-3.3.10/*.stamp
+rpg_cpp/fftw-3.3.10/*.aux
+
+# Ignore other potential temporary files
+rpg_cpp/fftw-3.3.10/*.exe
+rpg_cpp/fftw-3.3.10/*.out

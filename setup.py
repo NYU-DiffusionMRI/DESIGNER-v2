@@ -104,5 +104,6 @@ setup(
         python_requires = '>=3.9',
         install_requires = requirements,
         zip_safe = False,
+        verbose = True,
 )
     

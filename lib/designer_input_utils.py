@@ -370,6 +370,8 @@ def convert_input_data(dwi_metadata):
     if len(dwi_size) == 4:
         num_volumes = dwi_size[3]
 
+    dwi_ind_size = [i + [1] if len(i)==3 else i for i in dwi_ind_size]
+
     nvols = [i[3] for i in dwi_ind_size]
     for idx,i in enumerate(dwi_n_list):
         if len(dwi_n_list) == 1:
