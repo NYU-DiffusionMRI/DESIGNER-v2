@@ -93,24 +93,24 @@ jobs:
           ARCHFLAGS: "-arch x86_64 -arch arm64"
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
-          mkdir -p $GITHUB_WORKSPACE/dist/macos_universal2
+          mkdir -p $GITHUB_WORKSPACE/dist
           python setup.py bdist_wheel
       - name: Verify wheel creation
         run: |
-          ls -al $GITHUB_WORKSPACE/dist/macos_universal2/
+          ls -al $GITHUB_WORKSPACE/dist/
       - name: Repair wheels
         env:
           ARCHFLAGS: "-arch x86_64 -arch arm64"
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
           pip install delocate
-          delocate-listdeps $GITHUB_WORKSPACE/dist/macos_universal2/*.whl  # lists library dependencies
-          delocate-wheel $GITHUB_WORKSPACE/dist/macos_universal2/*.whl  # copies library dependencies into the wheel
+          delocate-listdeps $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
+          delocate-wheel $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
       - name: Verify repaired wheels
         run: |
-          ls -al $GITHUB_WORKSPACE/dist/macos_universal2/
+          ls -al $GITHUB_WORKSPACE/dist/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages_dir: dist/macos_universal2
+          packages_dir: dist
           password: ${{ secrets.PYPI_API_TOKEN }}
