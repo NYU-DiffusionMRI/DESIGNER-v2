@@ -34,7 +34,7 @@ jobs:
           echo 'Starting the Docker container' >> /project/build.log
           yum install -y fftw-devel && \
           echo 'FFTW installed' >> /project/build.log && \
-          mkdir -p /project/dist && \
+          mkdir -p /project/dist/${{ matrix.architecture }} && \
           echo 'Created dist directory' >> /project/build.log && \
           for PYBIN in /opt/_internal/cpython-${{ matrix.python-version }}*/bin; do
             echo 'Checking directory' \$PYBIN >> /project/build.log
@@ -48,28 +48,30 @@ jobs:
               echo 'Building wheel with Python binary from' \$PYBIN >> /project/build.log && \
               \$PYBIN/python setup.py bdist_wheel >> /project/build.log 2>&1 && \
               echo 'Built wheel' >> /project/build.log && \
-              \$PYBIN/auditwheel repair dist/*.whl --plat manylinux2014_${{ matrix.architecture }} -w /project/dist >> /project/build.log 2>&1 && \
+              \$PYBIN/auditwheel repair dist/*.whl --plat manylinux2014_${{ matrix.architecture }} -w /project/dist/${{ matrix.architecture }} >> /project/build.log 2>&1 && \
               echo 'Repaired wheel' >> /project/build.log && \
               rm -f dist/*linux_x86_64.whl && \
+              echo 'Removed non-compliant wheels' >> /project/build.log
             else
               echo 'Directory' \$PYBIN 'does not exist' >> /project/build.log
             fi
           done
-          echo 'Contents of /project/dist:' >> /project/build.log
-          ls -al /project/dist >> /project/build.log
+          echo 'Contents of /project/dist/${{ matrix.architecture }}:' >> /project/build.log
+          ls -al /project/dist/${{ matrix.architecture }} >> /project/build.log
           "
       - name: Output build logs
         run: |
           if [ -f $GITHUB_WORKSPACE/build.log ]; then cat $GITHUB_WORKSPACE/build.log; else echo "Build log not found"; fi
       - name: Verify wheels
         run: |
-          ls -al $GITHUB_WORKSPACE/dist/
+          ls -al $GITHUB_WORKSPACE/dist/${{ matrix.architecture }}/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          packages_dir: dist/${{ matrix.architecture }}
           password: ${{ secrets.PYPI_API_TOKEN }}
 
-  build-macos-wheels-x86_64:
+  build-macos-wheels:
     runs-on: macos-latest
     strategy:
       matrix:
@@ -88,61 +90,27 @@ jobs:
           brew install fftw
       - name: Build wheels
         env:
-          ARCHFLAGS: "-arch x86_64"
+          ARCHFLAGS: "-arch x86_64 -arch arm64"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
-          mkdir -p $GITHUB_WORKSPACE/dist/x86_64
+          mkdir -p $GITHUB_WORKSPACE/dist/macos_universal2
           python setup.py bdist_wheel
+      - name: Verify wheel creation
+        run: |
+          ls -al $GITHUB_WORKSPACE/dist/macos_universal2/
       - name: Repair wheels
         env:
-          ARCHFLAGS: "-arch x86_64"
+          ARCHFLAGS: "-arch x86_64 -arch arm64"
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
           pip install delocate
-          delocate-listdeps $GITHUB_WORKSPACE/dist/x86_64/*.whl  # lists library dependencies
-          delocate-wheel $GITHUB_WORKSPACE/dist/x86_64/*.whl  # copies library dependencies into the wheel
-      - name: Verify wheels
+          delocate-listdeps $GITHUB_WORKSPACE/dist/macos_universal2/*.whl  # lists library dependencies
+          delocate-wheel $GITHUB_WORKSPACE/dist/macos_universal2/*.whl  # copies library dependencies into the wheel
+      - name: Verify repaired wheels
         run: |
-          ls -al $GITHUB_WORKSPACE/dist/x86_64/
+          ls -al $GITHUB_WORKSPACE/dist/macos_universal2/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages_dir: dist/x86_64
-          password: ${{ secrets.PYPI_API_TOKEN }}
-
-  build-macos-wheels-arm64:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python-version: ['3.10', '3.11', '3.12']
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python
-        run: |
-          arch -arm64 brew install pyenv
-          arch -arm64 pyenv install ${{ matrix.python-version }}
-          arch -arm64 pyenv global ${{ matrix.python-version }}
-          echo "Python version set to $(arch -arm64 python --version)"
-      - name: Install dependencies
-        run: |
-          arch -arm64 python -m pip install --upgrade pip setuptools wheel pybind11
-          arch -arm64 brew install fftw
-      - name: Build wheels
-        env:
-          ARCHFLAGS: "-arch arm64"
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/dist/arm64
-          arch -arm64 python setup.py bdist_wheel
-      - name: Repair wheels
-        env:
-          ARCHFLAGS: "-arch arm64"
-        run: |
-          arch -arm64 pip install delocate
-          arch -arm64 delocate-listdeps $GITHUB_WORKSPACE/dist/arm64/*.whl  # lists library dependencies
-          arch -arm64 delocate-wheel $GITHUB_WORKSPACE/dist/arm64/*.whl  # copies library dependencies into the wheel
-      - name: Verify wheels
-        run: |
-          ls -al $GITHUB_WORKSPACE/dist/arm64/
-      - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages_dir: dist/arm64
+          packages_dir: dist/macos_universal2
           password: ${{ secrets.PYPI_API_TOKEN }}
