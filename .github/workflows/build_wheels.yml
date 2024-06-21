@@ -25,9 +25,9 @@ jobs:
       - name: Set up Docker image
         run: |
           docker pull quay.io/pypa/manylinux2014_${{ matrix.architecture }}
-      - name: Debug Python binaries path
+      - name: List available Python versions
         run: |
-          docker run --rm quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash -c "ls -al /opt/python"
+          docker run --rm quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash -c "ls -al /opt/_internal"
       - name: Build wheels
         run: |
           docker run --rm -v $GITHUB_WORKSPACE:/project quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash -c "
@@ -36,7 +36,7 @@ jobs:
           echo 'FFTW installed' >> /project/build.log && \
           mkdir -p /project/dist && \
           echo 'Created dist directory' >> /project/build.log && \
-          for PYBIN in /opt/python/*${{ matrix.python-version }}*/bin; do
+          for PYBIN in /opt/_internal/cpython-${{ matrix.python-version }}*/bin; do
             echo 'Checking directory' \$PYBIN >> /project/build.log
             if [ -d \$PYBIN ]; then
               echo 'Using Python binary from' \$PYBIN >> /project/build.log
@@ -96,8 +96,8 @@ jobs:
           ARCHFLAGS: "-arch x86_64"
         run: |
           pip install delocate
-          delocate-listdeps $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
-          delocate-wheel $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
+          delocate-listdeps --architecture x86_64 $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
+          delocate-wheel --architecture x86_64 $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
       - name: Verify wheels
         run: |
           ls -al $GITHUB_WORKSPACE/dist/
@@ -134,8 +134,8 @@ jobs:
           ARCHFLAGS: "-arch arm64"
         run: |
           arch -arm64 pip install delocate
-          arch -arm64 delocate-listdeps $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
-          arch -arm64 delocate-wheel $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
+          arch -arm64 delocate-listdeps --architecture arm64 $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
+          arch -arm64 delocate-wheel --architecture arm64 $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
       - name: Verify wheels
         run: |
           ls -al $GITHUB_WORKSPACE/dist/
