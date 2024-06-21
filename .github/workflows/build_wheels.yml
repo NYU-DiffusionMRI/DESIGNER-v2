@@ -48,8 +48,9 @@ jobs:
               echo 'Building wheel with Python binary from' \$PYBIN >> /project/build.log && \
               \$PYBIN/python setup.py bdist_wheel >> /project/build.log 2>&1 && \
               echo 'Built wheel' >> /project/build.log && \
-              \$PYBIN/auditwheel repair dist/*.whl -w /project/dist >> /project/build.log 2>&1 && \
-              echo 'Repaired wheel' >> /project/build.log
+              \$PYBIN/auditwheel repair dist/*.whl --plat manylinux2014_${{ matrix.architecture }} -w /project/dist >> /project/build.log 2>&1 && \
+              echo 'Repaired wheel' >> /project/build.log && \
+              rm -f dist/*linux_x86_64.whl && \
             else
               echo 'Directory' \$PYBIN 'does not exist' >> /project/build.log
             fi
@@ -89,21 +90,22 @@ jobs:
         env:
           ARCHFLAGS: "-arch x86_64"
         run: |
-          mkdir -p $GITHUB_WORKSPACE/dist
+          mkdir -p $GITHUB_WORKSPACE/dist/x86_64
           python setup.py bdist_wheel
       - name: Repair wheels
         env:
           ARCHFLAGS: "-arch x86_64"
         run: |
           pip install delocate
-          delocate-listdeps --architecture x86_64 $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
-          delocate-wheel --architecture x86_64 $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
+          delocate-listdeps $GITHUB_WORKSPACE/dist/x86_64/*.whl  # lists library dependencies
+          delocate-wheel $GITHUB_WORKSPACE/dist/x86_64/*.whl  # copies library dependencies into the wheel
       - name: Verify wheels
         run: |
-          ls -al $GITHUB_WORKSPACE/dist/
+          ls -al $GITHUB_WORKSPACE/dist/x86_64/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          packages_dir: dist/x86_64
           password: ${{ secrets.PYPI_API_TOKEN }}
 
   build-macos-wheels-arm64:
@@ -127,19 +129,20 @@ jobs:
         env:
           ARCHFLAGS: "-arch arm64"
         run: |
-          mkdir -p $GITHUB_WORKSPACE/dist
+          mkdir -p $GITHUB_WORKSPACE/dist/arm64
           arch -arm64 python setup.py bdist_wheel
       - name: Repair wheels
         env:
           ARCHFLAGS: "-arch arm64"
         run: |
           arch -arm64 pip install delocate
-          arch -arm64 delocate-listdeps --architecture arm64 $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
-          arch -arm64 delocate-wheel --architecture arm64 $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
+          arch -arm64 delocate-listdeps $GITHUB_WORKSPACE/dist/arm64/*.whl  # lists library dependencies
+          arch -arm64 delocate-wheel $GITHUB_WORKSPACE/dist/arm64/*.whl  # copies library dependencies into the wheel
       - name: Verify wheels
         run: |
-          ls -al $GITHUB_WORKSPACE/dist/
+          ls -al $GITHUB_WORKSPACE/dist/arm64/
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          packages_dir: dist/arm64
           password: ${{ secrets.PYPI_API_TOKEN }}
