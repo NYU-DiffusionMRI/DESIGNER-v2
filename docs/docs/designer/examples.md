@@ -48,7 +48,7 @@ designer -denoise -shrinkage frob -algorithm jespersen -phase phase.nii dwi.nii 
 
 Given a partial Fourier (6/8) sampled magnitude dataset with two shells: dwi_b1000.nii and dwi_b2000.nii (along with accompanying .bvec and .bval files), acquired in the AP direction, along with a reverse phase encoding b=0 image called "rpe_b0.nii", the call to designer to perform complete preprocessing would look like:
 ```
-designer -denoise -rician \
+designer -denoise -shrinkage frob -adaptive_patch -rician \
 -degibbs -pf 0.75 -pe_dir j- \
 -eddy -rpe_pair rpe_b0.nii \
 -normalize -mask \
