@@ -780,7 +780,7 @@ class SMI(object):
             t2e = 1000 * np.ones_like(f)
 
         d_fw = 3
-        t2_fw = 500
+        t2_fw = 1500
         n = 200
 
         
@@ -870,7 +870,8 @@ class SMI(object):
         k0_all = self.rotinv_kell_wfw_b_beta_te_numerical(0, shells, kernel_params[:,1:8])
         if self.rotinv_lmax == 2:
             k2_all = self.rotinv_kell_wfw_b_beta_te_numerical(2, shells, kernel_params[:,1:8])
-            rot_invs = s0 * np.hstack((k0_all, shells, kernel_params[:,[8]] * abs(k2_all)))
+            rot_invs = s0 * np.hstack((k0_all, 
+                kernel_params[:,[8]] * abs(k2_all)))
         elif self.rotinv_lmax == 4:
             k2_all = self.rotinv_kell_wfw_b_beta_te_numerical(2, shells, kernel_params[:,1:8])
             k4_all = self.rotinv_kell_wfw_b_beta_te_numerical(4, shells, kernel_params[:,1:8])

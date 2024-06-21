@@ -25,22 +25,37 @@ jobs:
       - name: Set up Docker image
         run: |
           docker pull quay.io/pypa/manylinux2014_${{ matrix.architecture }}
+      - name: Debug Python binaries path
+        run: |
+          docker run --rm quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash -c "ls -al /opt/python"
       - name: Build wheels
         run: |
           docker run --rm -v $GITHUB_WORKSPACE:/project quay.io/pypa/manylinux2014_${{ matrix.architecture }} /bin/bash -c "
+          echo 'Starting the Docker container' >> /project/build.log
           yum install -y fftw-devel && \
+          echo 'FFTW installed' >> /project/build.log && \
           mkdir -p /project/dist && \
+          echo 'Created dist directory' >> /project/build.log && \
           for PYBIN in /opt/python/*${{ matrix.python-version }}*/bin; do
+            echo 'Checking directory' \$PYBIN >> /project/build.log
             if [ -d \$PYBIN ]; then
-              echo Using Python binary from \$PYBIN >> /project/build.log
+              echo 'Using Python binary from' \$PYBIN >> /project/build.log
               \$PYBIN/python -m ensurepip >> /project/build.log 2>&1 && \
+              echo 'Ensured pip' >> /project/build.log && \
               \$PYBIN/pip install -U pip setuptools wheel auditwheel pybind11 >> /project/build.log 2>&1 && \
+              echo 'Installed dependencies' >> /project/build.log && \
               cd /project && \
-              echo Building wheel with Python binary from \$PYBIN >> /project/build.log && \
+              echo 'Building wheel with Python binary from' \$PYBIN >> /project/build.log && \
               \$PYBIN/python setup.py bdist_wheel >> /project/build.log 2>&1 && \
-              \$PYBIN/auditwheel repair dist/*.whl -w /project/dist >> /project/build.log 2>&1
+              echo 'Built wheel' >> /project/build.log && \
+              \$PYBIN/auditwheel repair dist/*.whl -w /project/dist >> /project/build.log 2>&1 && \
+              echo 'Repaired wheel' >> /project/build.log
+            else
+              echo 'Directory' \$PYBIN 'does not exist' >> /project/build.log
             fi
           done
+          echo 'Contents of /project/dist:' >> /project/build.log
+          ls -al /project/dist >> /project/build.log
           "
       - name: Output build logs
         run: |
@@ -53,53 +68,36 @@ jobs:
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
 
-  build-macos-wheels:
+  build-macos-wheels-x86_64:
     runs-on: macos-latest
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
-        architecture: [x86_64, arm64]
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
         run: |
-          if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
-            arch -arm64 brew install pyenv
-            arch -arm64 pyenv install ${{ matrix.python-version }}
-            arch -arm64 pyenv global ${{ matrix.python-version }}
-            echo "Python version set to $(python --version)"
-          else
-            brew install pyenv
-            pyenv install ${{ matrix.python-version }}
-            pyenv global ${{ matrix.python-version }}
-            echo "Python version set to $(python --version)"
-          fi
+          brew install pyenv
+          pyenv install ${{ matrix.python-version }}
+          pyenv global ${{ matrix.python-version }}
+          echo "Python version set to $(python --version)"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel pybind11
           brew install fftw
       - name: Build wheels
         env:
-          ARCHFLAGS: "-arch ${{ matrix.architecture }}"
+          ARCHFLAGS: "-arch x86_64"
         run: |
           mkdir -p $GITHUB_WORKSPACE/dist
-          if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
-            arch -arm64 python setup.py bdist_wheel
-          else
-            python setup.py bdist_wheel
-          fi
+          python setup.py bdist_wheel
       - name: Repair wheels
         env:
-          ARCHFLAGS: "-arch ${{ matrix.architecture }}"
+          ARCHFLAGS: "-arch x86_64"
         run: |
           pip install delocate
-          if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
-            arch -arm64 delocate-listdeps $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
-            arch -arm64 delocate-wheel $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
-          else
-            delocate-listdeps $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
-            delocate-wheel $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
-          fi
+          delocate-listdeps $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
+          delocate-wheel $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
       - name: Verify wheels
         run: |
           ls -al $GITHUB_WORKSPACE/dist/
@@ -108,43 +106,40 @@ jobs:
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
 
-  # build-windows-wheels:
-  #   runs-on: windows-latest
-  #   strategy:
-  #     matrix:
-  #       python-version: ['3.9', '3.10', '3.11', '3.12']
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v2
-  #       with:
-  #         python-version: ${{ matrix.python-version }}
-  #     - name: Install Miniconda
-  #       uses: conda-incubator/setup-miniconda@v2
-  #       with:
-  #         auto-update-conda: true
-  #         python-version: ${{ matrix.python-version }}
-  #         activate-environment: myenv
-  #     - name: Install FFTW
-  #       run: |
-  #         conda install -c conda-forge fftw
-  #     - name: Install dependencies
-  #       run: |
-  #         python -m pip install --upgrade pip setuptools wheel pybind11
-  #     - name: Ensure Visual C++ Build Tools are Installed
-  #       run: |
-  #         choco install visualstudio2019buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --includeOptional"
-  #     - name: Build wheels
-  #       run: |
-  #         mkdir -p $GITHUB_WORKSPACE/dist
-  #         python setup.py bdist_wheel 2>&1 | tee $GITHUB_WORKSPACE/build.log
-  #     - name: Output build logs
-  #       run: |
-  #         if [ -f $GITHUB_WORKSPACE/build.log ]; then cat $GITHUB_WORKSPACE/build.log; else echo “Build log not found”; fi
-  #     - name: Verify wheels
-  #       run: |
-  #         ls -al $GITHUB_WORKSPACE/dist/
-  #     - name: Upload to PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         password: ${{ secrets.PYPI_API_TOKEN }}
+  build-macos-wheels-arm64:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        run: |
+          arch -arm64 brew install pyenv
+          arch -arm64 pyenv install ${{ matrix.python-version }}
+          arch -arm64 pyenv global ${{ matrix.python-version }}
+          echo "Python version set to $(arch -arm64 python --version)"
+      - name: Install dependencies
+        run: |
+          arch -arm64 python -m pip install --upgrade pip setuptools wheel pybind11
+          arch -arm64 brew install fftw
+      - name: Build wheels
+        env:
+          ARCHFLAGS: "-arch arm64"
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/dist
+          arch -arm64 python setup.py bdist_wheel
+      - name: Repair wheels
+        env:
+          ARCHFLAGS: "-arch arm64"
+        run: |
+          arch -arm64 pip install delocate
+          arch -arm64 delocate-listdeps $GITHUB_WORKSPACE/dist/*.whl  # lists library dependencies
+          arch -arm64 delocate-wheel $GITHUB_WORKSPACE/dist/*.whl  # copies library dependencies into the wheel
+      - name: Verify wheels
+        run: |
+          ls -al $GITHUB_WORKSPACE/dist/
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
