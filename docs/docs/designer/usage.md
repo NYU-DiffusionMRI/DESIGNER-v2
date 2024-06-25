@@ -11,11 +11,6 @@ parent: designer
 
 This page describes each optional argument to designer. For specific use-case examples of designer calls, please see the [examples]({{ site.baseurl }}{% link docs/designer/examples.md %}) page.
 
-{: .ref }
-> Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., ... & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. Neuroimage, 183, 532-543.
->
-> Chen, J., Ades-Aron, B., Lee, H.H., Mehrin, S., Pang, M., Novikov, D. S., Veraart, J., & Fieremans, E. (2024). Optimization and validation of the DESIGNER preprocessing pipeline for clinical diffusion MRI in white matter aging. Imaging Neuroscience, 2 1–17
-
 Main usage:
 `designer <input1,input2,...> <output>`
 
@@ -27,6 +22,11 @@ Main usage:
 - Name of the output image in any of the above formats (except DICOM)
 - By default, if none of the below options are used, designer will not preprocess the input data. It will simply concatenate the comma separated inputs and output the concatenated dataset. 
 - Designer will also output gradient directions and magnitudes in FSL (.bvec, .bval) format according to the naming convention for the output file.
+
+{: .ref }
+> Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., ... & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. Neuroimage, 183, 532-543.
+>
+> Chen, J., Ades-Aron, B., Lee, H.H., Mehrin, S., Pang, M., Novikov, D. S., Veraart, J., & Fieremans, E. (2024). Optimization and validation of the DESIGNER preprocessing pipeline for clinical diffusion MRI in white matter aging. Imaging Neuroscience, 2 1–17
 
 ## Table of contents
 {: .no_toc .text-delta }
