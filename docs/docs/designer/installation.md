@@ -34,7 +34,7 @@ Files can be passed by mounting a local folder into the container: `docker run -
 
 Note that you can replace `nyudiffusionmri/designer2:<tag>` by any other tag. 
 
-For users who are working on HCP servers and cannot use Docker, DESIGNER may also be used with Singularity. The following can be run to singularity-ize our Docker image: `singularity pull docker://nyudiffusionmri/designer2:<tag>`
+For users who are working on HCP servers and cannot use Docker, DESIGNER may also be used with [Singularity](https://docs.sylabs.io/guides/2.6/user-guide/installation.html). The following can be run to singularity-ize our Docker image: `singularity pull docker://nyudiffusionmri/designer2:<tag>`
 
 We can then run DESIGNER by running: `singularity run designer2_<tag>.sif designer...`
 
