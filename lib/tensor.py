@@ -177,14 +177,14 @@ class TensorFitting(object):
             (dt[0,:], dt[1,:], dt[2,:], dt[1,:], dt[3,:], dt[4,:], dt[2,:], dt[4,:], dt[5,:])
             ), (3, 3, dt.shape[1]))
         
-        # get the trace
-        rdwi = np.exp(np.matmul(b[:,1:], dt))
-        B = np.round(self.grad[:,-1])
-        uB = np.unique(B)
-        trace = np.zeros((dt.shape[1], uB.shape[0]))
-        for ib in range(0, uB.shape[0]): 
-            t = np.where(B == uB[ib])[0]
-            trace[:,ib] = np.mean(rdwi[t,:], axis=0)
+        # # get the trace
+        # rdwi = np.exp(np.matmul(b[:,1:], dt))
+        # B = np.round(self.grad[:,-1])
+        # uB = np.unique(B)
+        # trace = np.zeros((dt.shape[1], uB.shape[0]))
+        # for ib in range(0, uB.shape[0]): 
+        #     t = np.where(B == uB[ib])[0]
+        #     trace[:,ib] = np.mean(rdwi[t,:], axis=0)
 
         nvox = dt.shape[1]
         inputs = range(0, nvox)
@@ -202,7 +202,7 @@ class TensorFitting(object):
         rd = (l2+l3)/2
         ad = l1
         fa = np.sqrt(1/2)*np.sqrt((l1-l2)**2+(l2-l3)**2+(l3-l1)**2)/np.sqrt(l1**2+l2**2+l3**2)
-        trace = vectorize(trace.T, mask)
+        #trace = vectorize(trace.T, mask)
         fe = np.abs(np.stack((fa*v1[:,:,:,0], fa*v1[:,:,:,1], fa*v1[:,:,:,2]), axis=3))
         
         parameters = {}
@@ -212,7 +212,7 @@ class TensorFitting(object):
             parameters['ad'] = ad
             parameters['fa'] = fa
             parameters['fe'] = fe
-            parameters['trace'] = trace
+            #parameters['trace'] = trace
 
         if extract_dki:
             #dirs = np.array(self.fibonacci_sphere(256, True))

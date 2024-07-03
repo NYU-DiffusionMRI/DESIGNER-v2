@@ -113,6 +113,8 @@ def execute(): #pylint: disable=unused-variable
     if order >= 2:
         bval = bval / 1000
 
+    grad = np.hstack((bvec.T, bval[None,...].T))
+
     if app.ARGS.mask:
         mask = image_read(path.from_user(app.ARGS.mask)).numpy()
     else:
@@ -170,8 +172,8 @@ def execute(): #pylint: disable=unused-variable
             bvec_dki = bvec[:,bval < maxb]
             bval_dki = bval[bval < maxb]
 
-            grad = np.hstack((bvec_dki.T, bval_dki[None,...].T))
-            dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
+            grad_dki = np.hstack((bvec_dki.T, bval_dki[None,...].T))
+            dki = tensor.TensorFitting(grad_dki, int(app.ARGS.n_cores))
             dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
 
         if app.ARGS.polyreg and app.ARGS.DKI:
@@ -215,6 +217,23 @@ def execute(): #pylint: disable=unused-variable
             if (app.ARGS.DKI or app.ARGS.WDKI):
                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+
+        if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
+            rdwi = tensor.vectorize(dwi, mask)
+            rdwi[~np.isfinite(rdwi)] = np.finfo(float).eps
+            rdwi[rdwi<=0] = np.finfo(float).eps
+            B = np.round(grad[:,-1]*1000)
+            uB = np.unique(B)
+            trace = np.zeros((rdwi.shape[1], uB.shape[0]))
+            for ib in range(0, uB.shape[0]):
+                t = np.where(B == uB[ib])[0]
+                indices = np.where(t < rdwi.shape[0])
+                t = t[indices]
+                masked_data = np.ma.masked_where(rdwi[t,:] <= 0.1, rdwi[t,:])
+                trace[:,ib] = np.exp(np.ma.mean(np.ma.log(masked_data), axis=0))
+            trace = tensor.vectorize(trace.T, mask)
+            params_trace = {'trace': trace}
+            save_params(params_trace, nii, model='allshells', outdir=outdir)
 
         if app.ARGS.DTI:
             print('...extracting and saving DTI maps...')
@@ -315,6 +334,23 @@ def execute(): #pylint: disable=unused-variable
                 if (app.ARGS.DKI or app.ARGS.WDKI):
                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                     dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+
+            if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
+                rdwi = tensor.vectorize(dwi, mask)
+                B = np.round(grad[:,-1]*1000)
+                uB = np.unique(B)
+                trace = np.zeros((rdwi.shape[1], uB.shape[0]))
+                rdwi[~np.isfinite(rdwi)] = np.finfo(float).eps
+                rdwi[rdwi<=0] = np.finfo(float).eps
+                for ib in range(0, uB.shape[0]):
+                    t = np.where(B == uB[ib])[0]
+                    indices = np.where(t < rdwi.shape[0])
+                    t = t[indices]
+                    masked_data = np.ma.masked_where(rdwi[t,:] <= 0.1, rdwi[t,:])
+                    trace[:,ib] = np.exp(np.ma.mean(np.ma.log(masked_data), axis=0))
+                trace = tensor.vectorize(trace.T, mask)
+                params_trace = {'trace': trace}
+                save_params(params_trace, nii, model='te'+str(te)+'_shells', outdir=outdir)
 
             if app.ARGS.DTI:
                 print('...extracting and saving DTI maps...')
