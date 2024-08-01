@@ -156,6 +156,7 @@ def execute(): #pylint: disable=unused-variable
     if len(set(dwi_metadata['echo_time_per_volume'])) == 1:
 
         if app.ARGS.DTI:
+            from lib.mpunits import vectorize
             print('...Single shell DTI fit...')
             dtishell = (bval <= 0.1) | ((bval > .5) & (bval <= 1.5))
             dwi_dti = dwi[:,:,:,dtishell]
@@ -165,7 +166,13 @@ def execute(): #pylint: disable=unused-variable
             dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
             dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
 
+            dt_ = {}
+            dt_dti_ = vectorize(dt_dti, mask)
+            dt_['dt'] = dt_dti_
+            save_params(dt_, nii, model='dti', outdir=outdir)
+
         if app.ARGS.DKI or app.ARGS.WDKI:
+            from lib.mpunits import vectorize
             print('...Multi shell DKI fit with constraints = ' + str(constraints))
 
             maxb = 2.5
@@ -176,6 +183,11 @@ def execute(): #pylint: disable=unused-variable
             grad_dki = np.hstack((bvec_dki.T, bval_dki[None,...].T))
             dki = tensor.TensorFitting(grad_dki, int(app.ARGS.n_cores))
             dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+
+            dt_ = {}
+            dt_dki_ = vectorize(dt_dki, mask)
+            dt_['dt'] = dt_dki_
+            save_params(dt_, nii, model='dki', outdir=outdir)
 
         if app.ARGS.polyreg:
             if app.ARGS.WDKI:

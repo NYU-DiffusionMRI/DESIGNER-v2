@@ -65,7 +65,7 @@ def get_input_info(input, fslbval, fslbvec, bids):
     if not bids:
         bidslist = [i + '.json' for i in DWInlist]
     else:
-        UserBidspath = bids.resplit(',')
+        UserBidspath = bids.rsplit(',')
         bidslist = [os.path.realpath(i) for i in UserBidspath]
 
     bshapelist = [i + '.bshape' for i in DWInlist]
