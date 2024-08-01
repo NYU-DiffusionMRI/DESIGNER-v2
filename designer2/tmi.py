@@ -66,6 +66,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
+    smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for polynomial regression. must be 0,2,4, or 6.')
 
     #wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
     #wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
@@ -176,8 +177,11 @@ def execute(): #pylint: disable=unused-variable
             dki = tensor.TensorFitting(grad_dki, int(app.ARGS.n_cores))
             dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
 
-        if app.ARGS.polyreg and app.ARGS.DKI:
-            dt_poly = dki.train_rotated_bayes_fit(dwi_dki, dt_dki, s0_dki, b_dki, mask)
+        if app.ARGS.polyreg:
+            if app.ARGS.WDKI:
+                dt_poly_dki = dki.train_rotated_bayes_fit(dwi_dki, dt_dki, s0_dki, b_dki, mask)
+            if app.ARGS.DTI:
+                dt_poly_dti = dti.train_rotated_bayes_fit(dwi_dti, dt_dti, s0_dti, b_dti, mask, 'True')
 
         if app.ARGS.akc_outliers:
             from lib.mpunits import vectorize
@@ -246,8 +250,12 @@ def execute(): #pylint: disable=unused-variable
             save_params(params_dki, nii, model='dki', outdir=outdir)
 
         if app.ARGS.polyreg:
-            params_dki_poly = dki.extract_parameters(dt_poly, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-            save_params(params_dki_poly, nii, model='dki_poly', outdir=outdir)
+            if app.ARGS.WDKI:
+                params_dki_poly = dki.extract_parameters(dt_poly_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                save_params(params_dki_poly, nii, model='dki_poly', outdir=outdir)
+            if app.ARGS.DTI:
+                params_dti_poly = dti.extract_parameters(dt_poly_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
+                save_params(params_dti_poly, nii, model='dti_poly', outdir=outdir)
 
         if app.ARGS.WDKI:
             print('...extracting and saving WDKI maps...')
@@ -293,8 +301,11 @@ def execute(): #pylint: disable=unused-variable
                 dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
                 dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
 
-            if app.ARGS.polyreg and app.ARGS.DKI:
-                dt_poly = dki.train_rotated_bayes_fit(dwi_dki, dt_dki, s0_dki, b_dki, mask)
+            if app.ARGS.polyreg:
+                if app.ARGS.WDKI:
+                    dt_poly_dki = dki.train_rotated_bayes_fit(dwi_dki, dt_dki, s0_dki, b_dki, mask)
+                if app.ARGS.DTI:
+                    dt_poly_dti = dti.train_rotated_bayes_fit(dwi_dti, dt_dti, s0_dti, b_dti, mask, 'True')
 
             if app.ARGS.akc_outliers:
                 from lib.mpunits import vectorize
@@ -363,8 +374,12 @@ def execute(): #pylint: disable=unused-variable
                 save_params(params_dki, nii, model='dki_te'+str(te), outdir=outdir)
 
             if app.ARGS.polyreg:
-                params_dki_poly = dki.extract_parameters(dt_poly, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-                save_params(params_dki_poly, nii, model='dki_poly_te'+str(te), outdir=outdir)
+                if app.ARGS.WDKI:
+                    params_dki_poly = dki.extract_parameters(dt_poly_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                    save_params(params_dki_poly, nii, model='dki_poly_te'+str(te), outdir=outdir)
+                if app.ARGS.DTI:
+                    params_dti_poly = dti.extract_parameters(dt_poly_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
+                    save_params(params_dti_poly, nii, model='dti_poly_te'+str(te), outdir=outdir)
 
             if app.ARGS.WDKI:
                 print('...extracting and saving WDKI maps...')
@@ -411,16 +426,24 @@ def execute(): #pylint: disable=unused-variable
         else: 
             compartments = ['IAS', 'EAS']
 
+        if app.ARGS.lmax:
+            if int(app.ARGS.lmax) not in {0, 2, 4, 6}:
+                raise ValueError("lmax value must be 0, 2, 4, or 6.")
+            else:
+                lmax = int(app.ARGS.lmax)
+        else:
+            lmax = None
+
         print('...SMI fit...')
         if multi_te_beta:
-            smi = SMI(bval=bval_orig, bvec=bvec_orig)
+            smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax)
             smi.set_compartments(compartments)
             smi.set_echotime(dwi_metadata['echo_time_per_volume'])
             smi.set_bshape(dwi_metadata['bshape_per_volume'])
             params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
             save_params(params_smi, nii, model='smi', outdir=outdir)
         else:
-            smi = SMI(bval=bval, bvec=bvec)
+            smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax)
             smi.set_compartments(compartments)
             smi.set_echotime(dwi_metadata['echo_time_per_volume'])
             smi.set_bshape(dwi_metadata['bshape_per_volume'])

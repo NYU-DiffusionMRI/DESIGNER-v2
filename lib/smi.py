@@ -21,7 +21,7 @@ class SMI(object):
     def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
-        l_max_training = None, seed=42):
+        l_max_training=None, seed=42):
         """
         Setting some default values and initialization required for class functions
         """
@@ -567,7 +567,11 @@ class SMI(object):
                     signal[ids_current_cluster,:] = y_lm_matrix[ids_current_cluster,:] @ (np.tile(n_l_all, (n_voxels,1)).T * s_lm_current_cluster)
             self.signal_4d = self.vectorize(signal, self.mask)
 
-        num_elements = self.rotinv_lmax // 2 + 1
+        if int(np.max(l_max)/2+1) < self.rotinv_lmax // 2 + 1:
+            num_elements = int(np.max(l_max)/2+1)
+        else:
+            num_elements = self.rotinv_lmax // 2 + 1
+
         slices = [np.squeeze(sl[:, :, :, i, :]) for i in range(num_elements)]
         sl = np.concatenate(slices, axis=3)
     

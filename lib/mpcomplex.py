@@ -52,7 +52,7 @@
 import gc
 import numpy as np
 from scipy.linalg import svd
-from numpy_groupies import aggregate
+from numpy_groupies.aggregate_numba import aggregate
 
 class MP(object):
     def __init__(self, dwi, kernel, step, shrinkage, algorithm, crop, n_cores):
@@ -66,7 +66,7 @@ class MP(object):
             self.shrink = shrinkage
 
         if algorithm is None:
-            self.algo = 'jespersen'
+            self.algo = 'cordero-grande'
         else:
             self.algo = algorithm
 
@@ -131,6 +131,27 @@ class MP(object):
         s[vals > t] = np.sqrt((x**2 - gamma - 1)**2 - 4*gamma) / x
         return np.diag(s)
     
+    def eig_deflate(self, X, t, u, vals, v):
+        s = np.zeros_like(X)
+        for _ in range(t):
+            vals_ = np.zeros_like(vals)
+            vals_[0] = np.sqrt(vals[0])
+            stmp = u @ np.diag(vals_) @ v
+
+            X -= stmp
+            s += stmp
+
+            del vals_, stmp, vals, u, v
+
+            u, vals, v = svd(X, full_matrices=False)
+            vals = (vals**2).astype('float32')
+            order = np.argsort(vals)[::-1]
+            u = u[:, order]
+            v = v[order, :]
+            vals = vals[order]
+
+        return s
+    
     def denoise(self, X):
         """
         Main function to denoise the data matrix X
@@ -149,7 +170,7 @@ class MP(object):
 
         order = np.argsort(vals)[::-1]
         u = u[:,order]
-        v = v[:,order]
+        v = v[order,:]
         vals = vals[order]
 
         tn = self.crop
@@ -186,59 +207,68 @@ class MP(object):
         npars = t
         if self.shrink == 'threshold':
             vals[t:] = 0
-            s = np.matrix(u) * np.diag(np.sqrt(vals)) * np.matrix(v)
-        else:
+            s = u @ np.diag(np.sqrt(vals)) @ v
+        elif self.shrink == 'frob':
             vals_norm = np.sqrt(vals)/(np.sqrt(Mp)*sigma)
             vals_frobnorm = (np.sqrt(Mp)*sigma) * self.eig_shrink(vals_norm, Np/Mp)
-            s = np.matrix(u) * vals_frobnorm * np.matrix(v) 
-        
+            s = u @ vals_frobnorm @ v
+        elif self.shrink == 'deflate':
+            s = self.eig_deflate(X, t, u, vals, v)
+
         if M<N:
             s = np.conj(s).T
 
         return s, sigma, npars #, nonlocalinds
 
-    def patchav(self, wp, signal, temp):
+
+    def patchav(self, signal, temp):
         """
         weighted patch averaging
         """
-        return aggregate(temp, wp*signal, func='sum', size=self.dwi.shape[0], dtype=self.dwi.dtype
+        # return aggregate(temp, wp*signal, func='sum', size=self.dwi.shape[0], dtype=self.dwi.dtype
+        #     ).reshape(self.imsize[:3])
+        return aggregate(temp, signal, func='mean', size=self.dwi.shape[0], dtype=self.dwi.dtype
             ).reshape(self.imsize[:3])
 
-    def get_weights(self, temp):
+    def get_weights(self, temp, sigma):
         from skimage.util.shape import view_as_windows
 
         i,j,k = np.unravel_index(temp, self.imsize[:3])
-        distance = (i-np.mean(i, axis=1, keepdims=True))**2 + \
-                     (j-np.mean(j, axis=1, keepdims=True))**2 + \
-                     (k-np.mean(k, axis=1, keepdims=True))**2
+        weights = (i-np.mean(i, axis=1, keepdims=True))**2 + \
+                    (j-np.mean(j, axis=1, keepdims=True))**2 + \
+                    (k-np.mean(k, axis=1, keepdims=True))**2
+        
         count = np.histogram(temp, np.arange(self.dwi.shape[0]+1))[0]
+        #weights = 1 / (np.array(sigma)[:, np.newaxis] + np.finfo(float).eps)
+        #weights = np.tile(weights, (1, self.patchsize))
 
         den = view_as_windows(self.patchav(
-            1, distance.flatten(), temp.flatten()
+            1, weights.flatten(), temp.flatten()
             ), self.kernel, self.step).reshape(
             -1, np.prod(self.kernel))
         cbl = view_as_windows(count.reshape(self.imsize[:3]
             ), self.kernel, self.step).reshape(
             -1, np.prod(self.kernel))
     
-        num = den - distance
+        num = den - weights
         wp = num / (den * (cbl-1) + np.finfo(float).eps)
         wp[cbl==1] = 1 
+            
         return wp.flatten()
 
-    def im_reconstruct(self, wp, image):
+    def im_reconstruct(self, image):
         from joblib import Parallel, delayed
         image = np.array(image)
 
         if image.ndim == 1:
             image = np.tile(image, (self.patchsize, 1)).T
-            rec_img = self.patchav(wp, image.flatten(), self.temp.flatten())
+            rec_img = self.patchav(image.flatten(), self.temp.flatten())
             rec_img = self.unpad(rec_img, self.pwidth[:][:-1])
         elif image.ndim == 3:
             # Process in chunks to manage memory usage
             S = Parallel(n_jobs=-3, prefer='threads')\
             (delayed(self.patchav)(
-                wp, image[:,:,i].flatten(), self.temp.flatten()
+                image[:,:,i].flatten(), self.temp.flatten()
                 ) for i in range(self.imsize[-1]))
             rec_img = np.array(S).transpose(1,2,3,0)
             rec_img = self.unpad(rec_img, self.pwidth)
@@ -259,16 +289,15 @@ class MP(object):
 
         
         results = Parallel(n_jobs=self.n_cores, prefer='processes')\
-            (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in range(num_patches))
-        
+           (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in range(num_patches))
+
         signal, sigma, npars = zip(*results)
 
-
         print('...patch averaging...')
-        wp = self.get_weights(self.temp)
-        signal = self.im_reconstruct(wp, signal)
-        sigma = self.im_reconstruct(wp, sigma)
-        npars = self.im_reconstruct(wp, npars)
+        #wp = self.get_weights(self.temp, sigma)
+        signal = self.im_reconstruct(signal)
+        sigma = self.im_reconstruct(sigma)
+        npars = self.im_reconstruct(npars)
 
         gc.collect()
 
@@ -308,7 +337,6 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         # ants.image_write(out, 'phase_dn.nii')
         out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
         ants.image_write(out, 'phase_dn.nii')
-        # import pdb; pdb.set_trace()
 
         print('magnitude denoising')
         img_np = np.real(img*np.exp(-1j*phi_dn))
@@ -321,8 +349,6 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         mp = MP(img, kernel, step, shrinkage, algorithm, crop, n_cores)
         Signal, Sigma, Npars = mp.process()
         Signal[zeroinds] = 0
-
-
 
     return Signal, Sigma, Npars
 
@@ -377,7 +403,7 @@ def generate_parser():
         '-algorithm',
         type=str,
         nargs='?',
-        default='jespersen',
+        default='cordero-grande',
         help='MP cutoff algorithm. veraart or coredero-grande or jespersen. (default=jespersen)'
     )
 
@@ -413,7 +439,7 @@ def main():
     else:
         extent = args.extent
    
-    (Signal, Sigma, Npars) = denoise(img_mag, kernel=extent, step=extent//2,  shrinkage=args.shrinkage, algorithm=args.algorithm, crop=0, phase=img_phi)
+    (Signal, Sigma, Npars) = denoise(img_mag, kernel=extent, step=[2,2,2],  shrinkage=args.shrinkage, algorithm=args.algorithm, crop=0, phase=img_phi)
     
     Signal_ants = ants.from_numpy(abs(Signal), origin=img_mag_ants.origin, spacing=img_mag_ants.spacing, direction=img_mag_ants.direction)
     ants.image_write(Signal_ants, args.output)

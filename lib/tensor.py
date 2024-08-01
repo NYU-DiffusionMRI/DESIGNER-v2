@@ -474,134 +474,6 @@ class TensorFitting(object):
 
         return x
     
-    def train_bayes_fit(self, dwi, dt, s0, b, mask, flag_dti='False'):
-        """
-        This function trains and evaluates a polynomial regression model to update
-        a wlls fit without outlier voxels. 
-
-        Inputs
-        ------
-        dwi: ND array 
-        dt : wlls evaluated diffusion tensor Nx21 tensor
-        s0 : first order element of dt
-        b  : gradient matrix
-
-        Outputs
-        -------
-        extended moments: dt fit from regression
-        """
-
-        SNR = 100
-        sigma = 1 / SNR
-
-        maxb = 3
-        # grad_orig = self.grad
-        # grad_keep = self.grad[:,3] < maxb
-        # dwi = dwi[..., grad_keep]
-        
-        dwi[dwi<=0] = np.finfo(dwi.dtype).eps
-        D_apprSq = 1/(np.sum(dt[(0,3,5),:], axis=0)/3)**2
-        if not flag_dti == 'True':
-            dt[6:,:] = dt[6:,:] / np.tile(D_apprSq, (15,1))
-        dt = np.vstack((np.log(s0), dt))
-
-        # first identify and remove outliers in dt
-        if flag_dti == 'True':
-            outlier_range = (1, 99)
-            trace = [1,4,6]
-        else:
-            outlier_range = (5, 95)
-            trace = [1,4,6,7,10,12,17,19,21]
-          
-
-        outlier_inds = np.zeros((len(trace), dt.shape[1]))
-        for i in range(len(trace)):
-            outlier_inds[i,:] = dt[trace[i], :] < -0.2
-        non_negative_trace = (1 - outlier_inds).all(axis=0)
-        dt_ = dt[:, non_negative_trace]
-
-        outlier_inds = np.zeros_like(dt_)
-        for i in range(dt.shape[0]):
-            outlier_inds[i,:] = self.identify_outliers(dt_[i,:], (3, 99))
-        non_outlier_voxels = (1 - outlier_inds).all(axis=0)
-
-        # interpolate non outliers in dt for more training data
-        train_size = 400000
-        dt_init = dt_[:, non_outlier_voxels]
-        scale_fact = train_size / dt_init.shape[1]
-
-        #scale_fact = int(np.ceil(.5e6 / dt_init.shape[1]))
-        dt_interp_init = zoom(dt_init, (1, scale_fact))
-           
-        # # set up training (zeroing diagnoal W elements)
-        # train_size = 400000
-        # id_non_outliers = np.random.permutation(train_size)
-        # dt_train = np.zeros((dt.shape[0], train_size))
-        # #inds_exclude = np.array([9,10,12,14,15,16,17,19,21]) - 1
-        # for id in range(dt.shape[0]):
-        #     #if np.any(id == inds_exclude):
-        #     #    dt_train[id,:] = 0
-        #     #else:
-        #     dt_train[id,:] = np.real((dt_interp_init[id, id_non_outliers]) * 1.0)
-
-
-        dt_train = dt_interp_init.copy()
-        dt_train[0,:] = -1 * np.random.exponential(0.707, (1,train_size))
-        #dt_train[0,:] = np.random.uniform(0,1,(1, train_size)) * 2
-        s_training = np.exp(b @ dt_train).T
-        s_training += np.abs(sigma *
-                        (np.random.standard_normal(s_training.shape) + 
-                        1j*np.random.standard_normal(s_training.shape)))
-        
-
-        # compress the training data for speed
-        npars = 15
-        x = np.log(s_training)
-        #u,s,v = np.linalg.svd((x - x.mean()) / x.std(), full_matrices=False)
-        #reduced_dim = v[:,npars:]
-        data_training = x #@ reduced_dim
-
-        # polynomial regression
-        order_poly_fit = 1
-        x_moments = self.compute_extended_moments(data_training, order_poly_fit)
-        pinv_x = np.linalg.pinv(x_moments)
-        
-        coeffs_dt = np.zeros((x_moments.shape[1], dt.shape[0]))
-        for i in range(dt.shape[0]):
-            coeffs_dt[:,i] = pinv_x @ dt_train[i,:].T
-
-        # apply the trained coefficients to the original data
-        data_testing = np.log(vectorize(dwi, mask) / s0).T #@ reduced_dim
-        x_moments_test = self.compute_extended_moments(data_testing, order_poly_fit)
-        dt_poly = np.zeros_like(dt)
-        #dt_poly_train = np.zeros_like(dt_train)
-        for i in range(dt.shape[0]):
-            kn = x_moments_test @ coeffs_dt[:,i]
-            kn[kn < np.min(dt_train[i,:])] = np.min(dt_train[i,:])
-            kn[kn > np.max(dt_train[i,:])] = np.max(dt_train[i,:])
-            dt_poly[i,:] = kn
-            #dt_poly_train[i,:] = x_moments @ coeffs_dt[:,i]
-
-        # import matplotlib.pyplot as plt
-        # plt.plot(dt_train[1,:],dt_poly_train[1,:],'o'); 
-        # plt.xlim([-3,3])
-        # plt.ylim([-3,3])
-        # # fig, ax = plt.subplots(7,1)
-        # # for i in range(dt.shape[0]):
-        # #     ax[i].plot(dt_train[i,:], dt_poly_train[i,:],'o')
-            
-        # plt.show()
-        # import pdb; pdb.set_trace()
-
-        dt_poly[~np.isfinite(dt_poly)] = 0
-        s0_poly = dt_poly[0,:]
-        dt_poly = dt_poly[1:,:]
-        D_apprSq = 1/(np.sum(dt_poly[(0,3,5),:], axis=0)/3)**2
-        if not flag_dti == 'True':
-            dt_poly[6:,:] = dt_poly[6:,:] * np.tile(D_apprSq, (15,1))
-
-        return dt_poly
-    
     def create_dw_tensors(self, dt, order):
         """
         Function to take vectorized diffusion tensor (no s0) and generate 3x3xN D tensor
@@ -615,7 +487,7 @@ class TensorFitting(object):
                 dt[2,:], dt[4,:], dt[5,:])
                 ) ,(3, 3, dt.shape[1])) #.transpose(2,0,1)
             
-            WT = None
+            WT = np.zeros((3,3,3,3,dt.shape[1]))
         
         if order == 4:
             DD = np.reshape(np.concatenate(
@@ -638,6 +510,41 @@ class TensorFitting(object):
                 ) ,(3, 3, 3, 3, dt.shape[1])) #.transpose(4,0,1,2,3)
             
         return DD, WT 
+    
+    def rotation_matrix(self, axis, theta):
+        """
+        Return the rotation matrix associated with counterclockwise rotation about
+        the given axis by theta radians.
+        """
+        axis = np.asarray(axis)
+        axis = axis / np.linalg.norm(axis)
+        a = np.cos(theta / 2.0)
+        b, c, d = -axis * np.sin(theta / 2.0)
+        aa, bb, cc, dd = a * a, b * b, c * c, d * d
+        bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+        return np.array([
+            [aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
+            [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+            [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]
+        ])
+
+    def compute_rotation_matrices(self, n_rotations):
+        golden_angle = np.pi * (3 - np.sqrt(5))
+        indices = np.arange(n_rotations)
+        theta = golden_angle * indices  # azimuthal angle
+        phi = np.arccos(1 - 2*(indices + 0.5)/n_rotations)  # polar angle
+
+        # Convert spherical to Cartesian coordinates
+        x = np.sin(phi) * np.cos(theta)
+        y = np.sin(phi) * np.sin(theta)
+        z = np.cos(phi)
+        
+        axes = np.vstack((x, y, z)).T
+
+        # Compute rotation matrices
+        rotation_matrices = np.array([self.rotation_matrix(axis, 2 * np.pi / n_rotations) for axis in axes])
+
+        return rotation_matrices
 
     
     def train_rotated_bayes_fit(self, dwi, dt, s0, b, mask, flag_dti='False'):
@@ -689,33 +596,21 @@ class TensorFitting(object):
         n_coeffs = dt.shape[0]
         n_rotations = 10
 
-        H = np.random.standard_normal((n_rotations,3,3))
-        H = (H + H.transpose(0,2,1))/2
-        (Evalues, Evec) = np.linalg.eig(H)
+        Evec = self.compute_rotation_matrices(n_rotations)
         Evec[0,:,:] = np.eye(3)
         dtx = np.zeros((n_coeffs, n_brain_voxels, n_rotations))
-        #Dx = np.einsum('ilj,klm,inj->iknm', Evec, DD, Evec)
+
+        # H = np.random.standard_normal((n_rotations,3,3))
+        # H = (H + H.transpose(0,2,1))/2
+        # (Evalues, Evec) = np.linalg.eig(H)
+        # Evec[0,:,:] = np.eye(3)
+        # dtx = np.zeros((n_coeffs, n_brain_voxels, n_rotations))
+        # #Dx = np.einsum('ilj,klm,inj->iknm', Evec, DD, Evec)
 
         print('rotations!!')
-        for rot in range(n_rotations):
-            R = Evec[rot,:,:]
-  
-            #Dx = (R @ (DD @ R.T)).transpose(1,2,0)
-            Dx = np.einsum('ab...,ac...,bd...->cd...', 
-                 DD, R, R)
-            dtx[:6, :, rot] = np.vstack((Dx[0,0,:], Dx[0,1,:], Dx[0,2,:], Dx[1,1,:], Dx[1,2,:], Dx[2,2,:]))
-
-            if not (flag_dti == 'True'):
-                #Wx = (R @ (WT @ R.T)).transpose(1,2,3,4,0).reshape(9,9,n_brain_voxels)
-                Wx = np.einsum('abcd...,ae,bf,cg,dh->efgh...', 
-                    WT, R, R, R, R
-                    ).reshape(9,9,n_brain_voxels, order='F')
-                dtx[6:, :, rot] = np.vstack((Wx[0,0,:], Wx[0,1,:], Wx[0,2,:], Wx[0,4,:], Wx[0,5,:], 
-                                             Wx[0,8,:], Wx[1,4,:], Wx[1,5,:], Wx[1,8,:], Wx[6,8,:],
-                                             Wx[4,4,:], Wx[4,5,:], Wx[4,8,:], Wx[5,8,:], Wx[8,8,:])) 
-                
         n_rotated_voxels = n_brain_voxels * n_rotations
-        dtx = dtx.reshape(n_coeffs, n_rotated_voxels)        
+        dtx = compute_rotations(n_coeffs, Evec, DD, WT, n_rotations, n_brain_voxels, flag_dti) 
+
         
         outlier_inds = np.zeros((len(trace), n_rotated_voxels))
         for i in range(len(trace)):
@@ -729,7 +624,7 @@ class TensorFitting(object):
         non_outlier_voxels = (1 - outlier_inds).all(axis=0)
 
         # interpolate non outliers in dt for more training data
-        train_size = 400000 * n_rotations
+        train_size = 100000 * n_rotations
         dt_init = dt_[:, non_outlier_voxels]
         scale_fact = train_size / dt_init.shape[1]
 
@@ -749,21 +644,12 @@ class TensorFitting(object):
 
 
         dt_train = dt_interp_init.copy()
-        
+        dt_train = np.vstack((
+                -1 * np.random.exponential(0.707, (1,train_size)),
+                dt_train))
         # dt_train[0,:] = -1 * np.random.exponential(0.707, (1,train_size))
         #dt_train[0,:] = np.random.uniform(0,1,(1, train_size)) * 2
-
-        # ivim stuff
-        dt_train = np.vstack((
-            np.random.uniform(0,1,(1, train_size)) * 3,
-            dt_train))
-        
-        f_pri = np.random.uniform(0,1,(1, train_size)) * 0.6
-        D_pri = np.random.uniform(0,1,(1, train_size)) * 200 + 3
-        
-        bval = self.grad[:,-1]
-        s_training = dt_train[:,0] * ((1-f_pri) * np.exp(b @ dt_train).T +
-                                      f_pri * np.exp(-bval * D_pri))
+        s_training = np.exp(b @ dt_train).T
         s_training += np.abs(sigma *
                         (np.random.standard_normal(s_training.shape) + 
                         1j*np.random.standard_normal(s_training.shape)))
@@ -785,7 +671,7 @@ class TensorFitting(object):
         # plt.show()
         # import pdb; pdb.set_trace()
         
-        print('PR')
+        #print('PR')
         # compress the training data for speed
         npars = 15
         x = np.log(s_training)
@@ -806,13 +692,14 @@ class TensorFitting(object):
         dwi = gaussian_filter(dwi, sigma=(0.425,.425,.425,0), truncate=2)
         data_testing = np.log(vectorize(dwi, mask) / s0).T #@ reduced_dim
         x_moments_test = self.compute_extended_moments(data_testing, order_poly_fit)
-        dt_poly = np.zeros((dt_train.shape[0], n_brain_voxels))
-        #dt_poly_train = np.zeros_like(dt_train)
-        for i in range(dt_train.shape[0]):
-            kn = x_moments_test @ coeffs_dt[:,i]
-            kn[kn < np.min(dt_train[i,:])] = np.min(dt_train[i,:])
-            kn[kn > np.max(dt_train[i,:])] = np.max(dt_train[i,:])
-            dt_poly[i,:] = kn
+        dt_poly = (x_moments_test @ coeffs_dt).T
+
+        # Find the minimum and maximum values for each row in dt_train
+        min_vals = np.min(dt_train, axis=1)
+        max_vals = np.max(dt_train, axis=1)
+
+        # Use broadcasting to clip the values in dt_poly
+        dt_poly = np.clip(dt_poly, min_vals[:,np.newaxis], max_vals[:,np.newaxis])
             #dt_poly_train[i,:] = x_moments @ coeffs_dt[:,i]
 
         # import matplotlib.pyplot as plt
@@ -834,3 +721,39 @@ class TensorFitting(object):
             dt_poly[6:,:] *= np.tile(D_apprSq, (15,1))
 
         return dt_poly
+    
+from numba import njit, prange
+
+@njit(parallel=True, fastmath=True)
+def compute_rotations(n_coeffs, Evec, DD, WT, n_rotations, n_brain_voxels, flag_fit_dti):
+    dtx = np.zeros((n_coeffs, n_brain_voxels, n_rotations))
+
+    for rot in prange(n_rotations):
+        R = Evec[rot, :, :]
+
+        Dx = np.zeros((3, 3, DD.shape[2]))
+        for i in range(3):
+            for j in range(3):
+                for k in range(3):
+                    for l in range(3):
+                        Dx[i, j] += DD[k, l] * R[k, i] * R[l, j]
+
+        dtx[:6, :, rot] = np.vstack((Dx[0, 0, :], Dx[0, 1, :], Dx[0, 2, :], Dx[1, 1, :], Dx[1, 2, :], Dx[2, 2, :]))
+
+        if not flag_fit_dti == 'True':
+            Wx = np.zeros((9, 9, n_brain_voxels))
+            for i in range(3):
+                for j in range(3):
+                    for k in range(3):
+                        for l in range(3):
+                            for m in range(3):
+                                for n in range(3):
+                                    Wx[i * 3 + j, k * 3 + l] += WT[i, k, j, l] * R[i, m] * R[k, n] * R[j, m] * R[l, n]
+
+            dtx[6:, :, rot] = np.vstack((Wx[0, 0, :], Wx[0, 1, :], Wx[0, 2, :], Wx[0, 4, :], Wx[0, 5, :],
+                                         Wx[0, 8, :], Wx[1, 4, :], Wx[1, 5, :], Wx[1, 8, :], Wx[6, 8, :],
+                                         Wx[4, 4, :], Wx[4, 5, :], Wx[4, 8, :], Wx[5, 8, :], Wx[8, 8, :]))
+            
+    n_rotated_voxels = n_brain_voxels * n_rotations
+    dtx = dtx.reshape(n_coeffs, n_rotated_voxels) 
+    return dtx
