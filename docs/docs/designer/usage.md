@@ -209,7 +209,7 @@ The `-rician` method of correcting for bias is specific to data with SNR > 2. If
 
 ### `-normalize`
 - Normalize the DWI data such that all b=0 images have the same mean intensity.
-- Normalization is performed voxelwise by smoothing each b=0 image with a Gaussian kernel with $\sigma=3$, then recaling each b=0 image based on the ratio between it and the mean smoothed b=0 image.
+- Normalization is performed voxelwise by smoothing each b=0 image with a Gaussian kernel with $\sigma=3$, then rescaling each input series based on the ratio between its smoothed b=0 image and the mean smoothed b=0 image.
 - Particularly important for multiple input series, where there may be changes in scanner gain.
 
 ### `-b1correct`
