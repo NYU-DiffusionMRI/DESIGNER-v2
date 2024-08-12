@@ -11,7 +11,6 @@ from scipy.ndimage import zoom, gaussian_filter
 
 import multiprocessing
 import warnings
-warnings.filterwarnings("ignore")
 
 class TensorFitting(object):
 
@@ -204,6 +203,7 @@ class TensorFitting(object):
         fa = np.sqrt(1/2)*np.sqrt((l1-l2)**2+(l2-l3)**2+(l3-l1)**2)/np.sqrt(l1**2+l2**2+l3**2)
         #trace = vectorize(trace.T, mask)
         fe = np.abs(np.stack((fa*v1[:,:,:,0], fa*v1[:,:,:,1], fa*v1[:,:,:,2]), axis=3))
+
         
         parameters = {}
         if extract_dti:
@@ -254,6 +254,7 @@ class TensorFitting(object):
         Outputs S0 the true quantitative mean signal at zero gradient strength
         the gradient tensor b
         """
+        warnings.filterwarnings("ignore")
         # run the fit
         order = np.floor(np.log(np.abs(np.max(self.grad[:,-1])+1))/np.log(10))
         if order >= 2:
@@ -547,7 +548,7 @@ class TensorFitting(object):
         return rotation_matrices
 
     
-    def train_rotated_bayes_fit(self, dwi, dt, s0, b, mask, flag_dti='False'):
+    def train_rotated_bayes_fit(self, dwi, dt, s0, b, mask, flag_dti=False):
         """
         This function trains and evaluates a polynomial regression model to update
         a wlls fit without outlier voxels. 
@@ -567,19 +568,20 @@ class TensorFitting(object):
         SNR = 100
         sigma = 1 / SNR
 
-        maxb = 3
         # grad_orig = self.grad
         # grad_keep = self.grad[:,3] < maxb
         # dwi = dwi[..., grad_keep]
+
+        dt = dt.copy()
         
         np.maximum(dwi, np.finfo(dwi.dtype).eps, out=dwi)
 
         D_apprSq = 1/(np.sum(dt[(0,3,5),:], axis=0)/3)**2
-        if not flag_dti == 'True':
+        if not flag_dti:
             dt[6:,:] /= np.tile(D_apprSq, (15,1))
 
         # first identify and remove outliers in dt
-        if flag_dti == 'True':
+        if flag_dti:
             outlier_range = (1, 99)
             all_tinds = np.arange(6)
             trace = [0,3,5]
@@ -717,7 +719,7 @@ class TensorFitting(object):
         s0_poly = dt_poly[0,:]
         dt_poly = dt_poly[1:,:]
         D_apprSq = 1/(np.sum(dt_poly[(0,3,5),:], axis=0)/3)**2
-        if not flag_dti == 'True':
+        if not flag_dti:
             dt_poly[6:,:] *= np.tile(D_apprSq, (15,1))
 
         return dt_poly
@@ -740,7 +742,7 @@ def compute_rotations(n_coeffs, Evec, DD, WT, n_rotations, n_brain_voxels, flag_
 
         dtx[:6, :, rot] = np.vstack((Dx[0, 0, :], Dx[0, 1, :], Dx[0, 2, :], Dx[1, 1, :], Dx[1, 2, :], Dx[2, 2, :]))
 
-        if not flag_fit_dti == 'True':
+        if not flag_fit_dti:
             Wx = np.zeros((9, 9, n_brain_voxels))
             for i in range(3):
                 for j in range(3):

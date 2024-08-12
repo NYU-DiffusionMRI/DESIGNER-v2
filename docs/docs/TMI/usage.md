@@ -84,11 +84,21 @@ By default, if none of the below options are used, TMI will not estimate paramet
 - Path to noise map for SMI parameter estimation. Not required but recommended.
 - We recommend computing sigma prior to running `tmi` using `designer`.
 
+### `-lmax <lmax (0,2,4,6)>`
+- Value of L-max to use for SMI parameter estimation.
+- Reasonable values of L-max will be computed automatically if this option is not used.
+- L-max should be 0, 2, 4, or 6.
+
 ### `-bshape <beta1,beta2,...>`
 - Specify the b-shape used in the acquisition (comma separated list the same length as number of inputs).
 
 ### `-echo_time <TE1,TE2,...>`
 - Specify the echo time used in the acquisition (comma separated list the same length as number of inputs).
+
+### `-maxb <b-value>`
+- Specify the maxmimum b-value to use during DKI estimation. 
+- Units should be in ms/µm^2.
+- default maximum b-value for DKI estimation is 3.0 ms/µm^2
 
 ## Other options for TMI
 
