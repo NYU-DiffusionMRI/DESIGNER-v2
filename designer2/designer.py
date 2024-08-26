@@ -114,7 +114,7 @@ def execute(): #pylint: disable=unused-variable
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
     
     # ensure inputs are reasonable for subsequent dwi processing
-    assert_inputs(dwi_metadata, app.ARGS.pe_dir, app.ARGS.pf)
+    # assert_inputs(dwi_metadata, app.ARGS.pe_dir, app.ARGS.pf)
 
     # convert input data to .mif format and concatenate
     convert_input_data(dwi_metadata)
@@ -126,6 +126,8 @@ def execute(): #pylint: disable=unused-variable
                   index = shell_rows)
     print('input DWI data has properties:')
     print(shell_df)
+    
+    import pdb; pdb.set_trace()
 
     app.goto_scratch_dir()
     

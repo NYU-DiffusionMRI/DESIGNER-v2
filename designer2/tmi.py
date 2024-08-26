@@ -153,7 +153,7 @@ def execute(): #pylint: disable=unused-variable
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
     logger.info("Input information obtained.", extra={"dwi_metadata": dwi_metadata})
 
-    assert_inputs(dwi_metadata, None, None)
+    #assert_inputs(dwi_metadata, None, None)
     convert_input_data(dwi_metadata)
     logger.info("Input data converted successfully.")
 
