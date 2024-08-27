@@ -339,6 +339,9 @@ class MP(object):
         return signal, sigma, npars
 
     def process(self):
+        import warnings
+        warnings.filterwarnings("ignore")
+        
         sx, sy, sz, N = self.dwi.shape
         mask = np.ones((sx,sy,sz))
 

@@ -719,7 +719,7 @@ T *O;
 T *Oi;
 bool pf7_8 = fabs(yfact - 1) > 1e-6; // here yfact should be 1 (5/8) or 3 (7/8)
 bool fimag = (Ii != nullptr);
-printf("UnringScale: yfact = %f, pf7_8 =  %d, fimag =  %d\n",yfact,pf7_8,fimag);
+//printf("UnringScale: yfact = %f, pf7_8 =  %d, fimag =  %d\n",yfact,pf7_8,fimag);
 unsigned int i, nyy;
 if(pf7_8){ // 7/8
 nyy = (int)round(yfact*ny);    
@@ -914,6 +914,10 @@ py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array
     // Apply unringing
     int scale = 4;
     for (unsigned int i = 0; i < nz * ndwi; ++i) {
+        if (PyErr_CheckSignals() != 0) {
+            throw py::error_already_set();  // Raise the Python exception if a signal was received
+        }
+
         if (pfo == 1 || pfo == 3) { // Cases where ifact can be equal to pfo
             if (pfdimf) { // y
                 if (phase_flag) { // complex

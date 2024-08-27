@@ -355,8 +355,7 @@ def convert_input_data(dwi_metadata):
                 try:
                     pf_per_series.append(dwi_header.keyval()['PartialFourier'])
                 except:
-                    warnings.warn('No partial fourier factor found in header, assuming full sampling')
-                    pf_per_series.append(1)
+                    raise MRtrixError('No partial fourier factor found in header, please specify manually')
 
             if app.ARGS.pe_dir:
                 pe_dir_app = app.ARGS.pe_dir
@@ -364,6 +363,9 @@ def convert_input_data(dwi_metadata):
                 try:
                     ped_per_series_bids = dwi_header.keyval()['PhaseEncodingDirection']
                     if ped_per_series_bids != pe_dir_app:
+                        user_pe_dir = pe_dir
+                        bids_pe_dir = ped_per_series_bids
+                        print(f'user defined pe dir: {user_pe_dir}, bids pe dir: {bids_pe_dir}')
                         warnings.warn('User defined phase encoding direction does not match that found in bids json. Using user defined value')
                 except:
                     pass
@@ -380,6 +382,9 @@ def convert_input_data(dwi_metadata):
             try:
                 te_per_series_bids = np.round(float(dwi_header.keyval()['EchoTime']), 3)
                 if te_per_series_bids != te_app:
+                    user_te = te_app
+                    bids_te = te_per_series_bids
+                    print(f'user defined pe dir: {user_te}, bids pe dir: {bids_te}')
                     warnings.warn('User defined echo time does not match that found in bids json. Using user defined value')
             except:
                 pass
@@ -387,7 +392,7 @@ def convert_input_data(dwi_metadata):
             try:
                 te_per_series.append(np.round(float(dwi_header.keyval()['EchoTime']), 3)) 
             except:
-                warnings.warn('No echo time found in header, assuming 0 unless specifified by a .echotime file')
+                warnings.warn('... No echo time found in header, assuming 0 unless specifified by a .echotime file')
                 te_per_series.append(0)
 
     else:
@@ -437,8 +442,7 @@ def convert_input_data(dwi_metadata):
                     try:
                         pf_per_series.append(dwi_header.keyval()['PartialFourier'])
                     except:
-                        warnings.warn('No partial fourier factor found in header, assuming full sampling')
-                        pf_per_series.append(1)
+                        raise MRtrixError('No partial fourier factor found in header, please specify manually')
 
                 if app.ARGS.pe_dir:
                     pe_dir_app = app.ARGS.pe_dir
@@ -446,6 +450,9 @@ def convert_input_data(dwi_metadata):
                     try:
                         ped_per_series_bids = dwi_header.keyval()['PhaseEncodingDirection']
                         if ped_per_series_bids != pe_dir_app:
+                            user_pe_dir = pe_dir
+                            bids_pe_dir = ped_per_series_bids
+                            print(f'user defined pe dir: {user_pe_dir}, bids pe dir: {bids_pe_dir}')
                             warnings.warn('User defined phase encoding direction does not match that found in bids json. Using user defined value')
                     except:
                         pass
@@ -462,6 +469,9 @@ def convert_input_data(dwi_metadata):
                 try:
                     te_per_series_bids = np.round(float(dwi_header.keyval()['EchoTime']), 3)
                     if te_per_series_bids != te_app[idx]:
+                        user_te = te_app[idx]
+                        bids_te = te_per_series_bids
+                        print(f'user defined pe dir: {user_te}, bids pe dir: {bids_te}')
                         warnings.warn('User defined echo time does not match that found in bids json. Using user defined value')
                 except:
                     pass
@@ -469,7 +479,7 @@ def convert_input_data(dwi_metadata):
                 try:
                     te_per_series.append(np.round(float(dwi_header.keyval()['EchoTime']), 3))
                 except:
-                    warnings.warn('No echo time found in header, assuming 0 unless specified by a .echotime file')
+                    warnings.warn('... No echo time found in header, assuming 0 unless specified by a .echotime file')
                     te_per_series.append(0)
 
         DWImif = ' '.join(miflist)
@@ -491,16 +501,13 @@ def convert_input_data(dwi_metadata):
         raise MRtrixError('No phase files found or phases are in an incompatible format')
         
 
-    dwi_metadata['TE'] = te_per_series
-    dwi_metadata['pf'] = pf_per_series
-    dwi_metadata['pe_dir'] = ped_per_series
-
     if app.ARGS.bshape:
         bshape = [float(i) for i in app.ARGS.bshape.rsplit(',')]
     else:
         bshape = [1] * len(dwi_metadata['dwi_list'])
     dwi_metadata['bshape'] = bshape
     bshape_per_series = dwi_metadata['bshape']
+    dwi_metadata['TE'] = te_per_series
 
     if (len(set(te_per_series)) > 1) and (not app.ARGS.rpe_te):
         raise MRtrixError('If data has variable echo time and no RPE TE is specified, please use the -rpe_te flag to specify the RPE TE')
@@ -511,6 +518,12 @@ def convert_input_data(dwi_metadata):
     if not all(x == pf_per_series[0] for x in pf_per_series):
         raise MRtrixError('input series have different partial fourier factors,', +
                             'series should be processed separately')
+    
+    if caller == 'designer':
+        print('... partial fourier factors: %s' % pf_per_series)
+        print('... phase encoding directions: %s' % ped_per_series)
+        dwi_metadata['pf'] = pf_per_series[0]
+        dwi_metadata['pe_dir'] = ped_per_series[0]
 
     # get diffusion header info - check to make sure all values are valid for processing
     dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))
