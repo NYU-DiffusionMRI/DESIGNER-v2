@@ -164,12 +164,19 @@ def convert_pe_dir_to_ijk(args_pe_dir):
     return pe_dir_app
 
 def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
+    """
+    This function has been depreciated. Please use the convert_input_data function instead.
+    This function will be deleted after testing.
+    """
+
     import json
     from mrtrix3 import app, MRtrixError
     import numpy as np
+    
 
     bidslist = dwi_metadata['bidslist']
-    try:
+    # if bids files are provided, check that the user inputs match the bids files
+    try:        
         bids = [json.load(open(i)) for i in bidslist]
     
         TE_bids = []
@@ -248,8 +255,13 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
         pf = pf_bids
     else:
         pf = args_pf
-    
-    def convert_to_float(frac_str):
+
+    dwi_metadata['pe_dir'] = pe_dir
+    dwi_metadata['pf'] = convert_to_float(pf)
+    dwi_metadata['TE'] = TE
+    dwi_metadata['bshape'] = bshape
+
+def convert_to_float(frac_str):
         try:
             return float(frac_str)
         except ValueError:
@@ -262,11 +274,6 @@ def assert_inputs(dwi_metadata, args_pe_dir, args_pf):
             frac = float(num) / float(denom)
             return whole - frac if whole < 0 else whole + frac
 
-    dwi_metadata['pe_dir'] = pe_dir
-    dwi_metadata['pf'] = convert_to_float(pf)
-    dwi_metadata['TE'] = TE
-    dwi_metadata['bshape'] = bshape
-
 def convert_input_data(dwi_metadata):
     """
     convert input data to .mif mrtrix format
@@ -276,6 +283,10 @@ def convert_input_data(dwi_metadata):
     from mrtrix3 import run, image, MRtrixError, app
     import numpy as np
     import os
+    import warnings
+    import inspect
+
+    caller = os.path.basename(inspect.stack()[-1].filename)
 
     miflist = []
     phaselist = []
@@ -284,28 +295,43 @@ def convert_input_data(dwi_metadata):
     bshapelist = []
     dwi_ind_size = [[0,0,0,0]]
 
+    te_per_series = []
+    pf_per_series = []
+    ped_per_series = []
+
     dwi_n_list = dwi_metadata['dwi_list']
     isdicom = dwi_metadata['isdicom']
     bveclist = dwi_metadata['bvecs']
     bvallist = dwi_metadata['bvals']
     dwi_ext = dwi_metadata['dwi_ext']
-    te_per_series = dwi_metadata['TE']
-    bshape_per_series = dwi_metadata['bshape']
     phase_n_list = dwi_metadata['phase_list']
     phase_ext = dwi_metadata['phase_ext']
     bshapelist_input = dwi_metadata['bshapelist']
     telist_input = dwi_metadata['telist']
+    bidslist = dwi_metadata['bidslist']
 
     if len(dwi_n_list) == 1:
         if not isdicom:
             if os.path.exists(bvallist[0]):
-                cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi.mif' % 
-                    (bveclist[0], bvallist[0], ''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
-                run.command(cmd)
+                if os.path.exists(bidslist[0]):
+                    cmd = ('mrconvert -fslgrad %s %s -json_import %s %s%s %s/dwi.mif' % 
+                        (bveclist[0], bvallist[0], bidslist[0],''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+                    run.command(cmd)
+                else:
+                    print('... no bids files identified')
+                    cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi.mif' % 
+                        (bveclist[0], bvallist[0], ''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+                    run.command(cmd)
             elif ~os.path.exists(bvallist[0]) and ('.mif' in ''.join(dwi_ext)):
-                cmd = ('mrconvert %s%s %s/dwi.mif' % 
-                    (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
-                run.command(cmd)
+                if os.path.exists(bidslist[0]):
+                    cmd = ('mrconvert %s%s -json_import %s %s/dwi.mif' % 
+                        (''.join(dwi_n_list), ''.join(dwi_ext), bidslist[0], app.SCRATCH_DIR))
+                    run.command(cmd)
+                else:
+                    print('... no bids files identified')
+                    cmd = ('mrconvert %s%s %s/dwi.mif' % 
+                        (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
+                    run.command(cmd)
             else:
                 raise MRtrixError('please make sure that inputs are either .nii files accompanied by corresponding .bval and .bvec files, or a .mif file with embedded gradient information')
         else:
@@ -314,18 +340,84 @@ def convert_input_data(dwi_metadata):
             run.command(cmd)
         dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))
         dwi_ind_size.append([ int(s) for s in dwi_header.size() ])
+        
+        if caller == 'designer':
+            if app.ARGS.pf:
+                pf_per_series_app = convert_to_float(app.ARGS.pf)
+                try:
+                    pf_per_series_bids = dwi_header.keyval()['PartialFourier']
+                    if pf_per_series_app != pf_per_series_bids:
+                        warnings.warn('User defined partial fourier factor does not match that found in bids json. Using user defined value')
+                except:
+                    pass
+                pf_per_series.append(pf_per_series_app)
+            else:
+                try:
+                    pf_per_series.append(dwi_header.keyval()['PartialFourier'])
+                except:
+                    raise MRtrixError('No partial fourier factor found in header, please specify manually')
+
+            if app.ARGS.pe_dir:
+                pe_dir_app = app.ARGS.pe_dir
+                pe_dir = convert_pe_dir_to_ijk(pe_dir_app)
+                try:
+                    ped_per_series_bids = dwi_header.keyval()['PhaseEncodingDirection']
+                    if ped_per_series_bids != pe_dir_app:
+                        user_pe_dir = pe_dir
+                        bids_pe_dir = ped_per_series_bids
+                        print(f'user defined pe dir: {user_pe_dir}, bids pe dir: {bids_pe_dir}')
+                        warnings.warn('User defined phase encoding direction does not match that found in bids json. Using user defined value')
+                except:
+                    pass
+                ped_per_series.append(pe_dir)
+            else:
+                try:
+                    ped_per_series.append(dwi_header.keyval()['PhaseEncodingDirection'])
+                except:
+                    raise MRtrixError('No phase encoding direction found in header, please specify manually')
+
+        if app.ARGS.echo_time:
+            te_app = np.round(float(app.ARGS.echo_time), 3)
+            te_per_series.append(te_app)
+            try:
+                te_per_series_bids = np.round(float(dwi_header.keyval()['EchoTime']), 3)
+                if te_per_series_bids != te_app:
+                    user_te = te_app
+                    bids_te = te_per_series_bids
+                    print(f'user defined pe dir: {user_te}, bids pe dir: {bids_te}')
+                    warnings.warn('User defined echo time does not match that found in bids json. Using user defined value')
+            except:
+                pass
+        else:   
+            try:
+                te_per_series.append(np.round(float(dwi_header.keyval()['EchoTime']), 3)) 
+            except:
+                warnings.warn('... No echo time found in header, assuming 0 unless specifified by a .echotime file')
+                te_per_series.append(0)
 
     else:
         for idx,i in enumerate(dwi_n_list):
             if not isdicom:
                 if os.path.exists(bvallist[idx]):
-                    cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi%s.mif' % 
-                        (bveclist[idx], bvallist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
-                    run.command(cmd)
+                    if os.path.exists(bidslist[idx]):
+                        cmd = ('mrconvert -fslgrad %s %s -json_import %s %s%s %s/dwi%s.mif' % 
+                            (bveclist[idx], bvallist[idx], bidslist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                        run.command(cmd)
+                    else:
+                        print('... no bids files identified for %s' % i)
+                        cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi%s.mif' % 
+                            (bveclist[idx], bvallist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                        run.command(cmd)
                 elif ~os.path.exists(bvallist[idx]) and ('.mif' in dwi_ext[idx]):
-                    cmd = ('mrconvert %s%s %s/dwi%s.mif' % 
-                        (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
-                    run.command(cmd)
+                    if os.path.exists(bidslist[idx]):
+                        cmd = ('mrconvert %s%s -json_import %s %s/dwi%s.mif' % 
+                            (i, dwi_ext[idx], bidslist[idx], app.SCRATCH_DIR, str(idx)))
+                        run.command(cmd)
+                    else:
+                        print('... no bids files identified for %s' % i)
+                        cmd = ('mrconvert %s%s %s/dwi%s.mif' % 
+                            (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                        run.command(cmd)
                 else:
                     raise MRtrixError('please make sure that inputs are either .nii files accompanied by corresponding .bval and .bvec files, or a .mif file with embedded gradient information')
             else:
@@ -335,6 +427,60 @@ def convert_input_data(dwi_metadata):
             dwi_header = image.Header('%s/dwi%s.mif' % (app.SCRATCH_DIR, str(idx)))
             dwi_ind_size.append([ int(s) for s in dwi_header.size() ])
             miflist.append('%s/dwi%s.mif' % (app.SCRATCH_DIR, str(idx)))
+            
+            if caller == 'designer':
+                if app.ARGS.pf:
+                    pf_per_series_app = convert_to_float(app.ARGS.pf)
+                    try:
+                        pf_per_series_bids = dwi_header.keyval()['PartialFourier']
+                        if pf_per_series_app != pf_per_series_bids:
+                            warnings.warn('User defined partial fourier factor does not match that found in bids json. Using user defined value')
+                    except:
+                        pass
+                    pf_per_series.append(pf_per_series_app)
+                else:
+                    try:
+                        pf_per_series.append(dwi_header.keyval()['PartialFourier'])
+                    except:
+                        raise MRtrixError('No partial fourier factor found in header, please specify manually')
+
+                if app.ARGS.pe_dir:
+                    pe_dir_app = app.ARGS.pe_dir
+                    pe_dir = convert_pe_dir_to_ijk(pe_dir_app)
+                    try:
+                        ped_per_series_bids = dwi_header.keyval()['PhaseEncodingDirection']
+                        if ped_per_series_bids != pe_dir_app:
+                            user_pe_dir = pe_dir
+                            bids_pe_dir = ped_per_series_bids
+                            print(f'user defined pe dir: {user_pe_dir}, bids pe dir: {bids_pe_dir}')
+                            warnings.warn('User defined phase encoding direction does not match that found in bids json. Using user defined value')
+                    except:
+                        pass
+                    ped_per_series.append(pe_dir)
+                else:
+                    try:
+                        ped_per_series.append(dwi_header.keyval()['PhaseEncodingDirection'])
+                    except:
+                        raise MRtrixError('No phase encoding direction found in header, please specify manually')
+
+            if app.ARGS.echo_time:
+                te_app = [np.round(float(i), 3) for i in app.ARGS.echo_time.rsplit(',')]
+                te_per_series.append(te_app[idx])
+                try:
+                    te_per_series_bids = np.round(float(dwi_header.keyval()['EchoTime']), 3)
+                    if te_per_series_bids != te_app[idx]:
+                        user_te = te_app[idx]
+                        bids_te = te_per_series_bids
+                        print(f'user defined pe dir: {user_te}, bids pe dir: {bids_te}')
+                        warnings.warn('User defined echo time does not match that found in bids json. Using user defined value')
+                except:
+                    pass
+            else:   
+                try:
+                    te_per_series.append(np.round(float(dwi_header.keyval()['EchoTime']), 3))
+                except:
+                    warnings.warn('... No echo time found in header, assuming 0 unless specified by a .echotime file')
+                    te_per_series.append(0)
 
         DWImif = ' '.join(miflist)
         cmd = ('mrcat -axis 3 %s %s/dwi.mif' % (DWImif, app.SCRATCH_DIR))
@@ -348,12 +494,36 @@ def convert_input_data(dwi_metadata):
             else:
                 for idx,i in enumerate(phase_n_list):
                     run.command('mrconvert %s%s %s/phase%s.nii' % 
-                                (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
+                                (i, phase_ext[idx], app.SCRATCH_DIR, str(idx)))
                     phaselist.append('%s/phase%s.nii' % (app.SCRATCH_DIR, str(idx)))
                 run.command('mrcat -axis 3 %s %s/phase.nii' % (' '.join(phaselist), app.SCRATCH_DIR))
     except:
         raise MRtrixError('No phase files found or phases are in an incompatible format')
         
+
+    if app.ARGS.bshape:
+        bshape = [float(i) for i in app.ARGS.bshape.rsplit(',')]
+    else:
+        bshape = [1] * len(dwi_metadata['dwi_list'])
+    dwi_metadata['bshape'] = bshape
+    bshape_per_series = dwi_metadata['bshape']
+    dwi_metadata['TE'] = te_per_series
+
+    if (len(set(te_per_series)) > 1) and (not app.ARGS.rpe_te):
+        raise MRtrixError('If data has variable echo time and no RPE TE is specified, please use the -rpe_te flag to specify the RPE TE')
+
+    if not all(x == ped_per_series[0] for x in ped_per_series):
+        raise MRtrixError('input series have different phase encoding directions, series should be processed separately')
+    
+    if not all(x == pf_per_series[0] for x in pf_per_series):
+        raise MRtrixError('input series have different partial fourier factors,', +
+                            'series should be processed separately')
+    
+    if caller == 'designer':
+        print('... partial fourier factors: %s' % pf_per_series)
+        print('... phase encoding directions: %s' % ped_per_series)
+        dwi_metadata['pf'] = pf_per_series[0]
+        dwi_metadata['pe_dir'] = ped_per_series[0]
 
     # get diffusion header info - check to make sure all values are valid for processing
     dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))

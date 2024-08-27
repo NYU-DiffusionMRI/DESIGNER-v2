@@ -278,6 +278,8 @@ class MP(object):
 
     def process(self):
         from joblib import Parallel, delayed
+        import warnings
+        warnings.filterwarnings("ignore")
         
         num_patches = self.temp.shape[0]
         num_vols = self.dwi.shape[1]

@@ -860,7 +860,7 @@ class SMI(object):
         if not self.flag_compartments[2]:
             f_fw = np.zeros((n_training, 1))
         else:
-            f_fw = self.prior[:,[5]]
+            f_fw = self.prior[:,[4]]
 
         if not self.flag_compartments[1]:
             f = 1 - f_fw
@@ -890,7 +890,6 @@ class SMI(object):
                 kernel_params[:,[8]] * abs(k2_all), 
                 kernel_params[:,[9]] * abs(k4_all),
                 kernel_params[:,[10]] * abs(k6_all)))
-
         return rot_invs
 
     def standard_model_mlfit_rot_invs(self, rot_invs, sigma_norm_limits):
