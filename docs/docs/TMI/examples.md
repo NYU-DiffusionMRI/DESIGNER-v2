@@ -113,10 +113,6 @@ nyudiffusionmri/designer2:<tag> tmi \
 
 The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/mnt`). The host_path contains the input series `dwi.mif`. The following is an example that calls tmi and will extract DKI maps with outlier correction and nonlocal means smoothing:
 ```
-pa=/mnt/rpe_b0.nii
-dwi=/mnt/dwi.nii
-dwi_out=/mnt/dwi_designer.nii
-
 singularity run --bind /path/to/folder/with/dataset:/mnt \
 designer2_<tag>.sif tmi \
 -DKI -akc_outliers -fit_smoothing 10 /mnt/dwi.mif /data/parameters
