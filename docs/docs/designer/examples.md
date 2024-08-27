@@ -84,6 +84,70 @@ In this case, eddy is run 6 separate times, for each unique echo-time b-shape co
 
 ---
 
+## Docker example
+
+`docker run -it` will take you inside a container. You can add `-v` to attach your data to the container for processing. Use `-v host_path:container_path` to mount your folder (host_path) to a specified path inside the container (container_path). 
+
+The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/data`). The host_path contains the input series `dwi.nii` with its bvec (`dwi.bvec`),  bval (`dwi.bvec`), and json (`dwi.json` containing PF factor, PE dir, and TE) along with reverse phase-encoding b=0 image (`rpe_b0.nii`). The following is an example that calls designer and will process the data using the recommended designer pipeline:
+```
+pa=/data/rpe_b0.nii
+dwi=/data/dwi.nii
+dwi_out=/data/dwi_designer.nii
+
+docker run -it -v /path/to/folder/with/dataset:/data \
+nyudiffusionmri/designer2:<tag> designer \
+-denoise -shrinkage frob -adaptive_patch -rician \
+-degibbs \
+-eddy -rpe_pair $pa \
+-normalize -mask \
+-scratch /data/processing -nocleanup \
+$dwi $dwi_out
+```
+
+---
+
+## Singularity example
+
+`singularity run` will run a Singularity container. `--bind` allows you to attach your data to the container for processing. Use `--bind host_path:container_path` to mount your folder (host_path) to a specified path inside the container (container_path). 
+
+The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/mnt`). The host_path contains the input series `dwi.nii` with its bvec (`dwi.bvec`),  bval (`dwi.bvec`), and json (`dwi.json` containing PF factor, PE dir, and TE) along with reverse phase-encoding b=0 image (`rpe_b0.nii`). The following is an example that calls designer and will process the data using the recommended designer pipeline:
+```
+pa=/mnt/rpe_b0.nii
+dwi=/mnt/dwi.nii
+dwi_out=/mnt/dwi_designer.nii
+
+singularity run --bind /path/to/folder/with/dataset:/mnt \
+designer2_<tag>.sif designer \
+-denoise -shrinkage frob -adaptive_patch -rician \
+-degibbs \
+-eddy -rpe_pair $pa \
+-normalize -mask \
+-scratch /mnt/processing -nocleanup \
+$dwi $dwi_out
+```
+
+If you're running this on a machine that uses GPU and CUDA, you can include `-nv` to use eddy_cuda. The following is an example that will use eddy_cuda when running on a GPU node on a HPC server:
+```
+module load singularity/3.9.8
+module load cuda/11.8
+
+pa=/mnt/rpe_b0.nii
+dwi=/mnt/dwi.nii
+dwi_out=/mnt/dwi_designer.nii
+
+singularity run --nv --bind /path/to/folder/with/dataset:/mnt \
+designer2_<tag>.sif designer \
+-denoise -shrinkage frob -adaptive_patch -rician \
+-degibbs \
+-eddy -rpe_pair $pa \
+-normalize -mask \
+-scratch /mnt/processing -nocleanup \
+$dwi $dwi_out
+```
+This is compatible with CUDA versions 9.1 to 11.8. Other versions have not been tested.
+
+---
+
 ## General recommended usage
 
 In general, we recommend running designer using the `-nocleanup` option and the `-mask` option turned on. This way, certain files that are useful for subsequent processing are retained. These include the brain mask generated after eddy current correction and the noisemap generated during denoising. For users intending to run TMI to estimate parametric maps after running Designer, these images are useful inputs.

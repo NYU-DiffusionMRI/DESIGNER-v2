@@ -93,3 +93,33 @@ tmi \
 -scratch tmi_processing_lte -nocleanup \
 dwi.mif parameters
 ```
+
+## Docker example
+
+`docker run -it` will take you inside a container. You can add `-v` to attach your data to the container for processing. Use `-v host_path:container_path` to mount your folder (host_path) to a specified path inside the container (container_path). 
+
+The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/data`). The host_path contains the input series `dwi.mif`. The following is an example that calls tmi and will extract DKI maps with outlier correction and nonlocal means smoothing:
+```
+docker run -it -v /path/to/folder/with/dataset:/data \
+nyudiffusionmri/designer2:<tag> tmi \
+-DKI -akc_outliers -fit_smoothing 10 /data/dwi.mif /data/parameters
+```
+
+---
+
+## Singularity example
+
+`singularity run` will run a Singularity container. `--bind` allows you to attach your data to the container for processing. Use `--bind host_path:container_path` to mount your folder (host_path) to a specified path inside the container (container_path). 
+
+The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/mnt`). The host_path contains the input series `dwi.mif`. The following is an example that calls tmi and will extract DKI maps with outlier correction and nonlocal means smoothing:
+```
+pa=/mnt/rpe_b0.nii
+dwi=/mnt/dwi.nii
+dwi_out=/mnt/dwi_designer.nii
+
+singularity run --bind /path/to/folder/with/dataset:/mnt \
+designer2_<tag>.sif tmi \
+-DKI -akc_outliers -fit_smoothing 10 /mnt/dwi.mif /data/parameters
+```
+
+---
