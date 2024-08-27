@@ -126,8 +126,6 @@ def execute(): #pylint: disable=unused-variable
                   index = shell_rows)
     print('input DWI data has properties:')
     print(shell_df)
-    
-    import pdb; pdb.set_trace()
 
     app.goto_scratch_dir()
     

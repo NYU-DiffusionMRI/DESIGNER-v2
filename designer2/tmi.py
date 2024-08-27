@@ -109,7 +109,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasts, by default designer will use available cores - 2', default=-3)
     options.add_argument('-echo_time',metavar=('<TE1,TE2,...>'),help='specify the echo time used in the acquisition (comma separated list the same length as number of inputs)')
     options.add_argument('-bshape',metavar=('<beta1,beta2,...>'),help='specify the b-shape used in the acquisition (comma separated list the same length as number of inputs)')
-
+    
     dki_options = cmdline.add_argument_group('tensor options for the TMI script')
     dki_options.add_argument('-DKI', action='store_true', help='Include DKI parameters in output folder (mk,ak,rk)')
     dki_options.add_argument('-DTI', action='store_true', help='Include DTI parameters in output folder (md,ad,rd,fa,eigenvalues, eigenvectors')
@@ -581,13 +581,19 @@ def execute(): #pylint: disable=unused-variable
             logger.info("No lmax specified for SMI. Using default.")
 
         logger.info("Initializing SMI fitting...")
+        echo_times = dwi_metadata['echo_time_per_volume']
+        if np.max(echo_times) > 1.0:
+            logger.info("Echo times in ms, converting to seconds.")
+            echo_times /= 1000
+
         if multi_te_beta:
             smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax)
             smi.set_compartments(compartments)
-            smi.set_echotime(dwi_metadata['echo_time_per_volume'])
+            
+            smi.set_echotime(echo_times)
             smi.set_bshape(dwi_metadata['bshape_per_volume'])
             logger.info("SMI model initialized for multi-TE/beta data.")
-
+            
             params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
             logger.info("SMI fitting completed for multi-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})
             
@@ -596,7 +602,7 @@ def execute(): #pylint: disable=unused-variable
         else:
             smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax)
             smi.set_compartments(compartments)
-            smi.set_echotime(dwi_metadata['echo_time_per_volume'])
+            smi.set_echotime(echo_times)
             smi.set_bshape(dwi_metadata['bshape_per_volume'])
             logger.info("SMI model initialized for single-TE/beta data.")
 
