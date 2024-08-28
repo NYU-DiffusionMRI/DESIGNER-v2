@@ -41,14 +41,18 @@ class SMI(object):
         self.rotinv_lmax = rotinv_lmax
         self.n_training = int(n_training)
 
+        # set up required inputs
         self.set_compartments(compartments)
+        self.set_bvals_bvecs(bval, bvec)
+        self.set_bshape(beta)
+        self.set_echotime(echo_time)
 
         if not l_max_training:
             self.l_max_training = 6
         else:
             self.l_max_training = l_max_training
         
-        if training_bounds is not None and training_prior is not None:
+        if (training_bounds is not None) and (training_prior is not None):
             self.prior = training_prior
             if not self.fit_T2:
                 self.prior = np.hstack(
@@ -74,11 +78,6 @@ class SMI(object):
             np.random.seed(self.seed)
         else:
             self.seed = None
-
-        # set up required inputs
-        self.set_bvals_bvecs(bval, bvec)
-        self.set_bshape(beta)
-        self.set_echotime(echo_time)
 
     def set_mask(self, mask):
         """
@@ -290,9 +289,9 @@ class SMI(object):
         for i in range(len(dims) - 1):
             dim = dims[i]
             dim_next = dims[i + 1]
-            px = self.l2norm(plm[dim:(dim+dim_next+1), :])
+            px = self.l2norm(plm[dim+1:(dim+dim_next+1), :])
             prior = np.vstack((prior, px))
-
+        
         return prior.T
 
     def vectorize(self, image, mask):
