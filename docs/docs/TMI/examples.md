@@ -115,7 +115,7 @@ The below example mounts the host_path (`/path/to/folder/with/dataset`) to the c
 ```
 singularity run --bind /path/to/folder/with/dataset:/mnt \
 designer2_<tag>.sif tmi \
--DKI -akc_outliers -fit_smoothing 10 /mnt/dwi.mif /data/parameters
+-DKI -akc_outliers -fit_smoothing 10 /mnt/dwi.mif /mnt/parameters
 ```
 
 ---
