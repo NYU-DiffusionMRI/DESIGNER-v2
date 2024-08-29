@@ -73,6 +73,9 @@ class SMI(object):
         elif noise_bias == 'rician':
             self.flag_rician_bias = True
 
+        if self.fit_T2:
+            self.n_training = int(2e5)
+
         if seed is not None:
             self.seed = seed
             np.random.seed(self.seed)

@@ -1,16 +1,26 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "Attach to Python Script",
             "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "/Users/benaron/Documents/DESIGNER-v2/lib",  // Update with your Python script directory
+                    "remoteRoot": "/path_to_your_python_script_on_remote_if_any"
+                }
+            ]
+        },
+        {
+            "name": "Debug Shell Script",
+            "type": "bashdb",
             "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": "${command:pickArgs}"
+            "program": "/Users/benaron/Documents/scripts/test_d2.sh",
         }
     ]
 }
