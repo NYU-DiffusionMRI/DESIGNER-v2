@@ -582,16 +582,15 @@ def execute(): #pylint: disable=unused-variable
 
         logger.info("Initializing SMI fitting...")
         echo_times = dwi_metadata['echo_time_per_volume']
-        if np.max(echo_times) > 1.0:
-            logger.info("Echo times in ms, converting to seconds.")
-            echo_times /= 1000
+        if (np.min(echo_times) < 1.0) and (np.min(echo_times) > 0):
+            logger.info("Echo times in s, converting to ms.")
+            echo_times *= 1000
 
         if multi_te_beta:
-            smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax)
-            smi.set_compartments(compartments)
+            smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
+                      compartments=compartments, echo_time=echo_times,
+                      beta=dwi_metadata['bshape_per_volume'])
             
-            smi.set_echotime(echo_times)
-            smi.set_bshape(dwi_metadata['bshape_per_volume'])
             logger.info("SMI model initialized for multi-TE/beta data.")
             
             params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
@@ -600,10 +599,10 @@ def execute(): #pylint: disable=unused-variable
             save_params(params_smi, nii, model='smi', outdir=outdir)
             logger.info("SMI parameters saved for multi-TE/beta data.", extra={"outdir": outdir})
         else:
-            smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax)
-            smi.set_compartments(compartments)
-            smi.set_echotime(echo_times)
-            smi.set_bshape(dwi_metadata['bshape_per_volume'])
+            smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
+                      compartments=compartments, echo_time=echo_times,
+                      beta=dwi_metadata['bshape_per_volume'])
+            
             logger.info("SMI model initialized for single-TE/beta data.")
 
             params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
