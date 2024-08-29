@@ -94,28 +94,42 @@ jobs:
       - name: Build x86_64 wheel
         env:
           ARCHFLAGS: "-arch x86_64"
+          CFLAGS: "-arch x86_64"
+          LDFLAGS: "-arch x86_64"
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
-          mkdir -p $GITHUB_WORKSPACE/dist
+          mkdir -p $GITHUB_WORKSPACE/dist/x86_64
           python setup.py bdist_wheel
+          mv dist/*.whl $GITHUB_WORKSPACE/dist/x86_64/
       - name: Repair x86_64 wheel
         run: |
           pip install delocate
-          delocate-wheel dist/*-macosx_11_0_x86_64.whl
+          delocate-wheel $GITHUB_WORKSPACE/dist/x86_64/*.whl
       - name: Build arm64 wheel
         env:
           ARCHFLAGS: "-arch arm64"
+          CFLAGS: "-arch arm64"
+          LDFLAGS: "-arch arm64"
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
+          mkdir -p $GITHUB_WORKSPACE/dist/arm64
           python setup.py bdist_wheel
+          mv dist/*.whl $GITHUB_WORKSPACE/dist/arm64/
       - name: Repair arm64 wheel
         run: |
-          delocate-wheel dist/*-macosx_11_0_arm64.whl
+          delocate-wheel dist/*.whl
       - name: Verify repaired wheels
         run: |
-          ls -al $GITHUB_WORKSPACE/dist/
-      - name: Upload to PyPI
+          ls -al $GITHUB_WORKSPACE/dist/x86_64/
+          ls -al $GITHUB_WORKSPACE/dist/arm64/
+      - name: Upload x86_64 wheel to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages_dir: dist
+          packages_dir: $GITHUB_WORKSPACE/dist/x86_64
+          password: ${{ secrets.PYPI_API_TOKEN }}
+  
+      - name: Upload arm64 wheel to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages_dir: $GITHUB_WORKSPACE/dist/arm64
           password: ${{ secrets.PYPI_API_TOKEN }}
