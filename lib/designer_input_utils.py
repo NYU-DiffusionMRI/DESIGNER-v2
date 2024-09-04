@@ -314,28 +314,28 @@ def convert_input_data(dwi_metadata):
         if not isdicom:
             if os.path.exists(bvallist[0]):
                 if os.path.exists(bidslist[0]):
-                    cmd = ('mrconvert -fslgrad %s %s -json_import %s %s%s %s/dwi.mif' % 
+                    cmd = ('mrconvert -strides -1,+2,+3,+4 -fslgrad %s %s -json_import %s %s%s %s/dwi.mif' % 
                         (bveclist[0], bvallist[0], bidslist[0],''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
                     run.command(cmd)
                 else:
                     print('... no bids files identified')
-                    cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi.mif' % 
+                    cmd = ('mrconvert -strides -1,+2,+3,+4 -fslgrad %s %s %s%s %s/dwi.mif' % 
                         (bveclist[0], bvallist[0], ''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
                     run.command(cmd)
             elif ~os.path.exists(bvallist[0]) and ('.mif' in ''.join(dwi_ext)):
                 if os.path.exists(bidslist[0]):
-                    cmd = ('mrconvert %s%s -json_import %s %s/dwi.mif' % 
+                    cmd = ('mrconvert -strides -1,+2,+3,+4 %s%s -json_import %s %s/dwi.mif' % 
                         (''.join(dwi_n_list), ''.join(dwi_ext), bidslist[0], app.SCRATCH_DIR))
                     run.command(cmd)
                 else:
                     print('... no bids files identified')
-                    cmd = ('mrconvert %s%s %s/dwi.mif' % 
+                    cmd = ('mrconvert -strides -1,+2,+3,+4 %s%s %s/dwi.mif' % 
                         (''.join(dwi_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
                     run.command(cmd)
             else:
                 raise MRtrixError('please make sure that inputs are either .nii files accompanied by corresponding .bval and .bvec files, or a .mif file with embedded gradient information')
         else:
-            cmd = ('mrconvert %s %s/dwi.mif' %
+            cmd = ('mrconvert -strides -1,+2,+3,+4 %s %s/dwi.mif' %
                 (''.join(dwi_n_list), app.SCRATCH_DIR))
             run.command(cmd)
         dwi_header = image.Header('%s/dwi.mif' % (app.SCRATCH_DIR))
@@ -400,28 +400,28 @@ def convert_input_data(dwi_metadata):
             if not isdicom:
                 if os.path.exists(bvallist[idx]):
                     if os.path.exists(bidslist[idx]):
-                        cmd = ('mrconvert -fslgrad %s %s -json_import %s %s%s %s/dwi%s.mif' % 
+                        cmd = ('mrconvert -strides -1,+2,+3,+4 -fslgrad %s %s -json_import %s %s%s %s/dwi%s.mif' % 
                             (bveclist[idx], bvallist[idx], bidslist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
                         run.command(cmd)
                     else:
                         print('... no bids files identified for %s' % i)
-                        cmd = ('mrconvert -fslgrad %s %s %s%s %s/dwi%s.mif' % 
+                        cmd = ('mrconvert -strides -1,+2,+3,+4 -fslgrad %s %s %s%s %s/dwi%s.mif' % 
                             (bveclist[idx], bvallist[idx], i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
                         run.command(cmd)
                 elif ~os.path.exists(bvallist[idx]) and ('.mif' in dwi_ext[idx]):
                     if os.path.exists(bidslist[idx]):
-                        cmd = ('mrconvert %s%s -json_import %s %s/dwi%s.mif' % 
+                        cmd = ('mrconvert -strides -1,+2,+3,+4 %s%s -json_import %s %s/dwi%s.mif' % 
                             (i, dwi_ext[idx], bidslist[idx], app.SCRATCH_DIR, str(idx)))
                         run.command(cmd)
                     else:
                         print('... no bids files identified for %s' % i)
-                        cmd = ('mrconvert %s%s %s/dwi%s.mif' % 
+                        cmd = ('mrconvert -strides -1,+2,+3,+4 %s%s %s/dwi%s.mif' % 
                             (i, dwi_ext[idx], app.SCRATCH_DIR, str(idx)))
                         run.command(cmd)
                 else:
                     raise MRtrixError('please make sure that inputs are either .nii files accompanied by corresponding .bval and .bvec files, or a .mif file with embedded gradient information')
             else:
-                cmd = ('mrconvert %s %s/dwi%s.mif' %
+                cmd = ('mrconvert -strides -1,+2,+3,+4 %s %s/dwi%s.mif' %
                 (i, app.SCRATCH_DIR, str(idx)))
                 run.command(cmd)
             dwi_header = image.Header('%s/dwi%s.mif' % (app.SCRATCH_DIR, str(idx)))
@@ -483,20 +483,20 @@ def convert_input_data(dwi_metadata):
                     te_per_series.append(0)
 
         DWImif = ' '.join(miflist)
-        cmd = ('mrcat -axis 3 %s %s/dwi.mif' % (DWImif, app.SCRATCH_DIR))
+        cmd = ('mrcat -axis 3 %s - | mrconvert -strides -1,+2,+3,+4 - %s/dwi.mif' % (DWImif, app.SCRATCH_DIR))
         run.command(cmd)
 
     try:
         if phase_n_list:
             if len(phase_n_list) == 1:
-                run.command('mrconvert %s%s %s/phase.nii' % 
+                run.command('mrconvert -strides -1,+2,+3,+4 %s%s %s/phase.nii' % 
                             (''.join(phase_n_list), ''.join(dwi_ext), app.SCRATCH_DIR))
             else:
                 for idx,i in enumerate(phase_n_list):
-                    run.command('mrconvert %s%s %s/phase%s.nii' % 
+                    run.command('mrconvert -strides -1,+2,+3,+4 %s%s %s/phase%s.nii' % 
                                 (i, phase_ext[idx], app.SCRATCH_DIR, str(idx)))
                     phaselist.append('%s/phase%s.nii' % (app.SCRATCH_DIR, str(idx)))
-                run.command('mrcat -axis 3 %s %s/phase.nii' % (' '.join(phaselist), app.SCRATCH_DIR))
+                run.command('mrcat -axis 3 %s - | mrconvert -strides -1,+2,+3,+4 - %s/phase.nii' % (' '.join(phaselist), app.SCRATCH_DIR))
     except:
         raise MRtrixError('No phase files found or phases are in an incompatible format')
         
@@ -571,7 +571,8 @@ def convert_input_data(dwi_metadata):
         raise MRtrixError('Number of lines in gradient table (%s) does not match input image (%s volumes); check your input data' % 
         (str(len(grad)), str(num_volumes)))
 
-    run.command('mrconvert %s/dwi.mif %s/working.mif' % (app.SCRATCH_DIR, app.SCRATCH_DIR), show=False)
+    run.command('mrconvert -strides -1,+2,+3,+4 -json_export %s/working.json %s/dwi.mif %s/working.mif' % 
+                (app.SCRATCH_DIR, app.SCRATCH_DIR, app.SCRATCH_DIR), show=False)
 
 def create_shell_table(dwi_metadata):
     from lib.smi import SMI

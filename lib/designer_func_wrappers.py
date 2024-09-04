@@ -403,6 +403,7 @@ def run_eddy(shell_table, dwi_metadata):
     start_time = time.time()
 
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+    run.command('mrconvert -force -json_import working.json working.mif working.mif', show=False)
 
     eddyopts = '" --cnr_maps --repol --data_is_shelled "'
 
@@ -488,10 +489,10 @@ def run_eddy(shell_table, dwi_metadata):
 
                 rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert -coord 3 0 -fslgrad %s %s -json_import %s %s %s' % 
+                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 -fslgrad %s %s -json_import %s %s %s' % 
                         (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.mif')))
                 else: 
-                    run.command('mrconvert -fslgrad %s %s -json_import %s %s %s' % 
+                    run.command('mrconvert -strides -1,+2,+3 -fslgrad %s %s -json_import %s %s %s' % 
                         (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.mif')))
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
                 run.command('mrconvert rpe_b0.mif rpe_b0.nii')
@@ -504,10 +505,10 @@ def run_eddy(shell_table, dwi_metadata):
 
                 rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert -coord 3 0 %s %s' % 
+                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 %s %s' % 
                         (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
                 else: 
-                    run.command('mrconvert %s %s' % 
+                    run.command('mrconvert -strides -1,+2,+3 %s %s' % 
                         (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
             
             # extract brain from mean b0
@@ -640,7 +641,7 @@ def run_eddy(shell_table, dwi_metadata):
             elif app.ARGS.rpe_all:
                 ### this needs to be changed for realistic compatiblity to eddy_groups
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
-                run.command('mrconvert -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif', show=False)
+                run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
                 run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir %s %s %s' %
                     (eddyopts, 
@@ -690,10 +691,10 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
                 rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert %s -coord 3 0  -fslgrad %s %s -json_import %s b0rpe.mif' % 
+                    run.command('mrconvert %s -coord 3 0 -strides -1,+2,+3 -fslgrad %s %s -json_import %s b0rpe.mif' % 
                             (path.from_user(app.ARGS.rpe_pair),rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
                 else: 
-                    run.command('mrconvert %s -fslgrad %s %s -json_import %s b0rpe.mif' % 
+                    run.command('mrconvert %s -fslgrad %s %s -strides -1,+2,+3 -json_import %s b0rpe.mif' % 
                             (path.from_user(app.ARGS.rpe_pair), rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
                 
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
@@ -710,9 +711,9 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
                 rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert %s -coord 3 0 b0rpe.nii' % (path.from_user(app.ARGS.rpe_pair)))
+                    run.command('mrconvert %s -strides -1,+2,+3 -coord 3 0 b0rpe.nii' % (path.from_user(app.ARGS.rpe_pair)))
                 else: 
-                    run.command('mrconvert %s b0rpe.nii' % (path.from_user(app.ARGS.rpe_pair)))
+                    run.command('mrconvert -strides -1,+2,+3 %s b0rpe.nii' % (path.from_user(app.ARGS.rpe_pair)))
 
                 acqp = np.zeros((2,3))
                 if 'i' in pe_dir: acqp[:,0] = 1
@@ -815,7 +816,7 @@ def run_eddy(shell_table, dwi_metadata):
             rpe_bids_path = rpe_fpath + '.json'
             
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('mrconvert -grad grad.txt -json_import %s %s dwirpe.mif' % (rpe_bids_path,path.from_user(app.ARGS.rpe_all)))
+                run.command('mrconvert -grad grad.txt -strides -1,+2,+3,+4 -json_import %s %s dwirpe.mif' % (rpe_bids_path,path.from_user(app.ARGS.rpe_all)))
                 run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -839,7 +840,7 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
 
-            run.command('mrconvert -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif')
+            run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif')
             run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
             run.command('flirt -in b0rpe.nii -ref b0pe.mif -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
