@@ -473,23 +473,48 @@ def run_eddy(shell_table, dwi_metadata):
                 raise MRtrixError('echo time of reverse phase encoding image does not\
                                   match any of the input echo times, please check.')
 
-            # extract b0s of dwi matching te of PA image
-            run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean %s -axis 3' %
-                (dwi_metadata['idxlist'][id_dwi_match_pa],
-                path.to_scratch('pe_original_meanb0.nii')),
-                show=False)
+            bidslist = dwi_metadata['bidslist']
+            rpe_fpath = splitext_(path.from_user(app.ARGS.rpe_pair))[0]
+            rpe_bids_path = rpe_fpath + '.json'
+            rpe_bvals_path = rpe_fpath + '.bval'
+            rpe_bvec_path = rpe_fpath + '.bvec'
+
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                # extract b0s of dwi matching te of PA image
+                run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean %s -axis 3' %
+                    (dwi_metadata['idxlist'][id_dwi_match_pa],
+                    path.to_scratch('pe_original_meanb0.mif')),
+                    show=False)
+
+                rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert -coord 3 0 -fslgrad %s %s -json_import %s %s %s' % 
+                        (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.mif')))
+                else: 
+                    run.command('mrconvert -fslgrad %s %s -json_import %s %s %s' % 
+                        (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.mif')))
+                run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
+                run.command('mrconvert rpe_b0.mif rpe_b0.nii')
+            else:
+                # extract b0s of dwi matching te of PA image
+                run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean %s -axis 3' %
+                    (dwi_metadata['idxlist'][id_dwi_match_pa],
+                    path.to_scratch('pe_original_meanb0.nii')),
+                    show=False)
+
+                rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert -coord 3 0 %s %s' % 
+                        (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
+                else: 
+                    run.command('mrconvert %s %s' % 
+                        (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
+            
             # extract brain from mean b0
             run.command('bet %s %s -f 0.2 -m' %
                 (path.to_scratch('pe_original_meanb0.nii'), 
                 path.to_scratch('pe_original_brain')))
-
-            rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
-            if len(rpe_size) == 4:
-                run.command('mrconvert -coord 3 0 %s %s' % 
-                    (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
-            else: 
-                run.command('mrconvert %s %s' % 
-                    (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
+            
             run.command('bet %s %s -f 0.20' % 
                 (path.to_scratch('rpe_b0.nii'), path.to_scratch('rpe_b0_brain')))
 
@@ -542,18 +567,27 @@ def run_eddy(shell_table, dwi_metadata):
                     path.to_scratch('rpe_to_ref_' + str(i) + fsl_suffix),
                     path.to_scratch('b0_pair_topup_' + str(i) + '.nii')))
 
-                acqp = np.zeros((2,3))
-                if 'i' in pe_dir: acqp[:,0] = 1
-                if 'j' in pe_dir: acqp[:,1] = 1
-                if 'k' in pe_dir: acqp[:,2] = 1
-                if '-' in pe_dir:
-                    acqp[0,:] = -acqp[0,:]
+                if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                    run.command('mrinfo pe_original_meanb0.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
+                    run.command('mrinfo rpe_b0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                    filenames = ['topup_config_1.txt', 'topup_config_2.txt']
+                    with open('topup_acqp.txt', 'w') as outfile:
+                        for fname in filenames:
+                            with open(fname) as infile:
+                                outfile.write(infile.read())
                 else:
-                    acqp[1,:] = -acqp[1,:]
-                
-                acqp[acqp==-0] = 0
-                acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-                np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+                    acqp = np.zeros((2,3))
+                    if 'i' in pe_dir: acqp[:,0] = 1
+                    if 'j' in pe_dir: acqp[:,1] = 1
+                    if 'k' in pe_dir: acqp[:,2] = 1
+                    if '-' in pe_dir:
+                        acqp[0,:] = -acqp[0,:]
+                    else:
+                        acqp[1,:] = -acqp[1,:]
+                    
+                    acqp[acqp==-0] = 0
+                    acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+                    np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
 
                 # if any of the image dims are odd dont subsample during topup
                 odd_dims = [ int(s) for s in image.Header(path.to_scratch('pe_to_ref_' + str(i) + fsl_suffix)).size()[:3] if s % 2 ]
@@ -646,28 +680,55 @@ def run_eddy(shell_table, dwi_metadata):
     else:
 
         if app.ARGS.rpe_pair:
+            bidslist = dwi_metadata['bidslist']
+            rpe_fpath = splitext_(path.from_user(app.ARGS.rpe_pair))[0]
+            rpe_bids_path = rpe_fpath + '.json'
+            rpe_bvals_path = rpe_fpath + '.bval'
+            rpe_bvec_path = rpe_fpath + '.bvec'
+            
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
+                rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert %s -coord 3 0  -fslgrad %s %s -json_import %s b0rpe.mif' % 
+                            (path.from_user(app.ARGS.rpe_pair),rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
+                else: 
+                    run.command('mrconvert %s -fslgrad %s %s -json_import %s b0rpe.mif' % 
+                            (path.from_user(app.ARGS.rpe_pair), rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
+                
+                run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
+                run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                filenames = ['topup_config_1.txt', 'topup_config_2.txt']
+                with open('topup_acqp.txt', 'w') as outfile:
+                    for fname in filenames:
+                        with open(fname) as infile:
+                            outfile.write(infile.read())
 
-            run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
-            rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
-            if len(rpe_size) == 4:
-                run.command('mrconvert -coord 3 0 ' + path.from_user(app.ARGS.rpe_pair) + ' b0rpe.nii')
-            else: 
-                run.command('mrconvert ' + path.from_user(app.ARGS.rpe_pair) + ' b0rpe.nii')
+                run.command('mrconvert b0rpe.mif b0rpe.nii')
+                run.command('mrconvert b0pe.mif b0pe.nii')
+            else:
+                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
+                rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert %s -coord 3 0 b0rpe.nii' % (path.from_user(app.ARGS.rpe_pair)))
+                else: 
+                    run.command('mrconvert %s b0rpe.nii' % (path.from_user(app.ARGS.rpe_pair)))
+
+                acqp = np.zeros((2,3))
+                if 'i' in pe_dir: acqp[:,0] = 1
+                if 'j' in pe_dir: acqp[:,1] = 1
+                if 'k' in pe_dir: acqp[:,2] = 1
+                if '-' in pe_dir:
+                    acqp[0,:] = -acqp[0,:]
+                else:
+                    acqp[1,:] = -acqp[1,:]
+                    
+                acqp[acqp==-0] = 0
+                acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+                np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
- 
-            acqp = np.zeros((2,3))
-            if 'i' in pe_dir: acqp[:,0] = 1
-            if 'j' in pe_dir: acqp[:,1] = 1
-            if 'k' in pe_dir: acqp[:,2] = 1
-            if '-' in pe_dir:
-                acqp[0,:] = -acqp[0,:]
-            else:
-                acqp[1,:] = -acqp[1,:]
-                
-            acqp[acqp==-0] = 0
-            acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-            np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
 
             # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
             odd_dims = [ int(s) for s in image.Header(path.to_scratch('b0pe.nii')).size()[:3] if s % 2 ]
@@ -747,25 +808,41 @@ def run_eddy(shell_table, dwi_metadata):
         elif app.ARGS.rpe_all:
             # run an initial topup to create a brain mask
             run.command('mrconvert -export_grad_mrtrix grad.txt dwi.mif tmp.mif', show=False)
-            run.command('mrconvert -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif')
+            run.command('dwiextract -bzero working.mif - | mrconvert -coord 3 0 - b0pe.mif')
 
-            run.command('dwiextract -bzero working.mif - | mrconvert -coord 3 0 - b0pe.nii')
-            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
-            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
-            run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+            bidslist = dwi_metadata['bidslist']
+            rpe_fpath = splitext_(path.from_user(app.ARGS.rpe_all))[0]
+            rpe_bids_path = rpe_fpath + '.json'
             
-            acqp = np.zeros((2,3))
-            if 'i' in pe_dir: acqp[:,0] = 1
-            if 'j' in pe_dir: acqp[:,1] = 1
-            if 'k' in pe_dir: acqp[:,2] = 1
-            if '-' in pe_dir:
-                acqp[0,:] = -acqp[0,:]
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                run.command('mrconvert -grad grad.txt -json_import %s %s dwirpe.mif' % (rpe_bids_path,path.from_user(app.ARGS.rpe_all)))
+                run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
+                run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
+                run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                filenames = ['topup_config_1.txt', 'topup_config_2.txt']
+                with open('topup_acqp.txt', 'w') as outfile:
+                    for fname in filenames:
+                        with open(fname) as infile:
+                            outfile.write(infile.read())
+                run.command('mrconvert b0rpe.mif b0rpe.nii')
             else:
-                acqp[1,:] = -acqp[1,:]
-                
-            acqp[acqp==-0] = 0
-            acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-            np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+                acqp = np.zeros((2,3))
+                if 'i' in pe_dir: acqp[:,0] = 1
+                if 'j' in pe_dir: acqp[:,1] = 1
+                if 'k' in pe_dir: acqp[:,2] = 1
+                if '-' in pe_dir:
+                    acqp[0,:] = -acqp[0,:]
+                else:
+                    acqp[1,:] = -acqp[1,:]
+                    
+                acqp[acqp==-0] = 0
+                acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+                np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+
+            run.command('mrconvert -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif')
+            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
+            run.command('flirt -in b0rpe.nii -ref b0pe.mif -dof 6 -out b0rpe2pe.nii.gz')
+            run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
 
             # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
             odd_dims = [ int(s) for s in image.Header(path.to_scratch('b0pe.nii')).size()[:3] if s % 2 ]
