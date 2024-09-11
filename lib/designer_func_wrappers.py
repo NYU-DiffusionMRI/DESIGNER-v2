@@ -217,8 +217,8 @@ def group_alignment(group_list):
     # 1) find the longest series and extract the b0
     group_len = []
     for i in range(len(group_list)):
-        std = run.command('mrinfo -size %s' %
-                          (path.to_scratch(group_list[i])
+        std = run.command('mrinfo -size "%s"' %
+                          (group_list[i]
                            ), show=False)
         group_len.append([int(j) for j in std[0].strip().split(' ')][-1])
     longest_series = np.argmax(group_len)
@@ -230,13 +230,13 @@ def group_alignment(group_list):
 
     # For each group: Register b0 ref PE and b0 RPE to the b0 and run topup + eddy
     for i in range(len(group_list)):
-        run.command('dwiextract -force -bzero %s - | mrmath - mean %s -axis 3 -force' %
-                    (path.to_scratch(group_list[i]), 
-                    path.to_scratch('b0_align_series_' + str(i) + '.nii')),
+        run.command('dwiextract -force -bzero "%s" - | mrmath - mean "%s" -axis 3 -force' %
+                    (group_list[i], 
+                    'b0_align_series_' + str(i) + '.nii'),
                     show=False)
-        run.command('bet %s %s -f 0.2 -m' %
-                    (path.to_scratch('b0_align_series_' + str(i) + '.nii'), 
-                    path.to_scratch('b0_align_series_' + str(i) + '_brain')),
+        run.command('bet "%s" "%s" -f 0.2 -m' %
+                    ('b0_align_series_' + str(i) + '.nii', 
+                    'b0_align_series_' + str(i) + '_brain'),
                     show=False)
 
     # 2) extract b0 images from all other series
@@ -245,34 +245,35 @@ def group_alignment(group_list):
             continue
         else:
             # 3) rigidly register all b0 images to the b0 from the longest series
-            run.command('flirt -in %s -ref %s -omat %s -dof 6' %
-                    (path.to_scratch('b0_align_series_' + str(i) + '_brain'),
-                    path.to_scratch('b0_align_series_' + str(longest_series) + '_brain'),
-                    path.to_scratch('b0_align_series_to_longest_series_' + str(i) + '.mat')),
+            run.command('flirt -in "%s" -ref "%s" -omat "%s" -dof 6' %
+                    ('b0_align_series_' + str(i) + '_brain',
+                    'b0_align_series_' + str(longest_series) + '_brain',
+                    'b0_align_series_to_longest_series_' + str(i) + '.mat'),
                     show=False)
-            run.command('transformconvert -force %s %s %s flirt_import %s' %
-                (path.to_scratch('b0_align_series_to_longest_series_' + str(i) + '.mat'),
-                path.to_scratch('b0_align_series_' + str(i) + '_brain' + fsl_suffix),
-                path.to_scratch('b0_align_series_' + str(longest_series) + '_brain' + fsl_suffix),
-                path.to_scratch('b0_align_series_scan' + str(i) + 'to_longest_series_mrtrix.txt')),
+            run.command('transformconvert -force "%s" "%s" "%s" flirt_import "%s"' %
+                ('b0_align_series_to_longest_series_' + str(i) + '.mat',
+                'b0_align_series_' + str(i) + '_brain' + fsl_suffix,
+                'b0_align_series_' + str(longest_series) + '_brain' + fsl_suffix,
+                'b0_align_series_scan' + str(i) + 'to_longest_series_mrtrix.txt'),
                 show=False)
-            run.command('mrtransform -force -linear %s -interp cubic %s %s' %
-                (path.to_scratch('b0_align_series_scan' + str(i) + 'to_longest_series_mrtrix.txt'),
-                path.to_scratch(group_list[i]),
-                path.to_scratch('dwi_align_series_' + str(i) + '_to_ref.mif')),
+            run.command('mrtransform -force -linear "%s" -interp cubic "%s" "%s"' %
+                ('b0_align_series_scan' + str(i) + 'to_longest_series_mrtrix.txt',
+                group_list[i],
+                'dwi_align_series_' + str(i) + '_to_ref.mif'),
                 show=False)
     
     # concatenate data in correct order
-    series_cat_all = ''
+    series_cat_all = []
     for i in range(len(group_list)):
         if i == longest_series:
-            series_to_cat = path.to_scratch(group_list[i])
+            series_cat_all.append(group_list[i])
         else:
-            series_to_cat = path.to_scratch('dwi_align_series_' + str(i) + '_to_ref.mif')
-        series_cat_all = series_cat_all + series_to_cat + ' '
+            series_to_cat = 'dwi_align_series_' + str(i) + '_to_ref.mif'
+            series_cat_all.append(series_to_cat)
+    SList = ' '.join(series_cat_all)
     run.command('mrcat -force %s %s' %
-                (series_cat_all,
-                path.to_scratch('dwi_align_series_aligned.mif')),
+                (SList,
+                'dwi_align_series_aligned.mif'),
                 show=False)
     run.command('mrconvert -force dwi_align_series_aligned.mif working.mif', show=False)
 
@@ -375,8 +376,8 @@ def run_pre_align(dwi_metadata):
     else:
         series_list = []
         for i in range(len(dwi_metadata['dwi_list'])):
-            run.command('mrconvert -coord 3 %s working.mif %s' % 
-                    (dwi_metadata['idxlist'][i], path.to_scratch('dwi_align_series_' + str(i) + '.mif')),
+            run.command('mrconvert -coord 3 "%s" working.mif "%s"' % 
+                    (dwi_metadata['idxlist'][i], 'dwi_align_series_' + str(i) + '.mif'),
                     show=False)
             series_list.append('dwi_align_series_' + str(i) + '.mif')
             
@@ -403,6 +404,7 @@ def run_eddy(shell_table, dwi_metadata):
     start_time = time.time()
 
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+    run.command('mrconvert -force -fslgrad working.bvec working.bval -json_import working.json working.nii working.mif', show=False)
 
     eddyopts = '" --cnr_maps --repol --data_is_shelled "'
 
@@ -445,7 +447,7 @@ def run_eddy(shell_table, dwi_metadata):
                 all_concatenated_bvecs = np.vstack((all_concatenated_bvecs, bvecs))
 
             fakeb_grad = np.hstack((all_concatenated_bvecs, fake_bvals[:, np.newaxis]))
-            np.savetxt(path.to_scratch('fakeb_grad.txt'), fakeb_grad, fmt='%0.8f')
+            np.savetxt('fakeb_grad.txt', fakeb_grad, fmt='%0.8f')
             print("Scaled b-values and concatenated b-vectors have been saved to fakeb_grad.txt")
         
          # get TE of the PA
@@ -453,7 +455,7 @@ def run_eddy(shell_table, dwi_metadata):
             if app.ARGS.rpe_te:
                 te_pa = float(app.ARGS.rpe_te)
             else:
-                pa_fpath = splitext_(path.from_user(app.ARGS.rpe_pair))[0]
+                pa_fpath = splitext_(app.ARGS.rpe_pair)[0]
                 pa_bids_path = pa_fpath + '.json'
                 if not os.path.exists(pa_bids_path):
                     raise MRtrixError('for variable TE data the RPE \
@@ -473,25 +475,50 @@ def run_eddy(shell_table, dwi_metadata):
                 raise MRtrixError('echo time of reverse phase encoding image does not\
                                   match any of the input echo times, please check.')
 
-            # extract b0s of dwi matching te of PA image
-            run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean %s -axis 3' %
-                (dwi_metadata['idxlist'][id_dwi_match_pa],
-                path.to_scratch('pe_original_meanb0.nii')),
-                show=False)
-            # extract brain from mean b0
-            run.command('bet %s %s -f 0.2 -m' %
-                (path.to_scratch('pe_original_meanb0.nii'), 
-                path.to_scratch('pe_original_brain')))
+            bidslist = dwi_metadata['bidslist']
+            rpe_fpath = splitext_(app.ARGS.rpe_pair)[0]
+            rpe_bids_path = rpe_fpath + '.json'
+            rpe_bvals_path = rpe_fpath + '.bval'
+            rpe_bvec_path = rpe_fpath + '.bvec'
 
-            rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
-            if len(rpe_size) == 4:
-                run.command('mrconvert -coord 3 0 %s %s' % 
-                    (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
-            else: 
-                run.command('mrconvert %s %s' % 
-                    (path.from_user(app.ARGS.rpe_pair), path.to_scratch('rpe_b0.nii')))
-            run.command('bet %s %s -f 0.20' % 
-                (path.to_scratch('rpe_b0.nii'), path.to_scratch('rpe_b0_brain')))
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                # extract b0s of dwi matching te of PA image
+                run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean "%s" -axis 3' %
+                    (dwi_metadata['idxlist'][id_dwi_match_pa],
+                    'pe_original_meanb0.mif'),
+                    show=False)
+
+                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 -fslgrad "%s" "%s" -json_import "%s" "%s" "%s"' % 
+                        (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                else: 
+                    run.command('mrconvert -strides -1,+2,+3 -fslgrad "%s" "%s" -json_import "%s" "%s" "%s"' % 
+                        (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
+                run.command('mrconvert rpe_b0.mif rpe_b0.nii')
+            else:
+                # extract b0s of dwi matching te of PA image
+                run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean "%s" -axis 3' %
+                    (dwi_metadata['idxlist'][id_dwi_match_pa],
+                    'pe_original_meanb0.nii'),
+                    show=False)
+
+                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 "%s" "%s"' % 
+                        (app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                else: 
+                    run.command('mrconvert -strides -1,+2,+3 "%s" "%s"' % 
+                        (app.ARGS.rpe_pair, 'rpe_b0.nii'))
+            
+            # extract brain from mean b0
+            run.command('bet "%s" "%s" -f 0.2 -m' %
+                ('pe_original_meanb0.nii', 
+                'pe_original_brain'))
+            
+            run.command('bet "%s" "%s" -f 0.20' % 
+                ('rpe_b0.nii', 'rpe_b0_brain'))
 
 
     if app.ARGS.eddy_groups:
@@ -514,124 +541,133 @@ def run_eddy(shell_table, dwi_metadata):
                 ginds.append(gindsi_str)
                 start += len(group_vol_inds[j])            
            
-            run.command('mrconvert -coord 3 %s working.mif %s' % 
+            run.command('mrconvert -coord 3 "%s" working.mif "%s"' % 
                 (volume_idx,
-                path.to_scratch('dwi_pre_eddy_' + str(i) + '.mif')),
+                'dwi_pre_eddy_' + str(i) + '.mif'),
                 show=False)
             
             if app.ARGS.rpe_pair:
-                run.command('dwiextract -bzero %s - | mrmath - mean %s -axis 3' %
-                    (path.to_scratch('dwi_pre_eddy_' + str(i) + '.mif'), 
-                    path.to_scratch('b0_pre_eddy_' + str(i) + '.nii')))
-                run.command('bet %s %s -f 0.2 -m' %
-                    (path.to_scratch('b0_pre_eddy_' + str(i) + '.nii'), 
-                    path.to_scratch('b0_pre_eddy_' + str(i) + '_brain')))
+                run.command('dwiextract -bzero "%s" - | mrmath - mean "%s" -axis 3' %
+                    ('dwi_pre_eddy_' + str(i) + '.mif', 
+                    'b0_pre_eddy_' + str(i) + '.nii'))
+                run.command('bet "%s" "%s" -f 0.2 -m' %
+                    ('b0_pre_eddy_' + str(i) + '.nii', 
+                    'b0_pre_eddy_' + str(i) + '_brain'))
 
-                run.command('flirt -in %s -ref %s -out %s -dof 6' %
-                    (path.to_scratch('rpe_b0_brain'),
-                    path.to_scratch('b0_pre_eddy_' + str(i) + '_brain'),
-                    path.to_scratch('rpe_to_ref_' + str(i))))
+                run.command('flirt -in "%s" -ref "%s" -out "%s" -dof 6' %
+                    ('rpe_b0_brain',
+                    'b0_pre_eddy_' + str(i) + '_brain',
+                    'rpe_to_ref_' + str(i)))
 
-                run.command('flirt -in %s -ref %s -out %s -dof 6' %
-                    (path.to_scratch('pe_original_brain' + fsl_suffix), 
-                    path.to_scratch('b0_pre_eddy_' + str(i) + '_brain'), 
-                    path.to_scratch('pe_to_ref_' + str(i))))
+                run.command('flirt -in "%s" -ref "%s" -out "%s" -dof 6' %
+                    ('pe_original_brain' + fsl_suffix, 
+                    'b0_pre_eddy_' + str(i) + '_brain', 
+                    'pe_to_ref_' + str(i)))
 
-                run.command('mrcat -force -axis 3 %s %s %s' %
-                    (path.to_scratch('pe_to_ref_' + str(i) + fsl_suffix),
-                    path.to_scratch('rpe_to_ref_' + str(i) + fsl_suffix),
-                    path.to_scratch('b0_pair_topup_' + str(i) + '.nii')))
+                run.command('mrcat -force -axis 3 "%s" "%s" "%s"' %
+                    ('pe_to_ref_' + str(i) + fsl_suffix,
+                    'rpe_to_ref_' + str(i) + fsl_suffix,
+                    'b0_pair_topup_' + str(i) + '.nii'))
 
-                acqp = np.zeros((2,3))
-                if 'i' in pe_dir: acqp[:,0] = 1
-                if 'j' in pe_dir: acqp[:,1] = 1
-                if 'k' in pe_dir: acqp[:,2] = 1
-                if '-' in pe_dir:
-                    acqp[0,:] = -acqp[0,:]
+                if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                    run.command('mrinfo pe_original_meanb0.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
+                    run.command('mrinfo rpe_b0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                    filenames = ['topup_config_1.txt', 'topup_config_2.txt']
+                    with open('topup_acqp.txt', 'w') as outfile:
+                        for fname in filenames:
+                            with open(fname) as infile:
+                                outfile.write(infile.read())
                 else:
-                    acqp[1,:] = -acqp[1,:]
-                
-                acqp[acqp==-0] = 0
-                acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-                np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+                    acqp = np.zeros((2,3))
+                    if 'i' in pe_dir: acqp[:,0] = 1
+                    if 'j' in pe_dir: acqp[:,1] = 1
+                    if 'k' in pe_dir: acqp[:,2] = 1
+                    if '-' in pe_dir:
+                        acqp[0,:] = -acqp[0,:]
+                    else:
+                        acqp[1,:] = -acqp[1,:]
+                    
+                    acqp[acqp==-0] = 0
+                    acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+                    np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
                 # if any of the image dims are odd dont subsample during topup
-                odd_dims = [ int(s) for s in image.Header(path.to_scratch('pe_to_ref_' + str(i) + fsl_suffix)).size()[:3] if s % 2 ]
+                odd_dims = [ int(s) for s in image.Header('pe_to_ref_' + str(i) + fsl_suffix).size()[:3] if s % 2 ]
                 if np.any(np.array(odd_dims)):
                     flag_no_subsampling = True
                 else:
                     flag_no_subsampling = False
 
                 if flag_no_subsampling:
-                    run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --subsamp=1 --scale=1 --out=%s --iout=%s' %
-                        (path.to_scratch('b0_pair_topup_' + str(i) + '.nii'),
-                        path.to_scratch('topup_acqp.txt'),
-                        path.to_scratch('topup_results_' + str(i)),
-                        path.to_scratch('topup_results_' + str(i) + fsl_suffix)))
+                    run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
+                        ('b0_pair_topup_' + str(i) + '.nii',
+                        'topup_acqp.txt',
+                        'topup_results_' + str(i),
+                        'topup_results_' + str(i) + fsl_suffix))
                 else:
-                    run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
-                        (path.to_scratch('b0_pair_topup_' + str(i) + '.nii'),
-                        path.to_scratch('topup_acqp.txt'),
-                        path.to_scratch('topup_results_' + str(i)),
-                        path.to_scratch('topup_results_' + str(i) + fsl_suffix)))
+                    run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
+                        ('b0_pair_topup_' + str(i) + '.nii',
+                        'topup_acqp.txt',
+                        'topup_results_' + str(i),
+                        'topup_results_' + str(i) + fsl_suffix))
                 
                 # mask the topup corrected image
-                run.command('mrmath %s mean %s -axis 3' %
-                            (path.to_scratch('topup_results_' + str(i) + fsl_suffix),
-                             path.to_scratch('topup_corrected_' + str(i) + '_mean.nii')
+                run.command('mrmath "%s" mean "%s" -axis 3' %
+                            ('topup_results_' + str(i) + fsl_suffix,
+                             'topup_corrected_' + str(i) + '_mean.nii'
                             ))
                  
-                run.command('bet %s %s -f 0.2 -m' %
-                    (path.to_scratch('topup_corrected_' + str(i) + '_mean.nii'), 
-                    path.to_scratch('topup_corrected_' + str(i) + '_brain')))
+                run.command('bet "%s" "%s" -f 0.2 -m' %
+                    ('topup_corrected_' + str(i) + '_mean.nii', 
+                    'topup_corrected_' + str(i) + '_brain'))
                 
-                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -topup_files %s -pe_dir %s %s %s' % 
-                    (path.to_scratch('eddy_processing_' + str(i)), 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
+                    ('eddy_processing_' + str(i), 
                     eddyopts, 
-                    path.to_scratch('topup_corrected_' + str(i) + '_brain_mask' + fsl_suffix),
-                    path.to_scratch('topup_results_' + str(i)),
+                    'topup_corrected_' + str(i) + '_brain_mask' + fsl_suffix,
+                    'topup_results_' + str(i),
                     pe_dir,
-                    path.to_scratch('dwi_pre_eddy_' + str(i) + '.mif'),
-                    path.to_scratch('dwi_post_eddy_' + str(i) + '.mif')))
+                    'dwi_pre_eddy_' + str(i) + '.mif',
+                    'dwi_post_eddy_' + str(i) + '.mif'))
                 
             elif app.ARGS.rpe_none:
 
-                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -pe_dir %s %s %s' % 
-                    (path.to_scratch('eddy_processing_' + str(i)), 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -pe_dir "%s" "%s" "%s"' % 
+                    ('eddy_processing_' + str(i), 
                     eddyopts, 
                     pe_dir,
-                    path.to_scratch('dwi_pre_eddy_' + str(i) + '.mif'),
-                    path.to_scratch('dwi_post_eddy_' + str(i) + '.mif')))
+                    'dwi_pre_eddy_' + str(i) + '.mif',
+                    'dwi_post_eddy_' + str(i) + '.mif'))
                 
             elif app.ARGS.rpe_all:
                 ### this needs to be changed for realistic compatiblity to eddy_groups
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
-                run.command('mrconvert -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif', show=False)
+                run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-                run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir %s %s %s' %
+                run.command('dwifslpreproc -nocleanup -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
                     (eddyopts, 
                      pe_dir, 
-                     path.to_scratch('dwi_pre_eddy_' + str(i) + '.mif'),
-                     path.to_scratch('dwi_post_eddy_' + str(i) + '.mif')))
+                     'dwi_pre_eddy_' + str(i) + '.mif',
+                     'dwi_post_eddy_' + str(i) + '.mif'))
                 run.function(os.remove,'tmp.mif')
 
             elif app.ARGS.rpe_header:
 
-                run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_header %s %s' % 
+                run.command('dwifslpreproc -nocleanup -eddy_options "%s" -rpe_header "%s" "%s"' % 
                 (eddyopts,
-                path.to_scratch('dwi_pre_eddy_' + str(i) + '.mif'),
-                path.to_scratch('dwi_post_eddy_' + str(i) + '.mif')))
+                'dwi_pre_eddy_' + str(i) + '.mif',
+                'dwi_post_eddy_' + str(i) + '.mif'))
 
-            run.command('dwiextract -bzero %s - | mrmath - mean %s -axis 3' %
-                    (path.to_scratch('dwi_post_eddy_' + str(i) + '.mif'), 
-                    path.to_scratch('b0_post_eddy_' + str(i) + '.nii')))
+            run.command('dwiextract -bzero "%s" - | mrmath - mean "%s" -axis 3' %
+                    ('dwi_post_eddy_' + str(i) + '.mif', 
+                    'b0_post_eddy_' + str(i) + '.nii'))
 
             # undo grouping:
             for j in range(len(group_idx)):
-                run.command('mrconvert -coord 3 %s %s %s' %
+                run.command('mrconvert -coord 3 "%s" "%s" "%s"' %
                             (ginds[j],
-                            path.to_scratch('dwi_post_eddy_' + str(i) + '.mif'),
-                            path.to_scratch('dwi_post_eddy_ungrouped_' + str(group_idx[j]) + '.mif')),
+                            'dwi_post_eddy_' + str(i) + '.mif',
+                            'dwi_post_eddy_ungrouped_' + str(group_idx[j]) + '.mif'),
                             show=False)
                 
         
@@ -646,170 +682,213 @@ def run_eddy(shell_table, dwi_metadata):
     else:
 
         if app.ARGS.rpe_pair:
+            bidslist = dwi_metadata['bidslist']
+            rpe_fpath = splitext_(app.ARGS.rpe_pair)[0]
+            rpe_bids_path = rpe_fpath + '.json'
+            rpe_bvals_path = rpe_fpath + '.bval'
+            rpe_bvec_path = rpe_fpath + '.bvec'
+            
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
+                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert "%s" -coord 3 0 -strides -1,+2,+3 -fslgrad "%s" "%s" -json_import "%s" b0rpe.mif' % 
+                            (app.ARGS.rpe_pair,rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
+                else: 
+                    run.command('mrconvert "%s" -fslgrad "%s" "%s" -strides -1,+2,+3 -json_import "%s" b0rpe.mif' % 
+                            (app.ARGS.rpe_pair, rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
+                
+                run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
+                run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                filenames = ['topup_config_1.txt', 'topup_config_2.txt']
+                with open('topup_acqp.txt', 'w') as outfile:
+                    for fname in filenames:
+                        with open(fname) as infile:
+                            outfile.write(infile.read())
 
-            run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
-            rpe_size = [ int(s) for s in image.Header(path.from_user(app.ARGS.rpe_pair)).size() ]
-            if len(rpe_size) == 4:
-                run.command('mrconvert -coord 3 0 ' + path.from_user(app.ARGS.rpe_pair) + ' b0rpe.nii')
-            else: 
-                run.command('mrconvert ' + path.from_user(app.ARGS.rpe_pair) + ' b0rpe.nii')
+                run.command('mrconvert b0rpe.mif b0rpe.nii')
+                run.command('mrconvert b0pe.mif b0pe.nii')
+            else:
+                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
+                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                if len(rpe_size) == 4:
+                    run.command('mrconvert "%s" -strides -1,+2,+3 -coord 3 0 b0rpe.nii' % (app.ARGS.rpe_pair))
+                else: 
+                    run.command('mrconvert -strides -1,+2,+3 "%s" b0rpe.nii' % (app.ARGS.rpe_pair))
+
+                acqp = np.zeros((2,3))
+                if 'i' in pe_dir: acqp[:,0] = 1
+                if 'j' in pe_dir: acqp[:,1] = 1
+                if 'k' in pe_dir: acqp[:,2] = 1
+                if '-' in pe_dir:
+                    acqp[0,:] = -acqp[0,:]
+                else:
+                    acqp[1,:] = -acqp[1,:]
+                    
+                acqp[acqp==-0] = 0
+                acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+                np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
+
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
- 
-            acqp = np.zeros((2,3))
-            if 'i' in pe_dir: acqp[:,0] = 1
-            if 'j' in pe_dir: acqp[:,1] = 1
-            if 'k' in pe_dir: acqp[:,2] = 1
-            if '-' in pe_dir:
-                acqp[0,:] = -acqp[0,:]
-            else:
-                acqp[1,:] = -acqp[1,:]
-                
-            acqp[acqp==-0] = 0
-            acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-            np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
 
             # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            odd_dims = [ int(s) for s in image.Header(path.to_scratch('b0pe.nii')).size()[:3] if s % 2 ]
+            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
             if np.any(np.array(odd_dims)):
                 flag_no_subsampling = True
             else:
                 flag_no_subsampling = False
 
             if flag_no_subsampling:
-                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --subsamp=1 --scale=1 --out=%s --iout=%s' %
-                    (path.to_scratch('b0_pair_topup.nii'),
-                    path.to_scratch('topup_acqp.txt'),
-                    path.to_scratch('topup_results'),
-                    path.to_scratch('topup_results' + fsl_suffix)))
+                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
+                    ('b0_pair_topup.nii',
+                    'topup_acqp.txt',
+                    'topup_results',
+                    'topup_results' + fsl_suffix))
             else:
-                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
-                    (path.to_scratch('b0_pair_topup.nii'),
-                    path.to_scratch('topup_acqp.txt'),
-                    path.to_scratch('topup_results'),
-                    path.to_scratch('topup_results' + fsl_suffix)))
+                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
+                    ('b0_pair_topup.nii',
+                    'topup_acqp.txt',
+                    'topup_results',
+                    'topup_results' + fsl_suffix))
                 
             # mask the topup corrected image
             run.command('mrmath %s mean %s -axis 3' %
-                        (path.to_scratch('topup_results' + fsl_suffix),
-                            path.to_scratch('topup_corrected_mean.nii')
+                        ('topup_results' + fsl_suffix,
+                            'topup_corrected_mean.nii'
                         ))
                  
             run.command('bet %s %s -f 0.2 -m' %
-                (path.to_scratch('topup_corrected_mean.nii'), 
-                path.to_scratch('topup_corrected_brain')))
+                ('topup_corrected_mean.nii', 
+                'topup_corrected_brain'))
             
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -topup_files %s -pe_dir %s %s %s' % 
-                        (path.to_scratch('eddy_processing'), 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
+                        ('eddy_processing', 
                         eddyopts, 
-                        path.to_scratch('topup_corrected_brain_mask' + fsl_suffix),
-                        path.to_scratch('topup_results'),
+                        'topup_corrected_brain_mask' + fsl_suffix,
+                        'topup_results',
                         pe_dir,
-                        path.to_scratch('working.mif'),
-                        path.to_scratch('dwiec.mif')))
+                        'working.mif',
+                        'dwiec.mif'))
             else:
-                run.command('dwifslpreproc -nocleanup -scratch %s -grad %s -eddy_options %s -rpe_none -eddy_mask %s -topup_files %s -pe_dir %s %s %s' % 
-                        (path.to_scratch('eddy_processing'),
-                        path.to_scratch('fakeb_grad.txt'), 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
+                        ('eddy_processing',
+                        'fakeb_grad.txt', 
                         eddyopts, 
-                        path.to_scratch('topup_corrected_brain_mask' + fsl_suffix),
-                        path.to_scratch('topup_results'),
+                        'topup_corrected_brain_mask' + fsl_suffix,
+                        'topup_results',
                         pe_dir,
-                        path.to_scratch('working.mif'),
-                        path.to_scratch('dwiec.mif')))
+                        'working.mif',
+                        'dwiec.mif'))
 
         elif app.ARGS.rpe_none:
 
             run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
             run.command('bet %s %s -f 0.2 -m' %
-                (path.to_scratch('b0pe.nii'), 
-                path.to_scratch('b0_pe_brain')))
+                ('b0pe.nii', 
+                'b0_pe_brain'))
             
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch %s -eddy_options %s -rpe_none -eddy_mask %s -pe_dir %s %s %s' % 
-                        (path.to_scratch('eddy_processing'), 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
+                        ('eddy_processing', 
                         eddyopts, 
-                        path.to_scratch('b0_pe_brain_mask' + fsl_suffix),
+                        'b0_pe_brain_mask' + fsl_suffix,
                         pe_dir,
-                        path.to_scratch('working.mif'),
-                        path.to_scratch('dwiec.mif')))
+                        'working.mif',
+                        'dwiec.mif'))
             else:
-                run.command('dwifslpreproc -nocleanup -scratch %s -grad %s -eddy_options %s -rpe_none -eddy_mask %s -pe_dir %s %s %s' % 
-                        (path.to_scratch('eddy_processing'), 
-                        path.to_scratch('fakeb_grad.txt'), 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
+                        ('eddy_processing', 
+                        'fakeb_grad.txt', 
                         eddyopts, 
-                        path.to_scratch('b0_pe_brain_mask' + fsl_suffix),
+                        'b0_pe_brain_mask' + fsl_suffix,
                         pe_dir,
-                        path.to_scratch('working.mif'),
-                        path.to_scratch('dwiec.mif')))
+                        'working.mif',
+                        'dwiec.mif'))
             
         elif app.ARGS.rpe_all:
             # run an initial topup to create a brain mask
             run.command('mrconvert -export_grad_mrtrix grad.txt dwi.mif tmp.mif', show=False)
-            run.command('mrconvert -grad grad.txt ' + path.from_user(app.ARGS.rpe_all) + ' dwirpe.mif')
+            run.command('dwiextract -bzero working.mif - | mrconvert -coord 3 0 - b0pe.mif')
 
-            run.command('dwiextract -bzero working.mif - | mrconvert -coord 3 0 - b0pe.nii')
-            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
-            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
-            run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+            bidslist = dwi_metadata['bidslist']
+            rpe_fpath = splitext_(app.ARGS.rpe_all)[0]
+            rpe_bids_path = rpe_fpath + '.json'
             
-            acqp = np.zeros((2,3))
-            if 'i' in pe_dir: acqp[:,0] = 1
-            if 'j' in pe_dir: acqp[:,1] = 1
-            if 'k' in pe_dir: acqp[:,2] = 1
-            if '-' in pe_dir:
-                acqp[0,:] = -acqp[0,:]
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                run.command('mrconvert -grad grad.txt -strides -1,+2,+3,+4 -json_import "%s" "%s" dwirpe.mif' % (rpe_bids_path,app.ARGS.rpe_all))
+                run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
+                run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
+                run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                filenames = ['topup_config_1.txt', 'topup_config_2.txt']
+                with open('topup_acqp.txt', 'w') as outfile:
+                    for fname in filenames:
+                        with open(fname) as infile:
+                            outfile.write(infile.read())
+                run.command('mrconvert b0rpe.mif b0rpe.nii')
             else:
-                acqp[1,:] = -acqp[1,:]
-                
-            acqp[acqp==-0] = 0
-            acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-            np.savetxt(path.to_scratch('topup_acqp.txt'), acqp, fmt="%1.2f")
+                acqp = np.zeros((2,3))
+                if 'i' in pe_dir: acqp[:,0] = 1
+                if 'j' in pe_dir: acqp[:,1] = 1
+                if 'k' in pe_dir: acqp[:,2] = 1
+                if '-' in pe_dir:
+                    acqp[0,:] = -acqp[0,:]
+                else:
+                    acqp[1,:] = -acqp[1,:]
+                    
+                acqp[acqp==-0] = 0
+                acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
+                np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
+
+            run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt "%s" dwirpe.mif' % (app.ARGS.rpe_all))
+            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
+            run.command('flirt -in b0rpe.nii -ref b0pe.mif -dof 6 -out b0rpe2pe.nii.gz')
+            run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
 
             # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            odd_dims = [ int(s) for s in image.Header(path.to_scratch('b0pe.nii')).size()[:3] if s % 2 ]
+            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
             if np.any(np.array(odd_dims)):
                 flag_no_subsampling = True
             else:
                 flag_no_subsampling = False
 
             if flag_no_subsampling:
-                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --subsamp=1 --scale=1 --out=%s --iout=%s' %
-                    (path.to_scratch('b0_pair_topup.nii'),
-                    path.to_scratch('topup_acqp.txt'),
-                    path.to_scratch('topup_results'),
-                    path.to_scratch('topup_results' + fsl_suffix)))
+                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
+                    ('b0_pair_topup.nii',
+                    'topup_acqp.txt',
+                    'topup_results',
+                    'topup_results' + fsl_suffix))
             else:
-                run.command('topup --imain=%s --datain=%s --config=b02b0.cnf --scale=1 --out=%s --iout=%s' %
-                    (path.to_scratch('b0_pair_topup.nii'),
-                    path.to_scratch('topup_acqp.txt'),
-                    path.to_scratch('topup_results'),
-                    path.to_scratch('topup_results' + fsl_suffix)))
+                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
+                    ('b0_pair_topup.nii',
+                    'topup_acqp.txt',
+                    'topup_results',
+                    'topup_results' + fsl_suffix))
                 
             # mask the topup corrected image
-            run.command('mrmath %s mean %s -axis 3' %
-                        (path.to_scratch('topup_results' + fsl_suffix),
-                            path.to_scratch('topup_corrected_mean.nii')
+            run.command('mrmath "%s" mean "%s" -axis 3' %
+                        ('topup_results' + fsl_suffix,
+                            'topup_corrected_mean.nii'
                         ))
                  
-            run.command('bet %s %s -f 0.2 -m' %
-                (path.to_scratch('topup_corrected_mean.nii'), 
-                path.to_scratch('topup_corrected_brain')))
+            run.command('bet "%s" "%s" -f 0.2 -m' %
+                ('topup_corrected_mean.nii', 
+                'topup_corrected_brain'))
 
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir %s -eddy_mask %s dwipe_rpe.mif dwiec.mif' %
+                run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
                             (eddyopts, 
                             pe_dir,
-                            path.to_scratch('topup_corrected_brain_mask' + fsl_suffix)
+                            'topup_corrected_brain_mask' + fsl_suffix
                             ))
             else:
-                run.command('dwifslpreproc -nocleanup -grad %s -eddy_options %s -rpe_all -pe_dir %s -eddy_mask %s dwipe_rpe.mif dwiec.mif' %
-                            (path.to_scratch('fakeb_grad.txt'),
+                run.command('dwifslpreproc -nocleanup -grad "%s" -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
+                            ('fakeb_grad.txt',
                             eddyopts, 
                             pe_dir,
-                            path.to_scratch('topup_corrected_brain_mask' + fsl_suffix)
+                            'topup_corrected_brain_mask' + fsl_suffix
                             ))
             run.function(os.remove,'tmp.mif')
 
@@ -818,8 +897,8 @@ def run_eddy(shell_table, dwi_metadata):
                 cmd = ('dwifslpreproc -nocleanup -eddy_options %s -rpe_header working.mif dwiec.mif' % 
                     (eddyopts))
             else:
-                cmd = ('dwifslpreproc -nocleanup -grad %s -eddy_options %s -rpe_header working.mif dwiec.mif' % 
-                    (path.to_scratch('fakeb_grad.txt'), eddyopts))
+                cmd = ('dwifslpreproc -nocleanup -grad "%s" -eddy_options %s -rpe_header working.mif dwiec.mif' % 
+                    ('fakeb_grad.txt', eddyopts))
             run.command(cmd)
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
@@ -857,7 +936,7 @@ def run_b1correct(dwi_metadata):
         # b1 correction may still need to be done individually for each diffusion series ...
         miflist = []
         for idx,i in enumerate(DWInlist):
-            cmd = ('mrconvert -coord 3 %s working.mif dwiprebc%s.mif' % 
+            cmd = ('mrconvert -coord 3 "%s" working.mif dwiprebc%s.mif' % 
                 (idxlist[idx], str(idx)))
             run.command(cmd)
             cmd = ('dwibiascorrect ants -bias biasfield%s.mif dwiprebc%s.mif dwibc%s.mif' % 

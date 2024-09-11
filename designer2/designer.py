@@ -134,7 +134,7 @@ def execute(): #pylint: disable=unused-variable
     # denoising
     if app.ARGS.denoise:
         if app.ARGS.phase:
-            phasepath = path.to_scratch('phase.nii')
+            phasepath = 'phase.nii'
         else:
             phasepath = None
 
@@ -186,7 +186,7 @@ def execute(): #pylint: disable=unused-variable
     run.command('mrinfo -export_grad_fsl dwi_designer.bvec dwi_designer.bval working.mif', show=False)
     run.command('mrconvert -force -datatype float32le working.mif dwi_designer.nii', show=False)
 
-    outpath = path.from_user(app.ARGS.output, True)
+    outpath = app.ARGS.output
     (head, fname) = os.path.split(outpath)
     full_outname = fname.split(os.extsep)
     oname = full_outname[0]
@@ -194,18 +194,18 @@ def execute(): #pylint: disable=unused-variable
         outpath += '.nii'
 
     if app.ARGS.datatype:
-        run.command('mrconvert -force -datatype %s -export_grad_fsl %s %s %s %s' % 
+        run.command('mrconvert -force -datatype %s -export_grad_fsl "%s" "%s" %s "%s"' % 
             (app.ARGS.datatype, 
             os.path.join(head, oname + '.bvec'),
             os.path.join(head, oname + '.bval'),
-            path.to_scratch('working.mif', True),
+            'working.mif',
             outpath))
     else:
-        run.command('mrconvert -force -export_grad_fsl %s %s %s %s' % 
+        run.command('mrconvert -force -export_grad_fsl "%s" "%s" %s "%s"' % 
             (
             os.path.join(head, oname + '.bvec'),
             os.path.join(head, oname + '.bval'),
-            path.to_scratch('working.mif', True), 
+            'working.mif', 
             outpath))
 
     bshapes = dwi_metadata['bshape_per_volume']
