@@ -36,7 +36,7 @@ class CustomBuildExt(build_ext):
         env = os.environ.copy()
         env['CFLAGS'] = '-fPIC'
         subprocess.check_call(
-            ["./configure", "--prefix=" + fftw_build_dir, "--enable-shared", "--disable-doc", "CFLAGS=-fPIC"],
+            ["./configure", "--prefix=" + fftw_build_dir, "--enable-shared", "--disable-doc", "--enable-threads"],
             cwd=fftw_source_dir,
             env=env
         )
@@ -69,14 +69,14 @@ ext_modules = [
         library_dirs=[
             # FFTW library directory will be added during the build
         ],
-        libraries=["fftw3"],
+        libraries=["fftw3","fftw3_threads"],
         extra_compile_args=["-std=c++11"],
     ),
 ]
 
 setup(
         name ='designer2',
-        version ='2.0.9',
+        version ='2.0.10',
         author ='Benjamin Ades-Aron',
         author_email ='benjamin.ades-aron@nyulangone.org',
         url ='https://github.com/NYU-DiffusionMRI/DESIGNER-v2',

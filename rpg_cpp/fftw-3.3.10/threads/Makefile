@@ -86,8 +86,8 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-build_triplet = arm-apple-darwin23.1.0
-host_triplet = arm-apple-darwin23.1.0
+build_triplet = arm-apple-darwin23.0.0
+host_triplet = arm-apple-darwin23.0.0
 subdir = threads
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/acx_mpi.m4 \
@@ -159,11 +159,11 @@ libfftw3_omp_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libfftw3_omp_la_CFLAGS) $(CFLAGS) \
 	$(libfftw3_omp_la_LDFLAGS) $(LDFLAGS) -o $@
-##am_libfftw3_omp_la_rpath =  \
-##	-rpath \
-##	$(libdir)
 #am_libfftw3_omp_la_rpath =  \
-#	-rpath $(libdir)
+#	-rpath \
+#	$(libdir)
+##am_libfftw3_omp_la_rpath =  \
+##	-rpath $(libdir)
 libfftw3_threads_la_DEPENDENCIES =  \
 	../libfftw3.la
 am_libfftw3_threads_la_OBJECTS =  \
@@ -182,9 +182,9 @@ libfftw3_threads_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libfftw3_threads_la_CFLAGS) $(CFLAGS) \
 	$(libfftw3_threads_la_LDFLAGS) $(LDFLAGS) -o $@
-#am_libfftw3_threads_la_rpath =  \
-#	-rpath $(libdir)
-##am_libfftw3_threads_la_rpath =
+am_libfftw3_threads_la_rpath =  \
+	-rpath $(libdir)
+#am_libfftw3_threads_la_rpath =
 AM_V_P = $(am__v_P_$(V))
 am__v_P_ = $(am__v_P_$(AM_DEFAULT_VERBOSITY))
 am__v_P_0 = false
@@ -250,16 +250,16 @@ am__can_run_installinfo = \
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' aclocal-1.16
+ACLOCAL = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' aclocal-1.16
 ALLOCA = 
 ALTIVEC_CFLAGS = 
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 1
 AR = ar
 AS = as
-AUTOCONF = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoconf
-AUTOHEADER = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoheader
-AUTOMAKE = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' automake-1.16
+AUTOCONF = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoconf
+AUTOHEADER = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoheader
+AUTOMAKE = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' automake-1.16
 AVX2_CFLAGS = 
 AVX512_CFLAGS = 
 AVX_128_FMA_CFLAGS = 
@@ -287,10 +287,10 @@ EXEEXT =
 F77 = gfortran
 FFLAGS = -g -O2
 FGREP = /usr/bin/grep -F
-FLIBS =  -L/opt/homebrew/Cellar/gcc/14.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/14 -L/opt/homebrew/Cellar/gcc/14.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/14.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/14/../../.. -lemutls_w -lheapt_w -lgfortran -lquadmath
+FLIBS =  -L/opt/homebrew/Cellar/gcc/13.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/13 -L/opt/homebrew/Cellar/gcc/13.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/13/../../.. -lgfortran -lemutls_w -lquadmath
 GREP = /usr/bin/grep
 INDENT = 
-INSTALL = /usr/bin/install -c
+INSTALL = /opt/homebrew/bin/ginstall -c
 INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
@@ -307,9 +307,9 @@ LN_S = ln -s
 LTLIBOBJS = 
 LT_SYS_LIBRARY_PATH = 
 MAINT = #
-MAKEINFO = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' makeinfo
+MAKEINFO = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' makeinfo
 MANIFEST_TOOL = :
-MKDIR_P = .././install-sh -c -d
+MKDIR_P = /opt/homebrew/bin/gmkdir -p
 MPICC = 
 MPILIBS = 
 MPIRUN = 
@@ -333,8 +333,8 @@ PATH_SEPARATOR = :
 POW_LIB = 
 PRECISION = d
 PREC_SUFFIX = 
-PTHREAD_CC = 
-PTHREAD_CFLAGS = 
+PTHREAD_CC = gcc
+PTHREAD_CFLAGS = -D_THREAD_SAFE 
 PTHREAD_LIBS = 
 RANLIB = ranlib
 SED = /usr/bin/sed
@@ -344,13 +344,13 @@ SHELL = /bin/sh
 SSE2_CFLAGS = 
 STACK_ALIGN_CFLAGS = 
 STRIP = strip
-THREADLIBS = 
+THREADLIBS =  
 VERSION = 3.3.10
 VSX_CFLAGS = 
-abs_builddir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/threads
-abs_srcdir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/threads
-abs_top_builddir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10
-abs_top_srcdir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10
+abs_builddir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/threads
+abs_srcdir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/threads
+abs_top_builddir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10
+abs_top_srcdir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10
 ac_ct_AR = ar
 ac_ct_CC = gcc
 ac_ct_DUMPBIN = 
@@ -362,10 +362,10 @@ am__quote =
 am__tar = $${TAR-tar} chof - "$$tardir"
 am__untar = $${TAR-tar} xf -
 bindir = ${exec_prefix}/bin
-build = arm-apple-darwin23.1.0
+build = arm-apple-darwin23.0.0
 build_alias = 
 build_cpu = arm
-build_os = darwin23.1.0
+build_os = darwin23.0.0
 build_vendor = apple
 builddir = .
 datadir = ${datarootdir}
@@ -373,15 +373,15 @@ datarootdir = ${prefix}/share
 docdir = ${datarootdir}/doc/${PACKAGE_TARNAME}
 dvidir = ${docdir}
 exec_prefix = ${prefix}
-host = arm-apple-darwin23.1.0
+host = arm-apple-darwin23.0.0
 host_alias = 
 host_cpu = arm
-host_os = darwin23.1.0
+host_os = darwin23.0.0
 host_vendor = apple
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/install-sh
+install_sh = ${SHELL} /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -390,7 +390,7 @@ mandir = ${datarootdir}/man
 mkdir_p = $(MKDIR_P)
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/build
+prefix = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/build
 program_transform_name = s,x,x,
 psdir = ${docdir}
 runstatedir = ${localstatedir}/run
@@ -406,9 +406,9 @@ AM_CPPFLAGS = -I $(top_srcdir)
 AM_CFLAGS = $(STACK_ALIGN_CFLAGS)
 FFTWOMPLIB = 
 #FFTWOMPLIB = libfftw3_omp.la
-##noinst_LTLIBRARIES = libfftw3_threads.la
-#lib_LTLIBRARIES = libfftw3_threads.la $(FFTWOMPLIB)
-lib_LTLIBRARIES = $(FFTWOMPLIB)
+#noinst_LTLIBRARIES = libfftw3_threads.la
+lib_LTLIBRARIES = libfftw3_threads.la $(FFTWOMPLIB)
+#lib_LTLIBRARIES = $(FFTWOMPLIB)
 libfftw3_threads_la_SOURCES = api.c conf.c threads.c	\
 threads.h dft-vrank-geq1.c ct.c rdft-vrank-geq1.c hc2hc.c		\
 vrank-geq1-rdft2.c f77api.c f77funcs.h

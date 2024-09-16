@@ -86,8 +86,8 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-build_triplet = arm-apple-darwin23.1.0
-host_triplet = arm-apple-darwin23.1.0
+build_triplet = arm-apple-darwin23.0.0
+host_triplet = arm-apple-darwin23.0.0
 noinst_PROGRAMS = bench$(EXEEXT)
 subdir = tests
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -188,16 +188,16 @@ ETAGS = etags
 CTAGS = ctags
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp README
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' aclocal-1.16
+ACLOCAL = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' aclocal-1.16
 ALLOCA = 
 ALTIVEC_CFLAGS = 
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 1
 AR = ar
 AS = as
-AUTOCONF = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoconf
-AUTOHEADER = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoheader
-AUTOMAKE = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' automake-1.16
+AUTOCONF = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoconf
+AUTOHEADER = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' autoheader
+AUTOMAKE = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' automake-1.16
 AVX2_CFLAGS = 
 AVX512_CFLAGS = 
 AVX_128_FMA_CFLAGS = 
@@ -225,10 +225,10 @@ EXEEXT =
 F77 = gfortran
 FFLAGS = -g -O2
 FGREP = /usr/bin/grep -F
-FLIBS =  -L/opt/homebrew/Cellar/gcc/14.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/14 -L/opt/homebrew/Cellar/gcc/14.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/14.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/14/../../.. -lemutls_w -lheapt_w -lgfortran -lquadmath
+FLIBS =  -L/opt/homebrew/Cellar/gcc/13.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/13 -L/opt/homebrew/Cellar/gcc/13.2.0/bin/../lib/gcc/current/gcc -L/opt/homebrew/Cellar/gcc/13.2.0/bin/../lib/gcc/current/gcc/aarch64-apple-darwin23/13/../../.. -lgfortran -lemutls_w -lquadmath
 GREP = /usr/bin/grep
 INDENT = 
-INSTALL = /usr/bin/install -c
+INSTALL = /opt/homebrew/bin/ginstall -c
 INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
@@ -245,9 +245,9 @@ LN_S = ln -s
 LTLIBOBJS = 
 LT_SYS_LIBRARY_PATH = 
 MAINT = #
-MAKEINFO = ${SHELL} '/Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' makeinfo
+MAKEINFO = ${SHELL} '/Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/missing' makeinfo
 MANIFEST_TOOL = :
-MKDIR_P = .././install-sh -c -d
+MKDIR_P = /opt/homebrew/bin/gmkdir -p
 MPICC = 
 MPILIBS = 
 MPIRUN = 
@@ -271,8 +271,8 @@ PATH_SEPARATOR = :
 POW_LIB = 
 PRECISION = d
 PREC_SUFFIX = 
-PTHREAD_CC = 
-PTHREAD_CFLAGS = 
+PTHREAD_CC = gcc
+PTHREAD_CFLAGS = -D_THREAD_SAFE 
 PTHREAD_LIBS = 
 RANLIB = ranlib
 SED = /usr/bin/sed
@@ -282,13 +282,13 @@ SHELL = /bin/sh
 SSE2_CFLAGS = 
 STACK_ALIGN_CFLAGS = 
 STRIP = strip
-THREADLIBS = 
+THREADLIBS =  
 VERSION = 3.3.10
 VSX_CFLAGS = 
-abs_builddir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/tests
-abs_srcdir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/tests
-abs_top_builddir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10
-abs_top_srcdir = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10
+abs_builddir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/tests
+abs_srcdir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/tests
+abs_top_builddir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10
+abs_top_srcdir = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10
 ac_ct_AR = ar
 ac_ct_CC = gcc
 ac_ct_DUMPBIN = 
@@ -300,10 +300,10 @@ am__quote =
 am__tar = $${TAR-tar} chof - "$$tardir"
 am__untar = $${TAR-tar} xf -
 bindir = ${exec_prefix}/bin
-build = arm-apple-darwin23.1.0
+build = arm-apple-darwin23.0.0
 build_alias = 
 build_cpu = arm
-build_os = darwin23.1.0
+build_os = darwin23.0.0
 build_vendor = apple
 builddir = .
 datadir = ${datarootdir}
@@ -311,15 +311,15 @@ datarootdir = ${prefix}/share
 docdir = ${datarootdir}/doc/${PACKAGE_TARNAME}
 dvidir = ${docdir}
 exec_prefix = ${prefix}
-host = arm-apple-darwin23.1.0
+host = arm-apple-darwin23.0.0
 host_alias = 
 host_cpu = arm
-host_os = darwin23.1.0
+host_os = darwin23.0.0
 host_vendor = apple
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/install-sh
+install_sh = ${SHELL} /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -328,7 +328,7 @@ mandir = ${datarootdir}/man
 mkdir_p = $(MKDIR_P)
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /Users/jc8329/DESIGNER-v2/rpg_cpp/fftw-3.3.10/build
+prefix = /Users/benaron/Documents/DESIGNER-v2/rpg_cpp/fftw-3.3.10/build
 program_transform_name = s,x,x,
 psdir = ${docdir}
 runstatedir = ${localstatedir}/run
@@ -342,10 +342,10 @@ top_builddir = ..
 top_srcdir = ..
 AM_CPPFLAGS = -I $(top_srcdir)
 EXTRA_DIST = check.pl README
-#bench_CFLAGS = $(OPENMP_CFLAGS)
-#bench_CFLAGS = $(PTHREAD_CFLAGS)
-#LIBFFTWTHREADS = $(top_builddir)/threads/libfftw3_threads.la
-#LIBFFTWTHREADS = $(top_builddir)/threads/libfftw3_omp.la
+##bench_CFLAGS = $(OPENMP_CFLAGS)
+bench_CFLAGS = $(PTHREAD_CFLAGS)
+LIBFFTWTHREADS = $(top_builddir)/threads/libfftw3_threads.la
+##LIBFFTWTHREADS = $(top_builddir)/threads/libfftw3_omp.la
 bench_SOURCES = bench.c hook.c fftw-bench.c fftw-bench.h
 bench_LDADD = $(LIBFFTWTHREADS)				\
 $(top_builddir)/libfftw3.la		\
@@ -702,24 +702,24 @@ check-local: bench$(EXEEXT)
 	@echo "--------------------------------------------------------------"
 	@echo "         FFTW transforms passed basic tests!"
 	@echo "--------------------------------------------------------------"
-#	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) -r -c=30 -v --nthreads=2 `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) -r -c=5 -v --threads_callback --nthreads=2 `pwd`/bench$(EXEEXT)
-#	@echo "--------------------------------------------------------------"
-#	@echo "         FFTW threaded transforms passed basic tests!"
-#	@echo "--------------------------------------------------------------"
+	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) -r -c=30 -v --nthreads=2 `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) -r -c=5 -v --threads_callback --nthreads=2 `pwd`/bench$(EXEEXT)
+	@echo "--------------------------------------------------------------"
+	@echo "         FFTW threaded transforms passed basic tests!"
+	@echo "--------------------------------------------------------------"
 
 bigcheck: bench$(EXEEXT)
 	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v `pwd`/bench$(EXEEXT)
 	@echo "--------------------------------------------------------------"
 	@echo "         FFTW transforms passed big tests!"
 	@echo "--------------------------------------------------------------"
-#	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --nthreads=2 `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --nthreads=3 `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --nthreads=10 `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --threads_callback --nthreads=2 `pwd`/bench$(EXEEXT)
-#	@echo "--------------------------------------------------------------"
-#	@echo "         FFTW threaded transforms passed big tests!"
-#	@echo "--------------------------------------------------------------"
+	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --nthreads=2 `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --nthreads=3 `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --nthreads=10 `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl $(CHECK_PL_OPTS) --validate-wisdom -a -v --threads_callback --nthreads=2 `pwd`/bench$(EXEEXT)
+	@echo "--------------------------------------------------------------"
+	@echo "         FFTW threaded transforms passed big tests!"
+	@echo "--------------------------------------------------------------"
 
 smallcheck: bench$(EXEEXT)
 	perl -w $(srcdir)/check.pl -r -c=1 -v `pwd`/bench$(EXEEXT)
@@ -727,24 +727,24 @@ smallcheck: bench$(EXEEXT)
 	@echo "--------------------------------------------------------------"
 	@echo "         FFTW transforms passed a few tests!"
 	@echo "--------------------------------------------------------------"
-#	perl -w $(srcdir)/check.pl -r --estimate -c=2 -v --nthreads=2 `pwd`/bench$(EXEEXT)
-#	@echo "--------------------------------------------------------------"
-#	@echo "         FFTW threaded transforms passed a few tests!"
-#	@echo "--------------------------------------------------------------"
+	perl -w $(srcdir)/check.pl -r --estimate -c=2 -v --nthreads=2 `pwd`/bench$(EXEEXT)
+	@echo "--------------------------------------------------------------"
+	@echo "         FFTW threaded transforms passed a few tests!"
+	@echo "--------------------------------------------------------------"
 
 paranoid-check: bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --patient --nthreads=10 --paranoid `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --patient --nthreads=7 --paranoid `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --patient --nthreads=3 --paranoid `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --patient --nthreads=2 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --patient --nthreads=10 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --patient --nthreads=7 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --patient --nthreads=3 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --patient --nthreads=2 --paranoid `pwd`/bench$(EXEEXT)
 	perl -w $(srcdir)/check.pl -a --patient --paranoid `pwd`/bench$(EXEEXT)
 
 exhaustive-check: bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=10 --paranoid `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=7 --paranoid `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=3 --paranoid `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=2 --paranoid `pwd`/bench$(EXEEXT)
-#	perl -w $(srcdir)/check.pl -a --exhaustive --threads_callback --nthreads=2 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=10 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=7 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=3 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --exhaustive --nthreads=2 --paranoid `pwd`/bench$(EXEEXT)
+	perl -w $(srcdir)/check.pl -a --exhaustive --threads_callback --nthreads=2 --paranoid `pwd`/bench$(EXEEXT)
 	perl -w $(srcdir)/check.pl -a --exhaustive --paranoid `pwd`/bench$(EXEEXT)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
