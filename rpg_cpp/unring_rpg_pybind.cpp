@@ -74,6 +74,35 @@ using namespace std;
 
 namespace py = pybind11;
 
+bool cgroup_exists() {
+    std::ifstream cgroup_file("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
+    return cgroup_file.good();
+}
+
+unsigned int get_cpu_quota() {
+    if (cgroup_exists()) {
+        int cpu_quota = -1;
+        int cpu_period = -1;
+
+        std::ifstream quota_file("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
+        std::ifstream period_file("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
+
+        if (quota_file.is_open() && period_file.is_open()) {
+            quota_file >> cpu_quota;
+            period_file >> cpu_period;
+
+            // Check if there's a valid CPU quota and period
+            if (cpu_quota > 0 && cpu_period > 0) {
+                unsigned int num_cpus = (cpu_quota + cpu_period - 1) / cpu_period; // Round up
+                return num_cpus;
+            }
+        }
+    }
+
+    // Fallback to hardware concurrency if no valid quota is found
+    return std::thread::hardware_concurrency();
+}
+
 class FFTWPlanManager {
 public:
     fftw_plan plan;
@@ -402,7 +431,7 @@ void unring_2d(fftw_complex *data1,fftw_complex *tmp2, const int *dim_sz, int ns
                 data2[j*dim_sz[1]+k][0] = data1[k*dim_sz[0]+j][0];
                 data2[j*dim_sz[1]+k][1] = data1[k*dim_sz[0]+j][1];
            }
-        
+
         fftw_execute_dft(p,data1,tmp1);
         fftw_execute_dft(p_tr,data2,tmp2);
         
@@ -991,6 +1020,7 @@ void process_slice(unsigned int start, unsigned int end, double** slicesin, doub
                    std::exception_ptr& exceptionPtr, std::mutex& mutex) {
     try {
         for (unsigned int i = start; i < end; ++i) {
+
             if (PyErr_CheckSignals() != 0) {
                 throw py::error_already_set();
             }
@@ -1167,7 +1197,15 @@ py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array
     // Apply unringing
     int scale = 4;
     // Apply unringing in parallel using threads
-    unsigned int num_threads = std::thread::hardware_concurrency();  // Get the number of available threads
+
+    // Initialize FFTW threading
+    if (fftw_init_threads() == 0) {
+        std::cerr << "Error initializing FFTW threading" << std::endl;
+    }
+
+    unsigned int num_threads = get_cpu_quota();  // Get the number of available threads
+    fftw_plan_with_nthreads(1); // You can adjust the number of threads FFTW uses per plan
+
     //unsigned int num_threads = 1;
     parallel_unringing(num_threads, slicesin.get(), slicesin_i ? slicesin_i.get() : nullptr, slicesout.get(), slicesout_i ? slicesout_i.get() : nullptr, 
                        nx, ny, nz, ndwi, scale, pfo, minW, maxW, nsh, pfdimf, phase_flag, dim_sz);
