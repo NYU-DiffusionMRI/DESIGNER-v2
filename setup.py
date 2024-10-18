@@ -37,6 +37,7 @@ class CustomBuildExt(build_ext):
         env['CFLAGS'] = '-fPIC'
         subprocess.check_call(
             ["./configure", "--prefix=" + fftw_build_dir, "--enable-shared", "--disable-doc", "--enable-threads"],
+            #["./configure", "--prefix=" + fftw_build_dir, "--enable-shared", "--disable-doc"],
             cwd=fftw_source_dir,
             env=env
         )
@@ -49,6 +50,7 @@ class CustomBuildExt(build_ext):
     def build_extension(self, ext):
         ext.include_dirs.append(self.fftw_include_dir)
         ext.library_dirs.append(self.fftw_lib_dir)
+        #ext.extra_link_args = ["-Wl,-rpath," + self.fftw_lib_dir]
         super().build_extension(ext)
 
 class get_pybind_include:
@@ -69,7 +71,8 @@ ext_modules = [
         library_dirs=[
             # FFTW library directory will be added during the build
         ],
-        libraries=["fftw3","fftw3_threads"],
+        #libraries=["fftw3","fftw3_threads"],
+        libraries=["fftw3","fftw3_threads","m"],
         extra_compile_args=["-std=c++11"],
     ),
 ]

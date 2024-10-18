@@ -62,9 +62,10 @@
 #include <pybind11/numpy.h>
 #include <thread>
 #include <vector>
-#include <exception>
-#include <mutex>
-#include <memory>
+//#include <exception>
+//#include <mutex>
+//#include <memory>
+#include <signal.h>
 // #include <pybind11/functional.h> 
 // #include <functional>
 
@@ -113,11 +114,12 @@ public:
     fftw_plan pinv_1D_nx;
     fftw_plan p_1D_ny;
     fftw_plan pinv_1D_ny;
+
     fftw_plan p_1D_ceil_ny;
     fftw_plan pinv_1D_ceil_ny;
     fftw_plan p_1D_floor_ny;
     fftw_plan pinv_1D_floor_ny;
-    // Additional FFT plans for pfo == 1 (when ny = floor(ny * 3/4))
+    
     fftw_plan plan_pfo1;
     fftw_plan plan_inv_pfo1;
     fftw_plan plan_tr_pfo1;
@@ -125,9 +127,8 @@ public:
     fftw_plan p_1D_ny_pfo1;
     fftw_plan pinv_1D_ny_pfo1;
 
+
     FFTWPlanManager(int nx, int ny, int pfo) {
-        int ny_ceil = std::ceil(ny / 2.0);
-        int ny_floor = std::floor(ny / 2.0);
 
         // Create FFTW plans
         plan = fftw_plan_dft_2d(ny, nx, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
@@ -142,54 +143,54 @@ public:
         p_1D_ny = fftw_plan_dft_1d(ny, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
         pinv_1D_ny = fftw_plan_dft_1d(ny, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
 
-        p_1D_ceil_ny = fftw_plan_dft_1d(ny_ceil, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
-        pinv_1D_ceil_ny = fftw_plan_dft_1d(ny_ceil, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
+        //if (pfo == 2) {
+            int ny_ceil = std::ceil(ny / 2.0);
+            int ny_floor = std::floor(ny / 2.0);
+            p_1D_ceil_ny = fftw_plan_dft_1d(ny_ceil, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
+            pinv_1D_ceil_ny = fftw_plan_dft_1d(ny_ceil, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
 
-        p_1D_floor_ny = fftw_plan_dft_1d(ny_floor, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
-        pinv_1D_floor_ny = fftw_plan_dft_1d(ny_floor, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
+            p_1D_floor_ny = fftw_plan_dft_1d(ny_floor, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
+            pinv_1D_floor_ny = fftw_plan_dft_1d(ny_floor, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
+        
+        //}
 
-        // Additional FFT plans for pfo == 1 (when ny = floor(ny * 3/4) or 1/4)
-        if (pfo == 3) {
-            unsigned int ny_pfo1 = floor(ny * 3 / 4);
+        //if (pfo == 1 || pfo == 3) {
+            unsigned int ny_pfo1 = (pfo == 3) ? floor(ny * 3 / 4) : floor(ny / 4);
             plan_pfo1 = fftw_plan_dft_2d(ny_pfo1, nx, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
             plan_inv_pfo1 = fftw_plan_dft_2d(ny_pfo1, nx, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
             plan_tr_pfo1 = fftw_plan_dft_2d(nx, ny_pfo1, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
             plan_inv_tr_pfo1 = fftw_plan_dft_2d(nx, ny_pfo1, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
             p_1D_ny_pfo1 = fftw_plan_dft_1d(ny_pfo1, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
             pinv_1D_ny_pfo1 = fftw_plan_dft_1d(ny_pfo1, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
-        } 
-        // Additional FFT plans for pfo == 3 (when ny = floor(ny / 4))
-        else if (pfo == 1) {
-            unsigned int ny_pfo1 = floor(ny / 4);
-            plan_pfo1 = fftw_plan_dft_2d(ny_pfo1, nx, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
-            plan_inv_pfo1 = fftw_plan_dft_2d(ny_pfo1, nx, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
-            plan_tr_pfo1 = fftw_plan_dft_2d(nx, ny_pfo1, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
-            plan_inv_tr_pfo1 = fftw_plan_dft_2d(nx, ny_pfo1, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
-            p_1D_ny_pfo1 = fftw_plan_dft_1d(ny_pfo1, nullptr, nullptr, FFTW_FORWARD, FFTW_ESTIMATE);
-            pinv_1D_ny_pfo1 = fftw_plan_dft_1d(ny_pfo1, nullptr, nullptr, FFTW_BACKWARD, FFTW_ESTIMATE);
-        }
+        
+        //}
     }
 
     ~FFTWPlanManager() {
+
         // Destroy FFTW plans
         fftw_destroy_plan(plan);
         fftw_destroy_plan(plan_inv);
         fftw_destroy_plan(plan_tr);
         fftw_destroy_plan(plan_inv_tr);
+
         fftw_destroy_plan(p_1D_nx);
         fftw_destroy_plan(pinv_1D_nx);
         fftw_destroy_plan(p_1D_ny);
         fftw_destroy_plan(pinv_1D_ny);
+
         fftw_destroy_plan(p_1D_ceil_ny);
         fftw_destroy_plan(pinv_1D_ceil_ny);
         fftw_destroy_plan(p_1D_floor_ny);
         fftw_destroy_plan(pinv_1D_floor_ny);
+
         fftw_destroy_plan(plan_pfo1);
-        fftw_destroy_plan(plan_tr_pfo1);
         fftw_destroy_plan(plan_inv_pfo1);
+        fftw_destroy_plan(plan_tr_pfo1);
         fftw_destroy_plan(plan_inv_tr_pfo1);
         fftw_destroy_plan(p_1D_ny_pfo1);
         fftw_destroy_plan(pinv_1D_ny_pfo1);
+
     }
 };
 
@@ -432,8 +433,12 @@ void unring_2d(fftw_complex *data1,fftw_complex *tmp2, const int *dim_sz, int ns
                 data2[j*dim_sz[1]+k][1] = data1[k*dim_sz[0]+j][1];
            }
 
+        //std::cout << "executing forward 2D ffts " << std::endl;
+
         fftw_execute_dft(p,data1,tmp1);
         fftw_execute_dft(p_tr,data2,tmp2);
+
+        //std::cout << "executed forward 2D ffts " << std::endl;
         
         for (int k = 0 ; k < dim_sz[1];k++)
         {
@@ -451,9 +456,10 @@ void unring_2d(fftw_complex *data1,fftw_complex *tmp2, const int *dim_sz, int ns
         fftw_execute_dft(pinv,tmp1,data1);
         fftw_execute_dft(pinv_tr,tmp2,data2);
         
+        //std::cout << "executing 1D ffts " << std::endl;
         unring_1D(data1,dim_sz[0],dim_sz[1],nsh,minW,maxW,p_1D_nx,pinv_1D_nx);
         unring_1D(data2,dim_sz[1],dim_sz[0],nsh,minW,maxW,p_1D_ny,pinv_1D_ny);
-         
+        //std::cout << "executed 1D ffts " << std::endl;
   
         fftw_execute_dft(p,data1,tmp1);
         fftw_execute_dft(p_tr,data2,tmp2);
@@ -738,6 +744,8 @@ FFTWPlanManager& plans, double yfact){
                }                        
         }
         
+        //std::cout << "processing a slice " << std::endl;
+
         if(pfo == 1){
         unring_2d_y(data_complex,res_complex,dim_sz,nsh,minW,maxW,plans);
         }
@@ -1016,52 +1024,49 @@ FFTWPlanManager& plans);
 void process_slice(unsigned int start, unsigned int end, double** slicesin, double** slicesin_i, double** slicesout, double** slicesout_i, 
                    unsigned int nx, unsigned int ny, int scale, int pfo, unsigned int minW, unsigned int maxW, unsigned int nsh, 
                    bool pfdimf, bool phase_flag, int* dim_sz, 
-                   FFTWPlanManager& plans,
-                   std::exception_ptr& exceptionPtr, std::mutex& mutex) {
-    try {
-        for (unsigned int i = start; i < end; ++i) {
+                   FFTWPlanManager& plans) {
+    
+    
+    for (unsigned int i = start; i < end; ++i) {
+        //std::cout << "Thread " << std::this_thread::get_id() << " processing slice A " << i << std::endl;
 
-            if (PyErr_CheckSignals() != 0) {
-                throw py::error_already_set();
-            }
-
-            // std::cout << "Thread " << std::this_thread::get_id() << " processing slice " << i << std::endl;
-
-            if (pfo == 1 || pfo == 3) {
-                if (pfdimf) { // y
-                    if (phase_flag) { // complex
-                        UnringScale(slicesin[i], slicesin_i[i], nx, ny, scale, pfo, minW, maxW, nsh, plans);
-                    } else { // real
-                        UnringScale(slicesin[i], static_cast<double*>(nullptr), nx, ny, scale, pfo, minW, maxW, nsh, plans);
-                    }
-                } else { // x
-                    if (phase_flag) { // complex
-                        UnringScale(slicesin[i], slicesin_i[i], ny, nx, scale, pfo, minW, maxW, nsh, plans);
-                    } else { // real
-                        UnringScale(slicesin[i], static_cast<double*>(nullptr), ny, nx, scale, pfo, minW, maxW, nsh, plans);
-                    }
+        if (pfo == 1 || pfo == 3) {
+            if (pfdimf) { // y
+                if (phase_flag) { // complex
+                    UnringScale(slicesin[i], slicesin_i[i], nx, ny, scale, pfo, minW, maxW, nsh, plans);
+                } else { // real
+                    UnringScale(slicesin[i], static_cast<double*>(nullptr), nx, ny, scale, pfo, minW, maxW, nsh, plans);
+                }
+            } else { // x
+                if (phase_flag) { // complex
+                    UnringScale(slicesin[i], slicesin_i[i], ny, nx, scale, pfo, minW, maxW, nsh, plans);
+                } else { // real
+                    UnringScale(slicesin[i], static_cast<double*>(nullptr), ny, nx, scale, pfo, minW, maxW, nsh, plans);
                 }
             }
-
-            int scalefact = 1;
-            if (phase_flag) { // complex
-                Unring(slicesin[i], slicesin_i[i], slicesout[i], slicesout_i[i], dim_sz, 2, pfo, minW, maxW, nsh, plans, scalefact);
-            } else { // real
-                Unring(slicesin[i], static_cast<double*>(nullptr), slicesout[i], static_cast<double*>(nullptr), dim_sz, 2, pfo, minW, maxW, nsh, plans, scalefact);
-            }
         }
-    } catch (...) {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (!exceptionPtr) {
-            exceptionPtr = std::current_exception();
+
+        int scalefact = 1;
+        if (phase_flag) { // complex
+            Unring(slicesin[i], slicesin_i[i], slicesout[i], slicesout_i[i], dim_sz, 2, pfo, minW, maxW, nsh, plans, scalefact);
+        } else { // real
+            Unring(slicesin[i], static_cast<double*>(nullptr), slicesout[i], static_cast<double*>(nullptr), dim_sz, 2, pfo, minW, maxW, nsh, plans, scalefact);
         }
     }
+
+
 }
+
+// void ignore_signals() {
+//     signal(SIGINT, SIG_IGN);  // Ignore interrupt signal (Ctrl+C)
+//     signal(SIGTERM, SIG_IGN); // Ignore termination signal
+// }
 
 // Function to run the unringing process in parallel using multiple threads
 void parallel_unringing(unsigned int num_threads, double** slicesin, double** slicesin_i, double** slicesout, double** slicesout_i,
                         unsigned int nx, unsigned int ny, unsigned int nz, unsigned int ndwi, int scale, int pfo, unsigned int minW,
                         unsigned int maxW, unsigned int nsh, bool pfdimf, bool phase_flag, int* dim_sz) {
+    
     std::mutex mutex;
     std::exception_ptr exceptionPtr = nullptr;
     unsigned int total_iterations = nz * ndwi;
@@ -1076,28 +1081,44 @@ void parallel_unringing(unsigned int num_threads, double** slicesin, double** sl
         unsigned int end = (t == num_threads - 1) ? total_iterations : start + chunk_size;
 
         std::cout << "Thread " << t << " processing slices " << start << " to " << end << std::endl;
-
+        
         // Initialize FFTWPlanManager for each thread
-        if (pfdimf) { // y
-            plan_managers[t] = std::make_shared<FFTWPlanManager>(nx, ny, pfo);
-        } else { // x
-            plan_managers[t] = std::make_shared<FFTWPlanManager>(ny, nx, pfo);
+        try { 
+            if (pfdimf) { // y
+                plan_managers[t] = std::make_shared<FFTWPlanManager>(nx, ny, pfo);
+            } else { // x
+                plan_managers[t] = std::make_shared<FFTWPlanManager>(ny, nx, pfo);
+            }
+
+            threads.emplace_back([=, &plan_managers, &exceptionPtr, &mutex]() {
+                try {
+                    process_slice(start, end, slicesin, slicesin_i, slicesout, slicesout_i,
+                            nx, ny, scale, pfo, minW, maxW, nsh, pfdimf, phase_flag, dim_sz,
+                            *plan_managers[t]);
+                } catch (...) {
+                    std::lock_guard<std::mutex> lock(mutex);
+                    exceptionPtr = std::current_exception();
+                }
+            });
+        } catch (...) {
+            std::lock_guard<std::mutex> lock(mutex);
+            exceptionPtr = std::current_exception();
         }
-        // Launch the thread with its corresponding FFTWPlanManager
-        threads.emplace_back([=, &plan_managers, &mutex, &exceptionPtr] {
-            process_slice(start, end, slicesin, slicesin_i, slicesout, slicesout_i,
-                          nx, ny, scale, pfo, minW, maxW, nsh, pfdimf, phase_flag, dim_sz,
-                          *plan_managers[t], std::ref(exceptionPtr), std::ref(mutex));
-        });
     }
 
     for (auto& th : threads) {
         th.join();
     }
 
+    plan_managers.clear();  // Potential hanging point
+
+    fftw_cleanup();  // Potential hanging point
+
     if (exceptionPtr) {
+        std::cout << "Re-throwing exception" << std::endl << std::flush;
         std::rethrow_exception(exceptionPtr);
     }
+
 }
 
 
@@ -1198,22 +1219,26 @@ py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array
     int scale = 4;
     // Apply unringing in parallel using threads
 
-    // Initialize FFTW threading
-    if (fftw_init_threads() == 0) {
-        std::cerr << "Error initializing FFTW threading" << std::endl;
-    }
+    // // Initialize FFTW threading
+    // if (fftw_init_threads() == 0) {
+    //     std::cerr << "Error initializing FFTW threading" << std::endl;
+    // }
+
+    //fftw_plan_with_nthreads(1); // You can adjust the number of threads FFTW uses per plan
+    //ignore_signals();
+    fftw_init_threads();
+    fftw_make_planner_thread_safe();
 
     unsigned int num_threads = get_cpu_quota();  // Get the number of available threads
-    fftw_plan_with_nthreads(1); // You can adjust the number of threads FFTW uses per plan
-
-    //unsigned int num_threads = 1;
     parallel_unringing(num_threads, slicesin.get(), slicesin_i ? slicesin_i.get() : nullptr, slicesout.get(), slicesout_i ? slicesout_i.get() : nullptr, 
                        nx, ny, nz, ndwi, scale, pfo, minW, maxW, nsh, pfdimf, phase_flag, dim_sz);
+    fftw_cleanup_threads();
 
     // Put slices into volume (real)
     Reshape<double>(volumeout.data(), slicesout.get(), nx, ny, nz, ndwi, pfdimf, false);
     // FreeMatrix(slicesin, nz * ndwi, nx * ny);
     // FreeMatrix(slicesout, nz * ndwi, nx * ny);
+
 
     if (phase_flag) { // (imag)
         Reshape<double>(phaseout.data(), slicesout_i.get(), nx, ny, nz, ndwi, pfdimf, false);
@@ -1238,6 +1263,8 @@ py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array
             delete[] slicesout_i[i];
         }
     }
+
+
 
     return py::make_tuple(
         py::array_t<double>(data_info.shape, volumeout.data()),
