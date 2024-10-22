@@ -265,13 +265,22 @@ def execute(): #pylint: disable=unused-variable
             bvec_dki = bvec[:,bval < maxb]
             bval_dki = bval[bval < maxb]
 
-            if np.max(bval_dki) < 2:
-                logger.warning("Max b-value is <2. Skipping DKI and WDKI fit.")
+            bvec_dki_temp=bvec_dki[:,bval_dki > 0.1]
+            ndir=np.shape(np.unique(bvec_dki_temp,axis=1))[1]
+
+            if len(set(np.round(bval_dki, 2))) <= 2:
+                logger.warning(f"Fewer than 2 nonzero shells found for DKI fitting. Skipping DKI/WDKI.", extra={"bval_dki": bval_dki.tolist()})
                 app.ARGS.DKI=False
                 app.ARGS.WDKI=False
+                app.ARGS.akc_outliers=False
+            elif ndir < 21:
+                logger.warning("Fewer than 21 unique directions detected for DKI fitting. Skipping DKI/WDKI.")
+                app.ARGS.DKI=False
+                app.ARGS.WDKI=False
+                app.ARGS.akc_outliers=False
             else:
-                if len(set(np.round(bval_dki, 2))) <= 2:
-                    logger.warning("Fewer than 2 nonzero shells found for DKI fitting.", extra={"bval_dki": bval_dki.tolist()})
+                if np.max(bval_dki) < 2:
+                    logger.warning("Max b-value is <2 for DKI fitting.")
 
                 grad_dki = np.hstack((bvec_dki.T, bval_dki[None,...].T))
                 dki = tensor.TensorFitting(grad_dki, int(app.ARGS.n_cores))
@@ -425,13 +434,22 @@ def execute(): #pylint: disable=unused-variable
                 bvec_dki = bvec[:,bval < maxb]
                 bval_dki = bval[bval < maxb]
 
-                if np.max(bval_dki) < 2:
-                    logger.warning("Max b-value is <2. Skipping DKI and WDKI fit.")
+                bvec_dki_temp=bvec_dki[:,bval_dki > 0.1]
+                ndir=np.shape(np.unique(bvec_dki_temp,axis=1))[1]
+
+                if len(set(np.round(bval_dki, 2))) <= 2:
+                    logger.warning(f"Fewer than 2 nonzero shells found for DKI fitting at TE={te}. Skipping DKI/WDKI.", extra={"bval_dki": bval_dki.tolist()})
                     app.ARGS.DKI=False
                     app.ARGS.WDKI=False
+                    app.ARGS.akc_outliers=False
+                elif ndir < 21:
+                    logger.warning("Fewer than 21 unique directions detected for DKI fitting. Skipping DKI/WDKI.")
+                    app.ARGS.DKI=False
+                    app.ARGS.WDKI=False
+                    app.ARGS.akc_outliers=False
                 else:
-                    if len(set(np.round(bval_dki, 2))) <= 2:
-                        logger.warning(f"Fewer than 2 nonzero shells found for DKI fitting at TE={te}.", extra={"bval_dki": bval_dki.tolist()})
+                    if np.max(bval_dki) < 2:
+                        logger.warning("Max b-value is <2 for DKI fitting.")
 
                     grad = np.hstack((bvec_dki.T, bval_dki[None,...].T))
                     dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
@@ -560,10 +578,19 @@ def execute(): #pylint: disable=unused-variable
         warnings.simplefilter('always', UserWarning) 
 
         logger.info("Starting SMI fitting process...")
-        if np.max(bval) < 2:
-            logger.warning("Max b-value is <2. Skipping SMI fit.")
+        bvec_temp=bvec[:,bval > 0.1]
+        ndir=np.shape(np.unique(bvec_temp,axis=1))[1]
+
+        if len(set(np.round(bval, 2))) <= 2:
+            logger.warning(f"Fewer than 2 nonzero shells found for SMI fitting. Skipping SMI.")
+            app.ARGS.SMI=False
+        elif ndir < 21:
+            logger.warning("Fewer than 21 unique directions detected for SMI fitting. Skipping SMI.")
             app.ARGS.SMI=False
         else:
+            if np.max(bval) < 2:
+                logger.warning("Max b-value is <2 for SMI fitting.")
+
             if not app.ARGS.sigma:
                 logger.warning("No sigma map provided. SMI may be poorly conditioned.")
                 sigma = None

@@ -490,11 +490,11 @@ def run_eddy(shell_table, dwi_metadata):
 
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 -fslgrad "%s" "%s" -json_import "%s" "%s" "%s"' % 
-                        (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 -json_import "%s" "%s" "%s"' % 
+                        (rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                 else: 
-                    run.command('mrconvert -strides -1,+2,+3 -fslgrad "%s" "%s" -json_import "%s" "%s" "%s"' % 
-                        (rpe_bvec_path, rpe_bvals_path, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                    run.command('mrconvert -strides -1,+2,+3 -json_import "%s" "%s" "%s"' % 
+                        (rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
                 run.command('mrconvert rpe_b0.mif rpe_b0.nii')
             else:
@@ -692,11 +692,11 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert "%s" -coord 3 0 -strides -1,+2,+3 -fslgrad "%s" "%s" -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair,rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
+                    run.command('mrconvert "%s" -coord 3 0 -strides -1,+2,+3 -json_import "%s" b0rpe.mif' % 
+                            (app.ARGS.rpe_pair, rpe_bids_path))
                 else: 
-                    run.command('mrconvert "%s" -fslgrad "%s" "%s" -strides -1,+2,+3 -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, rpe_bvec_path, rpe_bvals_path, rpe_bids_path))
+                    run.command('mrconvert "%s" -strides -1,+2,+3 -json_import "%s" b0rpe.mif' % 
+                            (app.ARGS.rpe_pair, rpe_bids_path))
                 
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
