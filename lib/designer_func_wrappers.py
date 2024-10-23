@@ -903,6 +903,25 @@ def run_eddy(shell_table, dwi_metadata):
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
+    if app.ARGS.eddy_quad_output:
+        run.command('eddy_quad "%s" -idx "%s" -par "%s" -m "%s" -b "%s" -g "%s" -o "%s"' %
+                    ('eddy_processing/dwi_post_eddy',
+                    'eddy_processing/eddy_indices.txt',
+                    'eddy_processing/eddy_config.txt',
+                    'eddy_processing/eddy_mask.nii',
+                    'eddy_processing/bvals',
+                    'eddy_processing/bvecs',
+                    app.ARGS.eddy_quad_output
+                    ))
+    else:
+        run.command('eddy_quad "%s" -idx "%s" -par "%s" -m "%s" -b "%s" -g "%s"' %
+                    ('eddy_processing/dwi_post_eddy',
+                    'eddy_processing/eddy_indices.txt',
+                    'eddy_processing/eddy_config.txt',
+                    'eddy_processing/eddy_mask.nii',
+                    'eddy_processing/bvals',
+                    'eddy_processing/bvecs'
+                    ))
 
     run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)
     # End timer

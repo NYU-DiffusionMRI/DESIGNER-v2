@@ -170,6 +170,15 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 - Perform rigid motion correction using ANTs (useful for cases where eddy breaks down).
 - Runs volume-to-volume registration for each DWI image using a mutual information cost function and b-spline interpolation.
 
+### `-eddy_quad_output <path/to/eddy_quad/output/folder>`
+- eddy_quad (QC report) will run after -eddy
+- Path to a not yet existing folder you want to save eddy_quad output to.
+- By default, it will save to the scratch (use `-nocleanup` to save scratch directory) directory (path/to/scratch/eddy_processing/dwi_post_eddy.qc)
+
+{: .ref }
+> Matteo Bastiani, Michiel Cottaar, Sean P. Fitzgibbon, Sana Suri, Fidel Alfaro-Almagro, Stamatios N.
+Sotiropoulos, Saad Joabdi and Jesper L.R. Andersson. (2019). Automated quality control for within and between studies diffusion MRI data using a non-parametric framework for movement and distortion correction. Neurolmage 184:801-812.
+
 ---
 
 ## Options relating to Gibbs artifact correction
