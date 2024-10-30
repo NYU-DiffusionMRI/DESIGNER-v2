@@ -133,16 +133,39 @@ def run_patch2self():
     print(f"Denoising completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
 
+def get_phase_encoding_dimension(pe_dir, strides):
+    # Define mappings for 'i', 'j', 'k' to their respective anatomical axes
+    axis_map = {
+        'i': 0,  # Left-Right (X-axis)
+        'j': 1,  # Anterior-Posterior (Y-axis)
+        'k': 2   # Superior-Inferior (Z-axis)
+    }
+    
+    # Check for valid phase encoding direction
+    if pe_dir not in axis_map:
+        raise ValueError("Invalid phase encoding direction. Choose from 'i', 'j', or 'k'.")
+    
+    # Map 'i', 'j', or 'k' to the target anatomical axis
+    target_axis = axis_map[pe_dir]
+    
+    # Determine which dimension in strides corresponds to the target axis
+    try:
+        dimension = strides.index(target_axis + 1)  # +1 since strides use 1-based indexing
+    except ValueError:
+        raise ValueError("Strides configuration does not contain the expected axis order.")
+    
+    return dimension
+
 def run_degibbs(pf, pe_dir):
     """
     wrapper for rpg degibbs
     """
 
     import lib.rpg as rpg
-    from mrtrix3 import run, app, MRtrixError
+    from mrtrix3 import run, app, MRtrixError, image
     from ants import image_read, image_write, from_numpy
-    # from tqdm import tqdm
-    # import os
+    import os
+    import numpy as np
 
     # rpg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'rpg_cpp')
 
@@ -164,25 +187,30 @@ def run_degibbs(pf, pe_dir):
     #print('phase-encoding direction = %s' % (pe_dir))
     #print('partial-fourier factor   = %s' % (pf))
 
+    # grab original strides
+    UserCpath = app.ARGS.input.rsplit(',')
+    dwi0 = [os.path.realpath(i) for i in UserCpath][0]
+    strides_orig = image.Header(dwi0).strides()
+    orient_orig = [abs(i) for i in strides_orig]
+
     if 'i' in pe_dir:
         pe_dir = 0
     elif 'j' in pe_dir:
         pe_dir = 1
     elif 'k' in pe_dir:
-        raise MRtrixError('k direction partial Fourier is not supported, check input data')
-    else:
-        pe_dir = 1
+        pe_dir = 2
 
-    dwi_t = dwi.transpose(3,2,1,0)
-    #progress_bar = tqdm(total=100)
-    #def progress_callback(progress):
-    #    progress_bar.n = progress
-    #    progress_bar.refresh()
+    pe_dir_orig = (np.array(orient_orig)-1)[pe_dir]
+    if pe_dir_orig == 2:
+        raise ValueError("PE dir=k should not be possible. Phase encoding direction must be along the first or second axis of the image.")
 
-    dwi_dg_t = rpg.unring(dwi_t, minW=1, maxW=3, nsh=20, pfv=float(pf), pfdimf=pe_dir, phase_flag=False)
-    #progress_bar.close()
-    dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0)
-
+    # we need to under the -1,2,3,4 striding and use the original PE direction here
+    # unring expects a transposed image along x,y (y along dim 0)
+    transpose_order = np.argsort(orient_orig)
+    dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(3,2,1,0))
+    dwi_dg_t = rpg.unring(dwi_t, minW=1, maxW=3, nsh=20, pfv=float(pf), pfdimf=pe_dir_orig, phase_flag=False)
+    dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0).transpose(np.argsort(transpose_order))
+    
     out = from_numpy(
         dwi_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
     image_write(out, 'working_rpg.nii')
