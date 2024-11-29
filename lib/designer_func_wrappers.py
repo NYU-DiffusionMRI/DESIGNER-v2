@@ -1030,7 +1030,9 @@ def run_rice_bias_correct():
         run.command('dwidenoise -noise lowbnoisemap.mif -estimator Exp2 dwi.mif dwitmp.mif', show=False)
         app.cleanup('dwitmp.mif')
         run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
-    run.command('mrconvert -force dwirc.mif working.mif')
+        if not app.ARGS.degibbs:
+            run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+        run.command('mrconvert -force -fslgrad working.bvec working.bval dwirc.mif working.mif', show=False)
 
 def run_normalization(dwi_metadata):
     from mrtrix3 import app, run
