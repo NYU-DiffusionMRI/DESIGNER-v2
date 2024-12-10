@@ -82,7 +82,7 @@ def save_params(paramDict, niiex, model, outdir):
 
     params = paramDict.keys()
     for key in params:
-        outpath = os.path.join(outdir, ('%s_%s.nii' % (key, model)))
+        outpath = os.path.join(r"{}".format(outdir), ("%s_%s.nii" % (key, model)))
         vol = paramDict[key]
         ndims = vol.ndim
 

@@ -139,6 +139,8 @@ def execute(): #pylint: disable=unused-variable
     import pandas as pd
 
     outdir = path.from_user(app.ARGS.output, True)
+    if outdir[0]=="'" and outdir[-1]=="'":
+        outdir= outdir.replace("'","")
     if not os.path.exists(outdir):
         os.makedirs(outdir)
         
