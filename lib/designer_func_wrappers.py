@@ -871,7 +871,8 @@ def run_eddy(shell_table, dwi_metadata):
 
             run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt "%s" dwirpe.mif' % (app.ARGS.rpe_all))
             run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
-            run.command('flirt -in b0rpe.nii -ref b0pe.mif -dof 6 -out b0rpe2pe.nii.gz')
+            run.command('mrconvert b0pe.mif b0pe.nii')
+            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
 
             # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
