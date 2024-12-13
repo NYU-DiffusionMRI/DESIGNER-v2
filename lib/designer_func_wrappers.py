@@ -906,15 +906,18 @@ def run_eddy(shell_table, dwi_metadata):
                 'topup_corrected_brain'))
 
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
+            
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
-                            (eddyopts, 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
+                            ('eddy_processing',
+                            eddyopts, 
                             pe_dir,
                             'topup_corrected_brain_mask' + fsl_suffix
                             ))
             else:
-                run.command('dwifslpreproc -nocleanup -grad "%s" -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
-                            ('fakeb_grad.txt',
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
+                            ('eddy_processing',
+                            'fakeb_grad.txt',
                             eddyopts, 
                             pe_dir,
                             'topup_corrected_brain_mask' + fsl_suffix
@@ -923,11 +926,11 @@ def run_eddy(shell_table, dwi_metadata):
 
         elif app.ARGS.rpe_header:
             if app.ARGS.eddy_fakeb is None: 
-                cmd = ('dwifslpreproc -nocleanup -eddy_options %s -rpe_header working.mif dwiec.mif' % 
-                    (eddyopts))
+                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
+                    ('eddy_processing',eddyopts))
             else:
-                cmd = ('dwifslpreproc -nocleanup -grad "%s" -eddy_options %s -rpe_header working.mif dwiec.mif' % 
-                    ('fakeb_grad.txt', eddyopts))
+                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_header working.mif dwiec.mif' % 
+                    ('eddy_processing','fakeb_grad.txt', eddyopts))
             run.command(cmd)
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
