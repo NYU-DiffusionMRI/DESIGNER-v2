@@ -672,8 +672,9 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
                 run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-                run.command('dwifslpreproc -nocleanup -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
-                    (eddyopts, 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
+                    ('eddy_processing',
+                     eddyopts, 
                      pe_dir, 
                      'dwi_pre_eddy_' + str(i) + '.mif',
                      'dwi_post_eddy_' + str(i) + '.mif'))
@@ -681,8 +682,9 @@ def run_eddy(shell_table, dwi_metadata):
 
             elif app.ARGS.rpe_header:
 
-                run.command('dwifslpreproc -nocleanup -eddy_options "%s" -rpe_header "%s" "%s"' % 
-                (eddyopts,
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header "%s" "%s"' % 
+                ('eddy_processing',
+                 eddyopts,
                 'dwi_pre_eddy_' + str(i) + '.mif',
                 'dwi_post_eddy_' + str(i) + '.mif'))
 
