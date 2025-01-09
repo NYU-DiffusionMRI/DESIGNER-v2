@@ -56,8 +56,14 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
     start_time = time.time()
 
     if app.ARGS.adaptive_patch:
+        
+        if app.ARGS.adaptive_patch_length:
+            adapt_length = int(app.ARGS.adaptive_patch_length)
+        else:
+            adapt_length = None
+
         Signal, Sigma, Nparameters = mp.denoise(
-            dwi, phase=args_phase, patchtype='nonlocal', shrinkage=args_shrinkage, algorithm=args_algorithm
+            dwi, phase=args_phase, kernel=extent, patchtype='nonlocal', patchsize=adapt_length, shrinkage=args_shrinkage, algorithm=args_algorithm
             )
     else:    
         Signal, Sigma, Nparameters = mp.denoise(

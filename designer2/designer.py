@@ -85,7 +85,8 @@ def usage(cmdline): #pylint: disable=unused-variable
     mp_options.add_argument('-extent', metavar=('<size>'), help='MPPCA Denoising extent. Default is 5,5,5')
     mp_options.add_argument('-phase', metavar=('<image>'), help='Diffusion phases - for performing denoising on complex data. This option should not be used alongside "-rician" since denoising complex data reduces the noise floor.', default=None)
     mp_options.add_argument('-adaptive_patch', action='store_true', help='Run MPPCA with adaptive patching')
-    
+    mp_options.add_argument('-adaptive_patch_length', metavar=('<len>'), help='Size of the adaptive patch for MPPCA denoising. Default is 80% of the kernel size')
+
     rpe_options = cmdline.add_argument_group('Options for eddy and to specify the acquisition phase-encoding design')
     rpe_options.add_argument('-eddy', action='store_true', help='run fsl eddy (note that if you choose this command you must also choose a phase encoding option')
     rpe_options.add_argument('-eddy_groups',metavar=('<index1,index2,...'),help='specify how input series should be grouped when running eddy, for use with variable TE or b-shape data. (Comma separated list of integers beginning with 1, i.e. 1,1,1,2,2,2 for 6 series where the first 3 series and second 3 series have different echo times).', default=None)

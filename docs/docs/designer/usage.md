@@ -90,6 +90,10 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 - Note when this argument is used, the patch size will be chosen based on the extent, where the total number of voxels in the adaptive patch is 80% of the total voxels in a patch.
 - Without the `-adaptive_patch` option, the patches are chosen as blocks with a step size of floor(extent/2), this increases speed at the expense of accuracy in noise estimation.
 
+### `-adaptive_patch_length`
+- Manually Specify the size of the adaptive patch.
+- choose a range from 1 to prod(extent). Default is 80% of the kernel size.
+
 ### `-phase <phase_image1,phase_image2,...>`
 - Include a volume (or volumes) of phase images corresponding to the input(s) to Designer. For example, if two series are input to Designer with a total of 100 directions, there should be two phase series with 100 total volumes.
 - Used in conjunction with `-denoise` option.

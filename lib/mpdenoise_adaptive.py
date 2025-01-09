@@ -355,12 +355,6 @@ class MP(object):
         # # parallel
         signal, sigma, npars = zip(*Parallel(n_jobs=num_cores, prefer='processes')\
            (delayed(self.denoise)(coords[:,i]) for i in inputs))
-        
-    #   #  serial
-        # k = self.kernel // 2
-        # #for t in inputs:
-        # crds = np.array([48+k[0], 38+k[1], 25+k[2]])
-        # a, b, c = self.denoise(crds)
            
         # reconstruct original data matrix
         Sigma = np.zeros((sx, sy, sz))
@@ -406,23 +400,22 @@ def denoise(img, kernel=None, patchtype=None, patchsize=None, shrinkage=None, al
         # ants.image_write(out, 'phase_dn.nii')
         out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
         ants.image_write(out, 'phase_dn.nii')
-        # import pdb; pdb.set_trace()
 
         print('magnitude denoising - adaptive patching')
         img_np = np.real(img*np.exp(-1j*phi_dn))
-        mp = MP(img_np, kernel, patchtype='adaptive', patchsize=None, shrinkage='frob', algorithm='jespersen', crop=0)
+        mp = MP(img_np, kernel, patchtype='adaptive', patchsize=patchsize, shrinkage=shrinkage, algorithm=algorithm, crop=0)
         Signal, Sigma, Npars = mp.process()
         
     else:
         zeroinds = np.where(img==0)
         img[zeroinds] = np.finfo(img.dtype).eps
 
-        mp = MP(img.copy(), kernel, patchtype='adaptive', patchsize=None, shrinkage='frob', algorithm='cordero-grande', crop=0)
+        mp = MP(img.copy(), kernel, patchtype='adaptive', patchsize=patchsize, shrinkage=shrinkage, algorithm=algorithm, crop=0)
         Signal, Sigma, Npars = mp.process()
         Signal[zeroinds] = 0
 
     return abs(Signal), Sigma, Npars
 
-# if __name__ == "__main__":
-#     denoise()
+if __name__ == "__main__":
+    denoise()
     
