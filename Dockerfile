@@ -4,6 +4,7 @@ FROM python:3.12.4-bookworm
 # Multi stage build from existing dependencies
 COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
 COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3
+COPY --from=antsx/ants:latest /opt/ants /usr/local/ants
 
 # RUN apt-get -qq update \
 #     && apt-get install -yq --no-install-recommends \
@@ -49,3 +50,5 @@ ENV LD_LIBRARY_PATH="/usr/local/mrtrix3/src:/usr/local/mrtrix3/core"
 ENV LD_LIBRARY_PATH="/app/rpg_cpp/fftw-3.3.10/build/lib:${LD_LIBRARY_PATH}"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
 ENV PYTHONPATH=/usr/local/mrtrix3/lib
+ENV PATH="/usr/local/ants/bin:$PATH"
+ENV LD_LIBRARY_PATH="/usr/local/ants/lib:$LD_LIBRARY_PATH"
