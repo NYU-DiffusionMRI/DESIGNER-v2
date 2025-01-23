@@ -80,7 +80,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     mp_options = cmdline.add_argument_group('Options for specifying denoising parameters')
     mp_options.add_argument('-patch2self', action='store_true', help='Perform patch2self')
     mp_options.add_argument('-denoise', action='store_true', help='Perform MPPCA')
-    mp_options.add_argument('-shrinkage',metavar=('<shrink>'),help='specify shrinkage type for MPPCA. Options are "threshold" or "(frob)"', default='frob')
+    mp_options.add_argument('-shrinkage',metavar=('<shrink>'),help='specify shrinkage type for MPPCA. Options are "threshold" or "frob"', default='threshold')
     mp_options.add_argument('-algorithm',metavar=('<alg>'),help='specify MP algorithm. Options are "veraart","(cordero-grande)","jespersen"',default='cordero-grande')
     mp_options.add_argument('-extent', metavar=('<size>'), help='MPPCA Denoising extent. Default is 5,5,5')
     mp_options.add_argument('-phase', metavar=('<image>'), help='Diffusion phases - for performing denoising on complex data. This option should not be used alongside "-rician" since denoising complex data reduces the noise floor.', default=None)

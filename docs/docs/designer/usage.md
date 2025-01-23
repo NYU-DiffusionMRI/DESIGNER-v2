@@ -56,7 +56,7 @@ Fadnavis, S., Batson, J., & Garyfallidis, E. (2020). Patch2Self: Denoising Diffu
 
 ### `-shrinkage <frob>`
 - Perform or do not perform singular value shrinkage using the Frobenuous norm described [here]({{ site.baseurl }}{% link docs/designer/background.md %}#singular-value-shrinkage) after MPPCA denoising
-- Options are `threshold` or `frob`. default `frob`.
+- Options are `threshold` or `frob`. default `threshold`.
 - Used in conjunction with the `-denoise` option.
 - When using this option please include the following citation:
 
