@@ -429,6 +429,8 @@ def run_eddy(shell_table, dwi_metadata):
     import json
     import os
     import glob
+    import warnings
+    from colorama import Fore
 
     terminal_width = shutil.get_terminal_size().columns
     separator = "=" * terminal_width
@@ -443,6 +445,11 @@ def run_eddy(shell_table, dwi_metadata):
     eddyopts = '" --cnr_maps --repol --data_is_shelled "'
 
     fsl_suffix = fsl.suffix()
+
+    stride=dwi_metadata['strides']
+    orient=dwi_metadata['orientation']
+    if orient!='axial':
+        warnings.warn(Fore.RED + '[WARNING] Image orientation is not axial, so eddy will not work on this data!!')
 
     pe_dir = dwi_metadata['pe_dir']
 
@@ -524,11 +531,11 @@ def run_eddy(shell_table, dwi_metadata):
 
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 -json_import "%s" "%s" "%s"' % 
-                        (rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                    run.command('mrconvert -coord 3 0 -strides "%s" -json_import "%s" "%s" "%s"' % 
+                        (stride[:-3], rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                 else: 
-                    run.command('mrconvert -strides -1,+2,+3 -json_import "%s" "%s" "%s"' % 
-                        (rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                    run.command('mrconvert -strides "%s" -json_import "%s" "%s" "%s"' % 
+                        (stride[:-3],rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
                 run.command('mrconvert rpe_b0.mif rpe_b0.nii')
             else:
@@ -540,11 +547,11 @@ def run_eddy(shell_table, dwi_metadata):
 
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert -coord 3 0 -strides -1,+2,+3 "%s" "%s"' % 
-                        (app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                    run.command('mrconvert -coord 3 0 -strides "%s" "%s" "%s"' % 
+                        (stride[:-3], app.ARGS.rpe_pair, 'rpe_b0.nii'))
                 else: 
-                    run.command('mrconvert -strides -1,+2,+3 "%s" "%s"' % 
-                        (app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                    run.command('mrconvert -strides "%s" "%s" "%s"' % 
+                        (stride[:-3], app.ARGS.rpe_pair, 'rpe_b0.nii'))
             
             # extract brain from mean b0
             run.command('bet "%s" "%s" -f 0.2 -m' %
@@ -676,7 +683,7 @@ def run_eddy(shell_table, dwi_metadata):
             elif app.ARGS.rpe_all:
                 ### this needs to be changed for realistic compatiblity to eddy_groups
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
-                run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
+                run.command('mrconvert -strides ' + stride + ' -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
                 run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
                     ('eddy_processing',
@@ -728,11 +735,11 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert "%s" -coord 3 0 -strides -1,+2,+3 -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, rpe_bids_path))
+                    run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' % 
+                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
                 else: 
-                    run.command('mrconvert "%s" -strides -1,+2,+3 -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, rpe_bids_path))
+                    run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
+                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
                 
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -748,9 +755,9 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
-                    run.command('mrconvert "%s" -strides -1,+2,+3 -coord 3 0 b0rpe.nii' % (app.ARGS.rpe_pair))
+                    run.command('mrconvert "%s" -strides "%s" -coord 3 0 b0rpe.nii' % (app.ARGS.rpe_pair, stride))
                 else: 
-                    run.command('mrconvert -strides -1,+2,+3 "%s" b0rpe.nii' % (app.ARGS.rpe_pair))
+                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
 
                 acqp = np.zeros((2,3))
                 if 'i' in pe_dir: acqp[:,0] = 1
@@ -853,7 +860,7 @@ def run_eddy(shell_table, dwi_metadata):
             rpe_bids_path = rpe_fpath + '.json'
             
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('mrconvert -grad grad.txt -strides -1,+2,+3,+4 -json_import "%s" "%s" dwirpe.mif' % (rpe_bids_path,app.ARGS.rpe_all))
+                run.command('mrconvert -grad grad.txt -strides  -json_import "%s" "%s" dwirpe.mif' % (stride,rpe_bids_path,app.ARGS.rpe_all))
                 run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -877,7 +884,7 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-            run.command('mrconvert -strides -1,+2,+3,+4 -grad grad.txt "%s" dwirpe.mif' % (app.ARGS.rpe_all))
+            run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
             run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
             run.command('mrconvert b0pe.mif b0pe.nii')
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')

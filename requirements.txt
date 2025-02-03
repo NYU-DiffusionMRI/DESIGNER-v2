@@ -53,3 +53,4 @@ trx-python==0.2.9
 tzdata==2024.1
 urllib3==2.2.2
 webcolors==24.6.0
+colorama==0.4.6
