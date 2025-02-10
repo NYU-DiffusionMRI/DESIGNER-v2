@@ -179,6 +179,9 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 - Path to a not yet existing folder you want to save eddy_quad output to.
 - By default, it will save to the scratch (use `-nocleanup` to save scratch directory) directory (path/to/scratch/eddy_processing/dwi_post_eddy.qc)
 
+### `-eddy_quad_off`
+- Include this flag if you prefer to skip eddy_quad after running eddy
+
 {: .ref }
 > Matteo Bastiani, Michiel Cottaar, Sean P. Fitzgibbon, Sana Suri, Fidel Alfaro-Almagro, Stamatios N.
 Sotiropoulos, Saad Joabdi and Jesper L.R. Andersson. (2019). Automated quality control for within and between studies diffusion MRI data using a non-parametric framework for movement and distortion correction. Neurolmage 184:801-812.

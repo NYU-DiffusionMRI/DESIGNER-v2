@@ -97,6 +97,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     rpe_options.add_argument('-rpe_header', action='store_true', help='Specify that the phase-encoding information can be found in the image header(s), and that this is the information that the script should use')
     rpe_options.add_argument('-rpe_te', metavar=('<echo time (s)>'), help='Specify the echo time of the reverse phase encoded image, if it is not accompanied by a bids .json sidecar.')
     rpe_options.add_argument('-eddy_quad_output', metavar=('<path>'), help='path to a not yet existing directory you want to save eddy_quad output to')
+    rpe_options.add_argument('-eddy_quad_off', action='store_true', help='skip eddy_quad')
 
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -216,6 +217,10 @@ def execute(): #pylint: disable=unused-variable
 
     if len(set(tes)) > 1:
         np.savetxt(os.path.join(head, oname + '.echotime'), tes, fmt='%s', delimiter=' ', newline=' ')
+
+    #eddy_quad
+    if app.ARGS.eddy:
+        run_eddy_quad()
 
 
 def main():

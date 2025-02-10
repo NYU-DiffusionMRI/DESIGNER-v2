@@ -210,7 +210,7 @@ def run_degibbs(pf, pe_dir):
     if pe_dir_orig == 2:
         raise ValueError("PE dir=k should not be possible. Phase encoding direction must be along the first or second axis of the image.")
 
-    # we need to under the -1,2,3,4 striding and use the original PE direction here
+    # we need to undo the -1,2,3,4 striding and use the original PE direction here
     # unring expects a transposed image along x,y (y along dim 0)
     transpose_order = np.argsort(orient_orig)
     dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(3,2,1,0))
@@ -950,25 +950,6 @@ def run_eddy(shell_table, dwi_metadata):
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
-    if app.ARGS.eddy_quad_output:
-        run.command('eddy_quad "%s" -idx "%s" -par "%s" -m "%s" -b "%s" -g "%s" -o "%s"' %
-                    ('eddy_processing/dwi_post_eddy',
-                    'eddy_processing/eddy_indices.txt',
-                    'eddy_processing/eddy_config.txt',
-                    'eddy_processing/eddy_mask.nii',
-                    'eddy_processing/bvals',
-                    'eddy_processing/bvecs',
-                    app.ARGS.eddy_quad_output
-                    ))
-    else:
-        run.command('eddy_quad "%s" -idx "%s" -par "%s" -m "%s" -b "%s" -g "%s"' %
-                    ('eddy_processing/dwi_post_eddy',
-                    'eddy_processing/eddy_indices.txt',
-                    'eddy_processing/eddy_config.txt',
-                    'eddy_processing/eddy_mask.nii',
-                    'eddy_processing/bvals',
-                    'eddy_processing/bvecs'
-                    ))
 
     run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)
     # End timer
@@ -1090,3 +1071,31 @@ def run_normalization(dwi_metadata):
                 DWImif = ' '.join(nmlist)
             run.command('mrcat -axis 3 ' + DWImif + ' dwinm.mif')
             run.command('mrconvert -force dwinm.mif working.mif')
+
+
+def run_eddy_quad():
+    from mrtrix3 import app, run
+
+    if app.ARGS.eddy_quad_off:
+        print("...Skipping eddy_quad...")
+    else:
+        print("...Run eddy_quad...")
+        if app.ARGS.eddy_quad_output:
+            run.command('eddy_quad "%s" -idx "%s" -par "%s" -m "%s" -b "%s" -g "%s" -o "%s"' %
+                        ('eddy_processing/dwi_post_eddy',
+                        'eddy_processing/eddy_indices.txt',
+                        'eddy_processing/eddy_config.txt',
+                        'eddy_processing/eddy_mask.nii',
+                        'eddy_processing/bvals',
+                        'eddy_processing/bvecs',
+                        app.ARGS.eddy_quad_output
+                        ))
+        else:
+            run.command('eddy_quad "%s" -idx "%s" -par "%s" -m "%s" -b "%s" -g "%s"' %
+                        ('eddy_processing/dwi_post_eddy',
+                        'eddy_processing/eddy_indices.txt',
+                        'eddy_processing/eddy_config.txt',
+                        'eddy_processing/eddy_mask.nii',
+                        'eddy_processing/bvals',
+                        'eddy_processing/bvecs'
+                        ))
