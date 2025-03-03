@@ -106,26 +106,27 @@ unsigned int get_cpu_quota() {
 
 class FFTWPlanManager {
 public:
-    fftw_plan plan;
-    fftw_plan plan_inv;
-    fftw_plan plan_tr;
-    fftw_plan plan_inv_tr;
-    fftw_plan p_1D_nx;
-    fftw_plan pinv_1D_nx;
-    fftw_plan p_1D_ny;
-    fftw_plan pinv_1D_ny;
+    fftw_plan plan = nullptr;
+    fftw_plan plan_inv = nullptr;
+    fftw_plan plan_tr = nullptr;
+    fftw_plan plan_inv_tr = nullptr;
 
-    fftw_plan p_1D_ceil_ny;
-    fftw_plan pinv_1D_ceil_ny;
-    fftw_plan p_1D_floor_ny;
-    fftw_plan pinv_1D_floor_ny;
-    
-    fftw_plan plan_pfo1;
-    fftw_plan plan_inv_pfo1;
-    fftw_plan plan_tr_pfo1;
-    fftw_plan plan_inv_tr_pfo1;
-    fftw_plan p_1D_ny_pfo1;
-    fftw_plan pinv_1D_ny_pfo1;
+    fftw_plan p_1D_nx = nullptr;
+    fftw_plan pinv_1D_nx = nullptr;
+    fftw_plan p_1D_ny = nullptr;
+    fftw_plan pinv_1D_ny= nullptr;
+
+    fftw_plan p_1D_ceil_ny = nullptr;
+    fftw_plan pinv_1D_ceil_ny = nullptr;
+    fftw_plan p_1D_floor_ny = nullptr;
+    fftw_plan pinv_1D_floor_ny = nullptr;
+
+    fftw_plan plan_pfo1= nullptr;
+    fftw_plan plan_inv_pfo1 = nullptr;
+    fftw_plan plan_tr_pfo1 = nullptr;
+    fftw_plan plan_inv_tr_pfo1 = nullptr;
+    fftw_plan p_1D_ny_pfo1 = nullptr;
+    fftw_plan pinv_1D_ny_pfo1 = nullptr;
 
 
     FFTWPlanManager(int nx, int ny, int pfo) {
@@ -1084,12 +1085,7 @@ void parallel_unringing(unsigned int num_threads, double** slicesin, double** sl
         
         // Initialize FFTWPlanManager for each thread
         try { 
-            if (pfdimf) { // y
-                plan_managers[t] = std::make_shared<FFTWPlanManager>(nx, ny, pfo);
-            } else { // x
-                plan_managers[t] = std::make_shared<FFTWPlanManager>(ny, nx, pfo);
-            }
-
+            plan_managers[t] = std::make_shared<FFTWPlanManager>(dim_sz[0], dim_sz[1], pfo);
             threads.emplace_back([=, &plan_managers, &exceptionPtr, &mutex]() {
                 try {
                     process_slice(start, end, slicesin, slicesin_i, slicesout, slicesout_i,
