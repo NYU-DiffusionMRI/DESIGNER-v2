@@ -142,7 +142,7 @@ def execute(): #pylint: disable=unused-variable
 
         # by default perform mppca denoising with optional phase denoising for complex data
         run_mppca(
-            app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm)
+            app.ARGS.extent, phasepath, app.ARGS.shrinkage, app.ARGS.algorithm, dwi_metadata)
     
     # patch2self can be run either in addition or alternatively to mppca
     if app.ARGS.patch2self:
@@ -173,7 +173,7 @@ def execute(): #pylint: disable=unused-variable
 
     # generate a final brainmask
     if app.ARGS.mask or app.ARGS.normalize:
-        create_brainmask(fsl_suffix)    
+        create_brainmask(fsl_suffix,dwi_metadata)    
 
     # rician bias correction
     if app.ARGS.phase and app.ARGS.rician:
@@ -186,7 +186,10 @@ def execute(): #pylint: disable=unused-variable
         run_normalization(dwi_metadata)
 
     run.command('mrinfo -export_grad_fsl dwi_designer.bvec dwi_designer.bval working.mif', show=False)
-    run.command('mrconvert -force -datatype float32le working.mif dwi_designer.nii', show=False)
+
+    orig_stride = dwi_metadata['stride']
+    run.command('mrconvert -force -stride %s -datatype float32le working.mif dwi_designer.nii' %
+                (orig_stride), show=False)
 
     outpath = app.ARGS.output
     (head, fname) = os.path.split(outpath)
@@ -196,15 +199,16 @@ def execute(): #pylint: disable=unused-variable
         outpath += '.nii'
 
     if app.ARGS.datatype:
-        run.command('mrconvert -force -datatype %s -export_grad_fsl "%s" "%s" %s "%s"' % 
-            (app.ARGS.datatype, 
+        run.command('mrconvert -force -stride %s -datatype %s -export_grad_fsl "%s" "%s" %s "%s"' % 
+            (orig_stride,
+             app.ARGS.datatype, 
             os.path.join(head, oname + '.bvec'),
             os.path.join(head, oname + '.bval'),
             'working.mif',
             outpath))
     else:
-        run.command('mrconvert -force -export_grad_fsl "%s" "%s" %s "%s"' % 
-            (
+        run.command('mrconvert -force -stride %s -export_grad_fsl "%s" "%s" %s "%s"' % 
+            (orig_stride,
             os.path.join(head, oname + '.bvec'),
             os.path.join(head, oname + '.bval'),
             'working.mif', 
