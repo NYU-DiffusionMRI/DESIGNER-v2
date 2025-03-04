@@ -312,6 +312,14 @@ def convert_input_data(dwi_metadata):
     telist_input = dwi_metadata['telist']
     bidslist = dwi_metadata['bidslist']
 
+    stride_info = run.command('mrinfo -strides "%s%s"' % 
+                            (dwi_n_list[0], dwi_ext[0]))
+    orig_stride = ','.join(stride_info.stdout.strip().split(' '))
+    temp=orig_stride.split(',')
+    orig_stride_3dim = ','.join(temp[:-1])
+    dwi_metadata['stride']=orig_stride
+    dwi_metadata['stride_3dim']=orig_stride_3dim
+
     if os.path.exists(bidslist[0]):
         bids = [json.load(open(i)) for i in bidslist]
         for i in bids:
@@ -320,17 +328,38 @@ def convert_input_data(dwi_metadata):
 
         if orient==[1,0,0,0,0,-1]:
             orient='coronal'
+            # stride=-'-1,-3,+2,+4'
         if orient==[1,0,0,0,1,0]:
             orient='axial'
+            # stride='-1,+2,+3,+4'
         if orient==[0,1,0,0,0,-1]:
             orient='sagittal'
+            # stride='+3,-1,+2,+4'
         dwi_metadata['orientation']=orient
-        stride='-1,+2,+3,+4'
-        dwi_metadata['strides']=stride
+    else:
+        print('... no bids files identified')
+        stride_list=[x for x in orig_stride.split(',')]
+        if '3' in stride_list[0]:
+            orient='sagittal'
+            print('Assuming orientation is sagittal based on strides')
+        if '3' in stride_list[1]:
+            orient='coronal'
+            print('Assuming orientation is coronal based on strides')
+        if '3' in stride_list[2]:
+            orient='axial'
+            print('Assuming orientation is axial based on strides')
+        dwi_metadata['orientation']=orient
 
+    
+    if caller == 'designer':
         if orient != 'axial':
             warnings.warn(Fore.RED + '[WARNING] Image orientation is not axial, so eddy will not work on this data!!')
-
+        
+        #converting images to stride -1,2,3,4 to work with dwifslpreproc
+        stride='-1,+2,+3,+4'
+    else:
+        stride=orig_stride
+        
     if len(dwi_n_list) == 1:
         if not isdicom:
             if os.path.exists(bvallist[0]):

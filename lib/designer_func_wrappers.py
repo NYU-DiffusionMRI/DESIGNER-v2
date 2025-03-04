@@ -20,7 +20,7 @@ run_normalization:
 import time
 import shutil
 
-def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
+def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
     wrapper for complex or magnitude, adatpive or local mppca
     
@@ -82,7 +82,10 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm):
     image_write(out, 'Npars.nii')
 
     run.command('mrconvert -grad grad.txt tmp_dwidn.nii dwidn.mif', show=False)
-    run.command('mrconvert sigma.nii noisemap.mif', show=False)
+
+    stride=dwi_metadata['stride_3dim']
+    run.command('mrconvert -force -strides %s sigma.nii sigma.nii' % (stride), show=False)
+    run.command('mrconvert -strides -1,+2,+3,+4 sigma.nii noisemap.mif', show=False)
     app.cleanup('tmp_dwi.nii')
     app.cleanup('tmp_dwidn.nii')
     app.cleanup('grad.txt')
@@ -446,7 +449,7 @@ def run_eddy(shell_table, dwi_metadata):
 
     fsl_suffix = fsl.suffix()
 
-    stride=dwi_metadata['strides']
+    stride=dwi_metadata['stride']
     orient=dwi_metadata['orientation']
     if orient!='axial':
         warnings.warn(Fore.RED + '[WARNING] Image orientation is not axial, so eddy will not work on this data!!')
@@ -532,10 +535,10 @@ def run_eddy(shell_table, dwi_metadata):
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
                     run.command('mrconvert -coord 3 0 -strides "%s" -json_import "%s" "%s" "%s"' % 
-                        (stride[:-3], rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                        (stride, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                 else: 
                     run.command('mrconvert -strides "%s" -json_import "%s" "%s" "%s"' % 
-                        (stride[:-3],rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                        (stride,rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
                 run.command('mrconvert rpe_b0.mif rpe_b0.nii')
             else:
@@ -548,10 +551,10 @@ def run_eddy(shell_table, dwi_metadata):
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
                     run.command('mrconvert -coord 3 0 -strides "%s" "%s" "%s"' % 
-                        (stride[:-3], app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                        (stride, app.ARGS.rpe_pair, 'rpe_b0.nii'))
                 else: 
                     run.command('mrconvert -strides "%s" "%s" "%s"' % 
-                        (stride[:-3], app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                        (stride, app.ARGS.rpe_pair, 'rpe_b0.nii'))
             
             # extract brain from mean b0
             run.command('bet "%s" "%s" -f 0.2 -m' %
@@ -662,7 +665,7 @@ def run_eddy(shell_table, dwi_metadata):
                     ('topup_corrected_' + str(i) + '_mean.nii', 
                     'topup_corrected_' + str(i) + '_brain'))
                 
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
                     ('eddy_processing_' + str(i), 
                     eddyopts, 
                     'topup_corrected_' + str(i) + '_brain_mask' + fsl_suffix,
@@ -673,7 +676,7 @@ def run_eddy(shell_table, dwi_metadata):
                 
             elif app.ARGS.rpe_none:
 
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -pe_dir "%s" "%s" "%s"' % 
                     ('eddy_processing_' + str(i), 
                     eddyopts, 
                     pe_dir,
@@ -685,7 +688,7 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
                 run.command('mrconvert -strides ' + stride + ' -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_all -pe_dir "%s" "%s" "%s"' %
                     ('eddy_processing',
                      eddyopts, 
                      pe_dir, 
@@ -695,7 +698,7 @@ def run_eddy(shell_table, dwi_metadata):
 
             elif app.ARGS.rpe_header:
 
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_header "%s" "%s"' % 
                 ('eddy_processing',
                  eddyopts,
                 'dwi_pre_eddy_' + str(i) + '.mif',
@@ -941,7 +944,7 @@ def run_eddy(shell_table, dwi_metadata):
 
         elif app.ARGS.rpe_header:
             if app.ARGS.eddy_fakeb is None: 
-                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
+                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_header working.mif dwiec.mif' % 
                     ('eddy_processing',eddyopts))
             else:
                 cmd = ('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_header working.mif dwiec.mif' % 
@@ -1005,7 +1008,7 @@ def run_b1correct(dwi_metadata):
     print(f"Eddy current, EPI, motion correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
 
-def create_brainmask(fsl_suffix):
+def create_brainmask(fsl_suffix, dwi_metadata):
     import os, gzip, shutil
     from mrtrix3 import run
 
@@ -1014,9 +1017,11 @@ def create_brainmask(fsl_suffix):
     # run.command('dwi2mask dwibc.mif - | maskfilter - dilate brain_mask.nii')
     # run.command('fslmaths b0bc.nii -mas brain_mask.nii brain')
     run.command('bet b0bc.nii brain' + fsl_suffix + ' -m -f 0.25')
+    stride=dwi_metadata['stride_3dim']
     if os.path.isfile('brain_mask.nii.gz'):
         with gzip.open('brain_mask' + fsl_suffix, 'rb') as f_in, open('brain_mask.nii', 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
+            run.command('mrconvert -force -strides %s brain_mask.nii brain_mask.nii' % (stride), show=False)
         run.function(os.remove,'brain_mask' + fsl_suffix, show=False)
 
 def run_rice_bias_correct():
