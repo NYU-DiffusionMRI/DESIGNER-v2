@@ -527,11 +527,13 @@ def run_eddy(shell_table, dwi_metadata):
 
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
                 # extract b0s of dwi matching te of PA image
-                run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean "%s" -axis 3' %
+                # mrmath removes phase encoding info
+                run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrconvert -json_export %s - - | mrmath - mean %s -axis 3' %
                     (dwi_metadata['idxlist'][id_dwi_match_pa],
+                    'pe_original_meanb0.json',
                     'pe_original_meanb0.mif'),
                     show=False)
-
+                
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
                 if len(rpe_size) == 4:
                     run.command('mrconvert -coord 3 0 -strides "%s" -json_import "%s" "%s" "%s"' % 
@@ -539,8 +541,11 @@ def run_eddy(shell_table, dwi_metadata):
                 else: 
                     run.command('mrconvert -strides "%s" -json_import "%s" "%s" "%s"' % 
                         (stride,rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                    
+                #need to import pe_original_meanb0 bids with phase encoding info so we can run mrinfo -export_pe_eddy
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
                 run.command('mrconvert rpe_b0.mif rpe_b0.nii')
+                run.command('mrconvert -force -json_import pe_original_meanb0.json pe_original_meanb0.nii pe_original_meanb0.mif', show=False)
             else:
                 # extract b0s of dwi matching te of PA image
                 run.command('mrconvert -coord 3 %s working.mif - | dwiextract -bzero - - | mrmath - mean "%s" -axis 3' %
@@ -614,8 +619,8 @@ def run_eddy(shell_table, dwi_metadata):
                     'b0_pair_topup_' + str(i) + '.nii'))
 
                 if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                    run.command('mrinfo pe_original_meanb0.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
-                    run.command('mrinfo rpe_b0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                    run.command('mrinfo -force pe_original_meanb0.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
+                    run.command('mrinfo -force rpe_b0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
                     filenames = ['topup_config_1.txt', 'topup_config_2.txt']
                     with open('topup_acqp.txt', 'w') as outfile:
                         for fname in filenames:
