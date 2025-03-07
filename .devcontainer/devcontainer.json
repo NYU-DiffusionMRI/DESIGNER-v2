@@ -17,9 +17,13 @@
 				"ms-python.debugpy",
 				"ms-python.vscode-pylance",
 				"streetsidesoftware.code-spell-checker",
-				"ms-toolsai.jupyter",
 				"CircleCI.circleci",
-				"GitHub.copilot"
+				"GitHub.copilot",
+				"eamodio.gitlens",
+				"ms-python.black-formatter",
+				"ms-python.flake8",
+				"ms-vscode-remote.remote-containers",
+				"ms-python.isort"
 			],
 			"settings": {
 				"terminal.integrated.defaultProfile.linux": "zsh",
@@ -31,5 +35,5 @@
 			}
 		}
 	},
-	"postCreateCommand": "pip3 install --user -r requirements.txt"
+	"postCreateCommand": "pip3 install --user -r requirements.txt && python setup.py build_ext",
 }
