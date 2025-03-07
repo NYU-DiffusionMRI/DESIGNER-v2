@@ -2,6 +2,7 @@
 import os
 import logging
 import json
+import scipy.io as sio
 from logging import StreamHandler, FileHandler
 
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
@@ -635,9 +636,12 @@ def execute(): #pylint: disable=unused-variable
                 
                 logger.info("SMI model initialized for multi-TE/beta data.")
                 
-                params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
+                params_smi,prior,coeffs_f = smi.fit(dwi_orig, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for multi-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})
                 
+                sio.savemat(os.path.join("{}/prior_smi.mat".format(outdir)), {'prior_smi': prior})
+                sio.savemat(os.path.join("{}/coeffs_f_smi.mat".format(outdir)), {'coeffs_f_smi': coeffs_f})
+
                 save_params(params_smi, nii, model='smi', outdir=outdir)
                 logger.info("SMI parameters saved for multi-TE/beta data.", extra={"outdir": outdir})
             else:
@@ -647,8 +651,11 @@ def execute(): #pylint: disable=unused-variable
                 
                 logger.info("SMI model initialized for single-TE/beta data.")
 
-                params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
+                params_smi,prior,coeffs_f = smi.fit(dwi, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for single-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})
+
+                sio.savemat("{}/prior_smi.mat".format(outdir), {'prior_smi': prior})
+                sio.savemat("{}/coeffs_f_smi.mat".format(outdir), {'coeffs_f_smi': coeffs_f})
 
                 save_params(params_smi, nii, model='smi', outdir=outdir)
                 logger.info("SMI parameters saved for single-TE/beta data.", extra={"outdir": outdir})

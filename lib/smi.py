@@ -1126,7 +1126,7 @@ class SMI(object):
         if flag_4d:
             kernel = self.vectorize(kernel, self.mask)
 
-        return kernel
+        return kernel,coeffs_f
 
     def get_plm_from_s_and_kernel(self, dwi, kernel):
         """
@@ -1296,6 +1296,10 @@ class SMI(object):
         # set SMI priors
         self.set_priors()
 
+        prior=self.prior
+
+        print(type(self.prior))
+
         dwi = dwi.astype(np.float32)
         # correct for rician bias if the flag is on
         if self.flag_rician_bias:
@@ -1306,7 +1310,7 @@ class SMI(object):
         
         output = {}
         # standard model fit
-        kernel = self.standard_model_mlfit_rot_invs(rot_invs, [0, 0.2])
+        kernel,coeffs_f = self.standard_model_mlfit_rot_invs(rot_invs, [0, 0.2])
         output['f'] = kernel[:,:,:,0]
         output['Da'] = kernel[:,:,:,1]
         output['DePar'] = kernel[:,:,:,2]
@@ -1342,7 +1346,7 @@ class SMI(object):
             epsilon = self.vectorize(epsilon, mask)
             output['epsilon'] = epsilon
 
-        return output
+        return output,prior,coeffs_f
         
 if __name__ == "__main__":
     sys.exit()
