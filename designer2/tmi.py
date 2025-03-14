@@ -2,7 +2,6 @@
 import os
 import logging
 import json
-import scipy.io as sio
 from logging import StreamHandler, FileHandler
 
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
@@ -578,6 +577,7 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.SMI:
         from lib.smi import SMI
         import warnings
+        import scipy.io as sio
         warnings.simplefilter('always', UserWarning) 
 
         logger.info("Starting SMI fitting process...")
