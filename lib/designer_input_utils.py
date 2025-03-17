@@ -559,8 +559,9 @@ def convert_input_data(dwi_metadata):
     bshape_per_series = dwi_metadata['bshape']
     dwi_metadata['TE'] = te_per_series
 
-    if (len(set(te_per_series)) > 1) and (not app.ARGS.rpe_te):
-        raise MRtrixError('If data has variable echo time and no RPE TE is specified, please use the -rpe_te flag to specify the RPE TE')
+    if caller == 'designer':
+        if (len(set(te_per_series)) > 1) and (not app.ARGS.rpe_te):
+            raise MRtrixError('If data has variable echo time and no RPE TE is specified, please use the -rpe_te flag to specify the RPE TE')
 
     if not all(x == ped_per_series[0] for x in ped_per_series):
         raise MRtrixError('input series have different phase encoding directions, series should be processed separately')
