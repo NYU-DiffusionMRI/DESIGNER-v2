@@ -76,7 +76,7 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
     image_write(out, 'tmp_dwidn.nii')
     out = from_numpy(
         Sigma, origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
-    image_write(out, 'sigma.nii')
+    image_write(out, 'sigma_fixed_strides.nii')
     out = from_numpy(
         Nparameters, origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
     image_write(out, 'Npars.nii')
@@ -84,7 +84,7 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
     run.command('mrconvert -grad grad.txt tmp_dwidn.nii dwidn.mif', show=False)
 
     stride=dwi_metadata['stride_3dim']
-    run.command('mrconvert -force -strides %s sigma.nii sigma.nii' % (stride), show=False)
+    run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
     run.command('mrconvert -strides -1,+2,+3,+4 sigma.nii noisemap.mif', show=False)
     app.cleanup('tmp_dwi.nii')
     app.cleanup('tmp_dwidn.nii')
@@ -1026,8 +1026,11 @@ def create_brainmask(fsl_suffix, dwi_metadata):
     if os.path.isfile('brain_mask.nii.gz'):
         with gzip.open('brain_mask' + fsl_suffix, 'rb') as f_in, open('brain_mask.nii', 'wb') as f_out:
             shutil.copyfileobj(f_in, f_out)
-            run.command('mrconvert -force -strides %s brain_mask.nii brain_mask.nii' % (stride), show=False)
         run.function(os.remove,'brain_mask' + fsl_suffix, show=False)
+    run.command('mrconvert -force -strides %s brain_mask.nii brain_mask_orig_strides.nii' % (stride), show=False)
+    run.function(os.remove,'brain_mask.nii', show=False)
+    os.rename('brain_mask_orig_strides.nii', 'brain_mask.nii')
+    
 
 def run_rice_bias_correct():
     from mrtrix3 import run, app
