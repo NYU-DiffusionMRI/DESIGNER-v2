@@ -56,7 +56,7 @@
 #include <fstream>
 #include <unistd.h>    // small 
 #include <getopt.h>    // large 
-// #include <nifti1_io.h> // medical images
+
 #include "fftw3.h"     // fast fourier transform
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
@@ -899,41 +899,31 @@ py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array
     std::cout << "number of slices: " << nz * ndwi << std::endl;
 
 
-// to check reshape
-for(unsigned int i = 0; i < (nz * ndwi); i++){
-for(unsigned int j = 0; j < (nx * ny); j++){
-slicesout[i][j] = slicesin[i][j];
-if(phase_flag){
-slicesout_i[i][j] = slicesin_i[i][j];    
+// apply unringing
+int scale = 4;
+int ndim  = 2;
+unsigned int i;
+for(i = 0; i < nz*ndwi; i++){
+if(pfo == 1 || pfo == 3){ // just for these cases ifact can be equal to pfo
+if(pfdimf){ // y    
+if(phase_flag) // complex   
+UnringScale<double>(slicesin[i],slicesin_i[i],nx,ny,scale,pfo,minW,maxW,nsh);
+else // real
+UnringScale<double>(slicesin[i],0,nx,ny,scale,pfo,minW,maxW,nsh);    
 }
-}
-}     
-
-// // apply unringing
-// int scale = 4;
-// int ndim  = 2;
-// unsigned int i;
-// for(i = 0; i < nz*ndwi; i++){
-// if(pfo == 1 || pfo == 3){ // just for these cases ifact can be equal to pfo
-// if(pfdimf){ // y    
-// if(phase_flag) // complex   
-// UnringScale<double>(slicesin[i],slicesin_i[i],nx,ny,scale,pfo,minW,maxW,nsh);
-// else // real
-// UnringScale<double>(slicesin[i],0,nx,ny,scale,pfo,minW,maxW,nsh);    
-// }
-// else{ // x
-// if(phase_flag) // complex       
-// UnringScale<double>(slicesin[i],slicesin_i[i],ny,nx,scale,pfo,minW,maxW,nsh);    
-// else // real
-// UnringScale<double>(slicesin[i],0,ny,nx,scale,pfo,minW,maxW,nsh);    
-// } // dim
-// } // pfo
-// if(phase_flag) // complex
-// Unring(slicesin[i],slicesin_i[i],slicesout[i],slicesout_i[i],dim_sz,ndim,pfo,minW,maxW,nsh);
-// else // real
-// Unring(slicesin[i],0,slicesout[i],0,dim_sz,ndim,pfo,minW,maxW,nsh);    
-// // slicesout = slicesin;
-// } // i
+else{ // x
+if(phase_flag) // complex       
+UnringScale<double>(slicesin[i],slicesin_i[i],ny,nx,scale,pfo,minW,maxW,nsh);    
+else // real
+UnringScale<double>(slicesin[i],0,ny,nx,scale,pfo,minW,maxW,nsh);    
+} // dim
+} // pfo
+if(phase_flag) // complex
+Unring(slicesin[i],slicesin_i[i],slicesout[i],slicesout_i[i],dim_sz,ndim,pfo,minW,maxW,nsh);
+else // real
+Unring(slicesin[i],0,slicesout[i],0,dim_sz,ndim,pfo,minW,maxW,nsh);    
+// slicesout = slicesin;
+} // i
 
     // Put slices into volume (real)
     Reshape<double>(volumeout.data(), slicesout.get(), nx, ny, nz, ndwi, pfdimf, false);

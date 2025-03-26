@@ -175,6 +175,7 @@ def run_degibbs(pf, pe_dir):
     from ants import image_read, image_write, from_numpy
     import os
     import numpy as np
+    import scipy.io as sio
 
     # rpg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'rpg_cpp')
 
@@ -217,6 +218,9 @@ def run_degibbs(pf, pe_dir):
     # unring expects a transposed image along x,y (y along dim 0)
     transpose_order = np.argsort(orient_orig)
     dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(3,2,1,0))
+
+    sio.savemat("before_degibbs.mat", {'before_degibbs': dwi_t})
+
     dwi_dg_t = rpg.unring(dwi_t, minW=1, maxW=3, nsh=20, pfv=float(pf), pfdimf=pe_dir_orig, phase_flag=False)
     dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0).transpose(np.argsort(transpose_order))
     
