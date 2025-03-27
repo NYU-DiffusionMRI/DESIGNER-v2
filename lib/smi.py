@@ -199,6 +199,7 @@ class SMI(object):
         """
         if self.flag_get_priors:
             self.prior = self.get_uniformly_distributed_SM_prior()
+            print(np.shape(self.prior))
 
         if (self.rotinv_lmax == 2 and self.prior.shape[1] < 8) \
             or (self.rotinv_lmax == 4 and self.prior.shape[1] < 9) \

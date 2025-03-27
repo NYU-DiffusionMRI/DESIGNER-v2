@@ -79,12 +79,14 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
     image_write(out, 'sigma_fixed_strides.nii')
     out = from_numpy(
         Nparameters, origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
-    image_write(out, 'Npars.nii')
+    image_write(out, 'Npars_fixed_strides.nii')
 
     run.command('mrconvert -grad grad.txt tmp_dwidn.nii dwidn.mif', show=False)
 
     stride=dwi_metadata['stride_3dim']
     run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
+    run.command('mrconvert -force -strides %s Npars_fixed_strides.nii Npars.nii' % (stride), show=False)
+
     run.command('mrconvert -strides -1,+2,+3,+4 sigma.nii noisemap.mif', show=False)
     app.cleanup('tmp_dwi.nii')
     app.cleanup('tmp_dwidn.nii')

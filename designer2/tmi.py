@@ -125,6 +125,8 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
     smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for SMI polynomial regression. must be 0,2,4, or 6.')
+    smi_options.add_argument('-training_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
+
 
     #wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
     #wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
@@ -577,6 +579,7 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.SMI:
         from lib.smi import SMI
         import warnings
+        import scipy.io as sio
         warnings.simplefilter('always', UserWarning) 
 
         logger.info("Starting SMI fitting process...")
@@ -629,9 +632,16 @@ def execute(): #pylint: disable=unused-variable
                 echo_times *= 1000
 
             if multi_te_beta:
-                smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
-                        compartments=compartments, echo_time=echo_times,
-                        beta=dwi_metadata['bshape_per_volume'])
+                if app.ARGS.training_prior:
+                    mat = sio.loadmat(app.ARGS.training_prior)
+                    prior = mat['prior']
+                    smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
+                            compartments=compartments, echo_time=echo_times,
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
+                else:
+                    smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
+                            compartments=compartments, echo_time=echo_times,
+                            beta=dwi_metadata['bshape_per_volume'])
                 
                 logger.info("SMI model initialized for multi-TE/beta data.")
                 
@@ -641,9 +651,17 @@ def execute(): #pylint: disable=unused-variable
                 save_params(params_smi, nii, model='smi', outdir=outdir)
                 logger.info("SMI parameters saved for multi-TE/beta data.", extra={"outdir": outdir})
             else:
-                smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
-                        compartments=compartments, echo_time=echo_times,
-                        beta=dwi_metadata['bshape_per_volume'])
+                if app.ARGS.training_prior:
+                    mat = sio.loadmat(app.ARGS.training_prior)
+                    prior = mat['prior']
+                    smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
+                            compartments=compartments, echo_time=echo_times,
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
+
+                else:
+                    smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
+                            compartments=compartments, echo_time=echo_times,
+                            beta=dwi_metadata['bshape_per_volume'])
                 
                 logger.info("SMI model initialized for single-TE/beta data.")
 
