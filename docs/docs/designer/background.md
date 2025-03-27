@@ -130,6 +130,7 @@ Designer performs normalization in a specific manner for cases where multi-shell
 
 ## b1 inhomogeneity correction
 
+Perform B1 field inhomogeneity correction for a DWI volume series using ants N4 bias field correction.
 
 ---
 
@@ -168,5 +169,4 @@ Thus, based on the b-values above eddy will not merge LTE and STE since these sh
 
 The above trick works because eddy makes very little assumptions about the data and the relations between directions of different shells. It is a workaround to not have to rewrite eddy and make it detect non-LTE encodings (eddy was conceived to process only LTE data but the assumption of a Gaussian process holds for any b-tensor shape).  Note that if all your data has the same bandwidth you can get away with acquiring a single b0 with reverse phase encoding (rather than one per TE). We use the input rpe_b0.nii and its corresponding b0 to compute distortions with topup and then applied these deformations to all datasets.
 
-Perform B1 field inhomogeneity correction for a DWI volume series using ants N4 bias field correction.
 
