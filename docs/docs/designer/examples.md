@@ -58,6 +58,25 @@ designer -denoise -shrinkage frob -algorithm jespersen -phase phase.nii dwi.nii 
 
 ---
 
+## Processing data with variable b-tensor shapes (multiple b-shapes)
+
+A more complex call to designer is required to process data with variable b-shapes. Given 2 input series with severe motion artifacts, one acquired with single diffusion encoding (SDE) and another one with double diffusion encoding (DDE), an example of such a call might look like:
+```
+dwi1=SDE_b1000_b2000_TE106.nii.gz
+dwi2=DDE_b2000_TE106.nii.gz
+
+designer \
+-denoise -degibbs \
+-pre_align -ants_motion_correction \
+-eddy -rpe_pair rpe_b0.nii -rpe_te 106 -pe_dir AP \
+-normalize -mask \
+-scratch designer_variable_beta -nocleanup \
+-eddy_fakeb 1,1.25 -bshape 1,-0.5 -echo_time 106,106 \
+$dwi1,$dwi2 dwi_designer.mif
+```
+In this case, eddy is run for the full data, making sure different b, and b-shape combinations are not mixed. 
+
+
 ## Processing data with variable echo time and b-shape
 
 A more complex call to designer is required to process data with variable echo time and b-shape. Given 6 input series with severe motion artifacts and with varying echo times and b-shapes, an example of such a call might look like:
@@ -73,14 +92,12 @@ designer \
 -denoise -degibbs \
 -pre_align -ants_motion_correction \
 -eddy -rpe_pair rpe_b0.nii -rpe_te 62 -pe_dir AP \
--echo_time 92,92,92,62,78,130 \
--bshape 1,-0.5,0,1,-0.5,1 \
--eddy_groups 1,2,3,4,5,6 \
 -normalize -mask \
--scratch designer_processing_variable_te_beta -nocleanup \
+-scratch designer_variable_te_beta -nocleanup \
+-eddy_fakeb 1,1.4,0.3,0.75,1.7,1.25 -bshape 1,0.6,0,1,0.6,1 -echo_time 92,92,92,62,80,130 \
 $dwi1,$dwi2,$dwi3,$dwi4,$dwi5,$dwi6 dwi_designer.mif
 ```
-In this case, eddy is run 6 separate times, for each unique echo-time b-shape combination. 
+In this case, eddy is run for the full data, making sure different b, b-shape, and echo-time combinations are not mixed. 
 
 ---
 
