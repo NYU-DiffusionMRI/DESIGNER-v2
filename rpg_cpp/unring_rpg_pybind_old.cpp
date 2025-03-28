@@ -47,7 +47,7 @@
 
 // Core functions by Elias Kellner ("unring_1D","unring_2d","Unring"),
 // and Hong Hsi Lee ("unring_2d_y","unring_2d_y_2" + Partial Fourier strategy )
-// Adapted from MATLAB to C++, adding command line instruction by Ricardo Coronado-Leija 13-Feb-2023
+// Adapted to command line instruction by Ricardo Coronado-Leija 13-Feb-2023
 
 #include <math.h>
 #include <map>
@@ -696,7 +696,7 @@ T *O;
 T *Oi;
 bool pf7_8 = fabs(yfact - 1) > 1e-6; // here yfact should be 1 (5/8) or 3 (7/8)
 bool fimag = (Ii != 0);
-printf("UnringScale: yfact = %f, pf7_8 =  %d, fimag =  %d\n",yfact,pf7_8,fimag);
+// printf("UnringScale: yfact = %f, pf7_8 =  %d, fimag =  %d\n",yfact,pf7_8,fimag);
 unsigned int i, nyy;
 if(pf7_8){ // 7/8
 nyy = (int)round(yfact*ny);    
@@ -872,14 +872,8 @@ py::tuple unring(py::array_t<double> data, py::array_t<double> phase = py::array
 
     // Set dimensions
     int dim_sz[4] = { static_cast<int>(nx), static_cast<int>(ny), static_cast<int>(nz), static_cast<int>(ndwi) };
-    if (pfdimf) { // y
-        // std::swap(dim_sz[0], dim_sz[1]); 
-    dim_sz[0] = nx;
-    dim_sz[1] = ny;
-    }
-    else{
-    dim_sz[0] = ny;
-    dim_sz[1] = nx;
+    if (~pfdimf) { // y
+        std::swap(dim_sz[0], dim_sz[1]);
     }
 
     // Determine pfo based on pfv
