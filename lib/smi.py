@@ -52,12 +52,14 @@ class SMI(object):
         else:
             self.l_max_training = l_max_training
         
-        if (training_bounds is not None) and (training_prior is not None):
+        # if (training_bounds is not None) and (training_prior is not None):
+        if (training_prior is not None):
             self.prior = training_prior
-            if not self.fit_T2:
-                self.prior = np.hstack(
-                    (self.prior[:,:4], 100 * np.ones((self.prior.shape[0], 2)), self.prior[:,5:])
-                    )  
+            self.flag_get_priors = False
+            # if not self.fit_T2:
+            #     self.prior = np.hstack(
+            #         (self.prior[:,:4], 100 * np.ones((self.prior.shape[0], 2)), self.prior[:,5:])
+            #         )  
         else:
             if training_bounds is None:
                 self.lb_training = [0.05, 1, 1, 0.1,   0,  50,  50, 0.05]

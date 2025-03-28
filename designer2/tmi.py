@@ -633,6 +633,7 @@ def execute(): #pylint: disable=unused-variable
 
             if multi_te_beta:
                 if app.ARGS.load_prior:
+                    logger.info("SMI loading user input training prior.")
                     mat = sio.loadmat(app.ARGS.load_prior)
                     array_name=list(mat.keys())
                     prior = mat[array_name[-1]]
@@ -653,6 +654,7 @@ def execute(): #pylint: disable=unused-variable
                 logger.info("SMI parameters saved for multi-TE/beta data.", extra={"outdir": outdir})
             else:
                 if app.ARGS.load_prior:
+                    logger.info("SMI loading user input training prior.")
                     mat = sio.loadmat(app.ARGS.load_prior)
                     array_name=list(mat.keys())
                     prior = mat[array_name[-1]]
