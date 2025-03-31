@@ -132,3 +132,42 @@ Designer performs normalization in a specific manner for cases where multi-shell
 
 Perform B1 field inhomogeneity correction for a DWI volume series using ants N4 bias field correction.
 
+---
+
+## Preprocessing data with multiple diffusion encodings (b-tensor shapes) and echo times - (eddy_fakeb option)
+
+Rationale behind the fake-b option:   We have found that when running eddy, it is more robust to process all the data together rather than doing it in batches, separating scans, and registering all blocks afterwards. This is why we added this option to designer: -eddy_fakeb
+This is nothing more than a trick to go around eddy so that you can process multiple b-tensor encodings and variable TE data rather than having to process them in batches that are later co-registered. An example on how to do this is:
+
+```
+dwi1=${raw}/LTE_TE92.nii
+dwi2=${raw}/PTE_TE92.nii
+dwi3=${raw}/STE_TE92.nii
+dwi4=${raw}/LTE_TE62.nii
+dwi5=${raw}/PTE_TE80.nii
+dwi6=${raw}/LTE_TE130.nii
+# The above are just the filenames of your magnitude data (if you have their corresponding phase maps you can use them too)
+
+designer \
+-denoise -degibbs \
+-pre_align -ants_motion_correction \
+-eddy -rpe_pair rpe_b0.nii -rpe_te 62 -pe_dir AP \
+-echo_time 92,92,92,62,78,130 \
+-bshape 1,-0.5,0,1,-0.5,1 \
+-eddy_groups 1,2,3,4,5,6 \
+-normalize -mask \
+-scratch designer_processing_variable_te_beta -nocleanup \
+$dwi1,$dwi2,$dwi3,$dwi4,$dwi5,$dwi6 dwi_designer.mif
+```
+
+Note that now you need to specify the b-tensor shape and TE of each scan. If you acquired phase maps, you can also perform complex MPPCA denoising. This -eddy_fakeb option allows us to trick eddy into processing all shells together. Thus, there should be less residual motion after designer now. In many 'good' subjects, this performs identically to running eddy in different groups and then registering the groups but in some more challenging cases, this change improves things. The 'fake b-value' option is just a multiplication factor that artificially changes the b-value of some scans such that eddy treats a given shell as a higher diffusion weighting. This is done so that b=2000 s/mm^2 LTE and b=2000 s/mm^2 PTE are not merged in eddy (we know they are different but eddy, whose only inputs are bvals and bvecs, does not know). For example, if you focus on the TE92 subset of this protocol, you have (in s/mm^2):
+* LTE: b=1000, b=2000, b=6000.
+* PTE: b=0, b=2000.
+* STE: b=0, b=1500.
+(note all b0s are identical measurements since there is no diffusion encoding so there is no such thing as an LTE/PTE/STE b0)
+
+Thus, based on the b-values above eddy will not merge LTE and STE since these shells differ on b-value. However, eddy will mix the two b=2000 shells in its processing and this will introduce biases because the contrast differs between these images. To make sure eddy treats LTE b=2000 and PTE b=2000 sets of DWIs separately, we tell eddy that the b-value of the PTE shell is 2000*1.4=2800 and thus, treats it as an independent shell. After eddy, we replace the fake b-value with the original one.
+
+The above trick works because eddy makes very few assumptions about the data and the relations between directions of different shells. It is a workaround to not have to rewrite eddy and make it detect non-LTE encodings (eddy was conceived to process only LTE data, but the assumption of a Gaussian process holds for any b-tensor shape).  Note that if all your data has the same bandwidth, you can get away with acquiring a single b0 with reverse phase encoding (rather than one per TE). We use the input rpe_b0.nii and its corresponding b0 to compute distortions with topup and then applied these deformations to all datasets.
+
+
