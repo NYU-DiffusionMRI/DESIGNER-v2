@@ -1,7 +1,8 @@
-FROM python:3.12.1-bookworm
+FROM python:3.12.1-bookworm AS builder
 
 RUN apt-get -qq update \
     && apt-get install -yq --no-install-recommends \
+    g++-11 \
     libeigen3-dev \
     libfftw3-dev \
     libgl1-mesa-dev \
@@ -14,10 +15,24 @@ RUN apt-get -qq update \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
+ARG CC=gcc-11 CXX=g++-11 BUILD_SHARED_LIBS=ON
+
+
+# Clone and build mrtrix
 WORKDIR /usr/local
-RUN git clone https://github.com/MRtrix3/mrtrix3.git
-WORKDIR /usr/local/mrtrix3
-RUN git checkout dev
-RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local/mrtrix3
-RUN cmake --build build
-RUN cmake --install build
+RUN git clone --branch dev --single-branch https://github.com/MRtrix3/mrtrix3.git
+RUN mkdir build mrtrix \
+    && cd build \
+    && cmake \
+    -GNinja \
+    -DCMAKE_INSTALL_PREFIX=/usr/local/mrtrix \
+    -DBUILD_SHARED_LIBS=ON \
+    -DMRTRIX_USE_QT5=ON \
+    ../mrtrix3 \
+    && cmake --build . --parallel 
+WORKDIR /usr/local/build
+RUN cmake --install .
+
+FROM docker.io/debian:bookworm-slim AS base
+
+COPY --from=builder /usr/local/mrtrix /usr/local/mrtrix

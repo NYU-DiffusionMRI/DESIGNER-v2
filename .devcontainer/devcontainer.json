@@ -23,7 +23,8 @@
 				"ms-python.black-formatter",
 				"ms-python.flake8",
 				"ms-vscode-remote.remote-containers",
-				"ms-python.isort"
+				"ms-python.isort",
+				"ms-python.autopep8"
 			],
 			"settings": {
 				"terminal.integrated.defaultProfile.linux": "zsh",
@@ -31,7 +32,12 @@
 					"zsh": {
 						"path": "/bin/zsh"
 					}
-				}
+				},
+				"editor.formatOnSave": true, // Enable format on save
+				"python.formatting.provider": "autopep8", // Set autopep8 as the formatter
+				"python.formatting.autopep8Args": [
+					"--max-line-length=100"
+				] // Optional: Configure autopep8 arguments
 			}
 		}
 	},
