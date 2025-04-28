@@ -320,6 +320,7 @@ def convert_input_data(dwi_metadata):
     dwi_metadata['stride']=orig_stride
     dwi_metadata['stride_3dim']=orig_stride_3dim
 
+    orient=None
     if os.path.exists(bidslist[0]):
         bids = [json.load(open(i)) for i in bidslist]
         for i in bids:

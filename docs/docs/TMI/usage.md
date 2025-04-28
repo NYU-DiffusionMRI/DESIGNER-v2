@@ -61,14 +61,14 @@ By default, if none of the below options are used, TMI will not estimate paramet
 ### `-fit_smoothing <percentile>`
 - Windowed adaptive nonlocal means filter on the dwi.
 - Diffusion weighted images undergo an NLM filter over the most similar neighboring pixels and directions prior to fitting.
-- For each voxel we take a cubic patch in 4d and take the mean over the $n$ most similar voxels in *xyz* and *q-space*. n is decided by the input argument to tmi, where with n=10 (default) we are smoothing over the 10% most similar voxels, and so on.
+- For each voxel we take a cubic patch in 4d and take the mean over the $n$ most similar voxels in *xyz* and *q-space*. n is decided by the input argument to tmi, where with n=10 we are smoothing over the 10% most similar voxels, and so on.
 - If used in conjunctions with `-akc_outliers` outliers are detected and ignored during the smoothing process.
 - The `<percentile>` Defines the degree of similar voxels in a sliding window patch to average. A percentile of 10 will average the 10% most similar voxels and directions in the sliding window. We recommend a percentile of 10 as a starting point for tuning this option.
 
 ## Options for model estimation
 
 ### `-SMI`
-- Perform estimation of the Standard Model of WHite Matter.
+- Perform estimation of the Standard Model of White Matter.
 - Use in conjunction with `-compartments`, `-sigma`, `-bshape`, and `-echo_time` options.
 - We recommend prior estimation of the noise level sigma using `designer` along with the `-denoise` option.
 
