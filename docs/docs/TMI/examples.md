@@ -42,9 +42,9 @@ In this case the W form of the kurtosis tensor is returned in addition to the K 
 ---
 
 ## Outlier replacement and filtering
-This call to `tmi` will perform  outlier replacement along with nonlocal means smoothing as a filtering step prior to fitting the kurtosis tensor.
+This call to `tmi` will perform  outlier replacement along with nonlocal means smoothing (user may adjust how much smoothing by adjusting `-fit_smoothing <percentile>`) as a filtering step prior to fitting the kurtosis tensor.
 ```
-tmi -DKI -akc_outliers -fit_smoothing 10 dwi.mif parameters
+tmi -DKI -akc_outliers -fit_smoothing 25 dwi.mif parameters
 ```
 
 {: .note }
@@ -102,7 +102,7 @@ The below example mounts the host_path (`/path/to/folder/with/dataset`) to the c
 ```
 docker run -it -v /path/to/folder/with/dataset:/data \
 nyudiffusionmri/designer2:<tag> tmi \
--DKI -akc_outliers -fit_smoothing 10 /data/dwi.mif /data/parameters
+-DKI -akc_outliers -fit_smoothing 25 /data/dwi.mif /data/parameters
 ```
 
 ---
@@ -115,7 +115,7 @@ The below example mounts the host_path (`/path/to/folder/with/dataset`) to the c
 ```
 singularity run --bind /path/to/folder/with/dataset:/mnt \
 designer2_<tag>.sif tmi \
--DKI -akc_outliers -fit_smoothing 10 /mnt/dwi.mif /mnt/parameters
+-DKI -akc_outliers -fit_smoothing 25 /mnt/dwi.mif /mnt/parameters
 ```
 
 ---

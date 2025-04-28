@@ -323,21 +323,22 @@ def convert_input_data(dwi_metadata):
     if os.path.exists(bidslist[0]):
         bids = [json.load(open(i)) for i in bidslist]
         for i in bids:
-            orient=i['ImageOrientationPatientDICOM']
-            orient=[round(o) for o in orient]
-
-        if orient==[1,0,0,0,0,-1]:
-            orient='coronal'
-            # stride=-'-1,-3,+2,+4'
-        if orient==[1,0,0,0,1,0]:
-            orient='axial'
-            # stride='-1,+2,+3,+4'
-        if orient==[0,1,0,0,0,-1]:
-            orient='sagittal'
-            # stride='+3,-1,+2,+4'
-        dwi_metadata['orientation']=orient
-    else:
-        print('... no bids files identified')
+            if 'ImageOrientationPatientDICOM' in i:
+                orient=i['ImageOrientationPatientDICOM']
+                orient=[round(o) for o in orient]
+                if orient==[1,0,0,0,0,-1]:
+                    orient='coronal'
+                    # stride=-'-1,-3,+2,+4'
+                if orient==[1,0,0,0,1,0]:
+                    orient='axial'
+                    # stride='-1,+2,+3,+4'
+                if orient==[0,1,0,0,0,-1]:
+                    orient='sagittal'
+                    # stride='+3,-1,+2,+4'
+                dwi_metadata['orientation']=orient
+        
+    if not orient:
+        print('... no bids files or image orientation key identified')
         stride_list=[x for x in orig_stride.split(',')]
         if '3' in stride_list[0]:
             orient='sagittal'
