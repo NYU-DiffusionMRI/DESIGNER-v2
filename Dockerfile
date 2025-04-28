@@ -4,24 +4,20 @@ FROM python:3.12.4-bookworm
 # Multi stage build from existing dependencies
 COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
 COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3
+COPY --from=twom/ants:v2.5.4 /usr/local/ants /usr/local/ants
 
-# RUN apt-get -qq update \
-#     && apt-get install -yq --no-install-recommends \
-#     libgl1-mesa-dev \
-#     cmake \
-#     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get -qq update && \
     apt-get install -yq --no-install-recommends \
-    libgl1-mesa-dev \
     cmake \
-    gcc \
     g++ \
-    libopenblas-dev \
-    liblapack-dev \
-    pkg-config \
+    gcc \
+    hdf5-tools \
+    libgl1-mesa-dev \
     libhdf5-serial-dev \
-    hdf5-tools && \
+    liblapack-dev \
+    libopenblas-dev \
+    pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -37,15 +33,14 @@ WORKDIR /app
 # Add the current directory contents into the container at /app
 ADD . /app
 
-# RUN /app/rpg_cpp/compile.sh 
 # Run setup.py
 RUN python -m pip install .
 
 
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
-ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3/bin"
-ENV LD_LIBRARY_PATH="/usr/local/mrtrix3/src:/usr/local/mrtrix3/core"
+ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix/bin:/usr/local/ants/bin"
+ENV LD_LIBRARY_PATH="/usr/local/mrtrix/lib:/usr/local/ants/lib"
 ENV LD_LIBRARY_PATH="/app/rpg_cpp/fftw-3.3.10/build/lib:${LD_LIBRARY_PATH}"
+ENV PYTHONPATH="/usr/local/mrtrix/lib:$PYTHONPATH"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
-ENV PYTHONPATH=/usr/local/mrtrix3/lib
