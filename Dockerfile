@@ -40,6 +40,6 @@ RUN python -m pip install .
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
 ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix/bin:/usr/local/ants/bin"
-ENV LD_LIBRARY_PATH="/usr/local/mrtrix3/src:/usr/local/mrtrix/core:/usr/local/ants/lib:/app/rpg_cpp/fftw-3.3.10/build/lib"
+ENV LD_LIBRARY_PATH="/usr/local/mrtrix/src:/usr/local/mrtrix/core:/usr/local/ants/lib:/app/rpg_cpp/fftw-3.3.10/build/lib"
 ENV PYTHONPATH="/usr/local/mrtrix/lib"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
