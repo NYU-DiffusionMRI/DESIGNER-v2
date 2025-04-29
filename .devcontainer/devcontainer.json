@@ -31,5 +31,5 @@
 			}
 		}
 	},
-	"postCreateCommand": "pip3 install --user -r requirements.txt"
+	"postCreateCommand": "pip3 install --user -r requirements.txt && python setup.py build_ext"
 }
