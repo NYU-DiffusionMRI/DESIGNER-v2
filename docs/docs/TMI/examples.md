@@ -73,7 +73,7 @@ dwi6=dwi_te130_LTE.nii
 
 tmi \
 -SMI \
--sigma /path/to/designer_processing/noisemap.nii \
+-sigma /path/to/designer_processing/sigma.nii \
 -compartments EAS,IAS,FW \
 -echo_time 92,92,92,62,78,130 \
 -bshape 1,-0.5,0,1,-0.5,1 \
@@ -87,7 +87,7 @@ If the input to SMI is purely LTE, the call to SMI can be simplified:
 ```
 tmi \
 -SMI \
--sigma /path/to/designer_processing/noisemap.nii \
+-sigma /path/to/designer_processing/sigma.nii \
 -compartments EAS,IAS \
 -mask /path/to/designer_processing/brain_mask.nii \
 -scratch tmi_processing_lte -nocleanup \
