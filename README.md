@@ -15,7 +15,7 @@ For complete documentation on designer & tmi installation and usage please visit
 
 ## Installation
 
-designer-v2 is made available as a [python package](https://pypi.org/project/designer2/), and a [docker image](https://hub.docker.com/r/nyudiffusionmri/designer2/) bundling all dependencies. See the [Installation](https://nyu-diffusionmri.github.io/DESIGNER-v2/docs/designer/installation/) documentation for detailed stps
+designer-v2 is made available as a [python package](https://pypi.org/project/designer2/), and a [docker image](https://hub.docker.com/r/nyudiffusionmri/designer2/) bundling all dependencies. See the [Installation](https://nyu-diffusionmri.github.io/DESIGNER-v2/docs/designer/installation/) documentation for detailed steps
 
 
 ## Example usage for "meso" data
