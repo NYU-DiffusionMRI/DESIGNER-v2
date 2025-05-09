@@ -166,7 +166,7 @@ def get_phase_encoding_dimension(pe_dir, strides):
     
     return dimension
 
-def run_degibbs(pf, pe_dir):
+def run_degibbs(pf, pe_dir,orig_stride):
     """
     wrapper for rpg degibbs
     """
@@ -198,10 +198,13 @@ def run_degibbs(pf, pe_dir):
     #print('partial-fourier factor   = %s' % (pf))
 
     # grab original strides
-    UserCpath = app.ARGS.input.rsplit(',')
-    dwi0 = [os.path.realpath(i) for i in UserCpath][0]
-    strides_orig = image.Header(dwi0).strides()
-    orient_orig = [abs(i) for i in strides_orig]
+    # UserCpath = app.ARGS.input.rsplit(',')
+    # dwi0 = [os.path.realpath(i) for i in UserCpath][0]
+    # strides_orig = image.Header(dwi0).strides()
+    # orient_orig = [abs(i) for i in strides_orig]
+
+    strides_orig = [x for x in orig_stride.split(',')]
+    orient_orig = [abs(int(i)) for i in strides_orig]
 
     if 'i' in pe_dir:
         pe_dir = 0

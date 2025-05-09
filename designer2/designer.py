@@ -150,7 +150,7 @@ def execute(): #pylint: disable=unused-variable
 
     # rpg gibbs artifact correction
     if app.ARGS.degibbs:
-        run_degibbs(dwi_metadata['pf'], dwi_metadata['pe_dir'])
+        run_degibbs(dwi_metadata['pf'], dwi_metadata['pe_dir'],dwi_metadata['stride'])
 
     # rigid alignment of b0s from separate input series
     if app.ARGS.pre_align:
