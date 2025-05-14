@@ -1037,7 +1037,7 @@ def create_brainmask(fsl_suffix, dwi_metadata):
     os.rename('brain_mask_orig_strides.nii', 'brain_mask.nii')
     
 
-def run_rice_bias_correct():
+def run_rice_bias_correct(dwi_metadata):
     from mrtrix3 import run, app
 
     print("...Rician Bias correction...")
@@ -1045,8 +1045,15 @@ def run_rice_bias_correct():
         run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
         run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
     else:
-        run.command('dwidenoise -noise lowbnoisemap.mif -estimator Exp2 dwi.mif dwitmp.mif', show=False)
-        app.cleanup('dwitmp.mif')
+        if app.ARGS.noisemap:
+            stride=dwi_metadata['designer_stride_3dim']
+            run.command('mrconvert -force -strides "%s" "%s" lowbnoisemap.mif' %
+                        (stride,
+                         app.ARGS.noisemap), 
+                        show=False)
+        else:
+            run.command('dwidenoise -noise lowbnoisemap.mif -estimator Exp2 dwi.mif dwitmp.mif', show=False)
+            app.cleanup('dwitmp.mif')
         run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
         if not app.ARGS.degibbs:
             run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)

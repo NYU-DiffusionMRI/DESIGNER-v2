@@ -1,4 +1,4 @@
-__version__ = "2.0.12"
+__version__ = "2.0.13"
 
 import lib.tensor as tensor
 import lib.mpcomplex  as mpcomplex

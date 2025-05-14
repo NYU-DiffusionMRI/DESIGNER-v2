@@ -62,6 +62,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     options = cmdline.add_argument_group('Other options for the DESIGNER script')
     options.add_argument('-degibbs', action='store_true', help='Perform (RPG) Gibbs artifact correction. Must include PF factor with -pf (e.g. 6/8, 7/8) and PF dimension -dim (1, 2 or 3 for i, j  or k respectively).')
     options.add_argument('-rician', action='store_true', help='Perform Rician bias correction')
+    options.add_argument('-noisemap', metavar=('<noise map image>'), help='Used along with Rician correction if denoising was done outside of designer')
     options.add_argument('-b1correct', action='store_true', help='Include a bias correction step in dwi preprocessing', default=False)
     options.add_argument('-normalize', action='store_true', help='normalize the dwi volume to median b0 CSF intensity of 1000 (useful for multiple dwi acquisitions)', default=False)
     options.add_argument('-mask', action='store_true',help='compute a brain mask prior to tensor fitting to strip skull and improve efficiency')
@@ -179,7 +180,7 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.phase and app.ARGS.rician:
         print('phase included, skipping approximated bias correction')
     elif app.ARGS.rician and not app.ARGS.phase:
-        run_rice_bias_correct()
+        run_rice_bias_correct(dwi_metadata)
 
     # normalize separate input series (voxelwise) such that b0 images are properly scaled
     if app.ARGS.normalize:

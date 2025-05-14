@@ -223,6 +223,10 @@ The `-rician` method of correcting for bias is specific to data with SNR > 2. If
 {: .ref }
 > Koay CG, Basser PJ. Analytically exact correction scheme for signal extraction from noisy magnitude MR signals. J Magn Reson 2006; 179: 317– 322.
 
+### `-noisemap <noise_map_img>`
+- User provided noise map used for Rician bias correction if denoising was not done within DESIGNER
+- Used with -rician
+
 ### `-normalize`
 - Normalize the DWI data such that all b=0 images have the same mean intensity.
 - Normalization is performed voxelwise by smoothing each b=0 image with a Gaussian kernel with $\sigma=3$, then rescaling each input series based on the ratio between its smoothed b=0 image and the mean smoothed b=0 image.
