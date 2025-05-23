@@ -50,9 +50,6 @@ The easiest source for references on these tools is right here. In addition, con
      <a href="https://github.com/jchen33344"><img src="https://www.diffusion-mri.com/wp-content/uploads/2023/01/Screen-Shot-2023-01-07-at-10.59.32-PM.png" style="height:90px" alt="https://github.com/jchen33344"></a>
   </li>
   <li class="d-inline-block mr-1">
-     <a href="https://github.com/jelleveraart"><img src="https://avatars.githubusercontent.com/u/6860257?v=4" width="90" height="90" alt="https://github.com/jelleveraart"></a>
-  </li>
-  <li class="d-inline-block mr-1">
      <a href="https://github.com/leehhtw"><img src="https://www.diffusion-mri.com/wp-content/uploads/2021/05/Hong-Hsi-Lee.png)" style="height:90px" alt="https://github.com/leehhtw"></a>    
   </li>
   <li class="d-inline-block mr-1">
@@ -61,6 +58,9 @@ The easiest source for references on these tools is right here. In addition, con
   <li class="d-inline-block mr-1">
      <a href="https://santiagocoelho.github.io"><img src="https://avatars.githubusercontent.com/u/54751227?v=4" width="90" height="90" alt="https://santiagocoelho.github.io"></a>
   </li><!--
+  <li class="d-inline-block mr-1">
+     <a href="https://github.com/jelleveraart"><img src="https://avatars.githubusercontent.com/u/6860257?v=4" width="90" height="90" alt="https://github.com/jelleveraart"></a>
+      </li>
 <li class="d-inline-block mr-1">
      <a href="https://www.linkedin.com/in/gregory-lemberskiy/"><img src="https://avatars.githubusercontent.com/u/1512844?v=4" width="90" height="90" alt="https://www.linkedin.com/in/gregory-lemberskiy/"></a>
   </li>
