@@ -57,6 +57,9 @@ The easiest source for references on these tools is right here. In addition, con
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://santiagocoelho.github.io"><img src="https://avatars.githubusercontent.com/u/54751227?v=4" width="90" height="90" alt="https://santiagocoelho.github.io"></a>
+  </li>
+  <li class="d-inline-block mr-1">
+     <a href="https://github.com/d-novikov"><img src="https://avatars.githubusercontent.com/u/29991818?v=4" width="90" height="90" alt="https://github.com/d-novikov"></a>
   </li><!--
   <li class="d-inline-block mr-1">
      <a href="https://github.com/jelleveraart"><img src="https://avatars.githubusercontent.com/u/6860257?v=4" width="90" height="90" alt="https://github.com/jelleveraart"></a>
@@ -69,9 +72,6 @@ The easiest source for references on these tools is right here. In addition, con
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://www.linkedin.com/in/ying-liao-nyu/"><img src="https://media.licdn.com/dms/image/C4E03AQEfT0sPV34ImQ/profile-displayphoto-shrink_400_400/0/1627317717468?e=1691625600&v=beta&t=eqAZqafA7ZusHRkVzBwwkA4r6yAcZMC0lbRhlCmU8Ig" width="90" height="90" alt="https://www.linkedin.com/in/ying-liao-nyu/"></a>
-  </li>
-  <li class="d-inline-block mr-1">
-     <a href="https://github.com/d-novikov"><img src="https://avatars.githubusercontent.com/u/29991818?v=4" width="90" height="90" alt="https://github.com/d-novikov"></a>
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/aAbdz"><img src="https://avatars.githubusercontent.com/u/29164686?v=4" width="90" height="90" alt="https://github.com/aAbdz"></a>
