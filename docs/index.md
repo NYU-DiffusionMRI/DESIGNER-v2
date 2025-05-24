@@ -60,6 +60,9 @@ The easiest source for references on these tools is right here. In addition, con
   </li>
   <li class="d-inline-block mr-1">
      <a href="https://github.com/d-novikov"><img src="https://avatars.githubusercontent.com/u/29991818?v=4" width="90" height="90" alt="https://github.com/d-novikov"></a>
+    </li>
+<li class="d-inline-block mr-1">
+     <a href="https://www.linkedin.com/in/tomderyckere/"><img src="https://avatars.githubusercontent.com/u/1512844?v=4" width="90" height="90" alt="https://www.linkedin.com/in/tomderyckere/"></a>
   </li><!--
   <li class="d-inline-block mr-1">
      <a href="https://github.com/jelleveraart"><img src="https://avatars.githubusercontent.com/u/6860257?v=4" width="90" height="90" alt="https://github.com/jelleveraart"></a>
