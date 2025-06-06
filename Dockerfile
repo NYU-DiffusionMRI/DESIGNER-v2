@@ -3,7 +3,7 @@ FROM python:3.12.4-bookworm
 
 # Multi stage build from existing dependencies
 COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
-COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix
+COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3 /usr/local/mrtrix3
 COPY --from=twom/ants:v2.5.4 /usr/local/ants /usr/local/ants
 
 
@@ -39,7 +39,7 @@ RUN python -m pip install .
 
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
-ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix/bin:/usr/local/ants/bin"
-ENV LD_LIBRARY_PATH="/usr/local/mrtrix/src:/usr/local/mrtrix/core:/usr/local/ants/lib:/app/rpg_cpp/fftw-3.3.10/build/lib"
-ENV PYTHONPATH="/usr/local/mrtrix/lib"
+ENV PATH="/usr/local/fsl/bin:/usr/local/mrtrix3/build/bin:/usr/local/ants/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/mrtrix3/build/lib:/usr/local/ants/lib:/app/rpg_cpp/fftw-3.3.10/build/lib"
+ENV PYTHONPATH="/usr/local/mrtrix3/python/lib"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
