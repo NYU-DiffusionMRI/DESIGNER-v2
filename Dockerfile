@@ -27,11 +27,13 @@ RUN wget http://www.fftw.org/fftw-3.3.10.tar.gz \
     && tar xzf fftw-3.3.10.tar.gz \
     && cd fftw-3.3.10 \
     && ./configure \
+        --enable-shared \
+        --disable-static \
         --enable-threads \
         --disable-doc \
         --enable-sse2 \
         --enable-avx \
-        CFLAGS="-O3" \
+        CFLAGS="-O3 -fPIC" \
     && make -j$(nproc) \
     && make install \
     && cd / \
