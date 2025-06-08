@@ -11,9 +11,6 @@ RUN apt-get -qq update \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspaces/DESIGNER-v2
-COPY . .
-
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
 ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin"
