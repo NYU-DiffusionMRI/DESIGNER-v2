@@ -62,7 +62,7 @@ RUN pip install -r requirements.txt --no-cache-dir
 WORKDIR /app
 
 # Add the current directory contents into the container at /app
-ADD . /app
+COPY . /app
 
 # Run setup.py
 RUN python -m pip install .
