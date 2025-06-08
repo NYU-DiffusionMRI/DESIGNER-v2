@@ -1,4 +1,0 @@
-# Do not allow the binaries to be checked in, as the architecture may be variable and cause issues
-build/
-rpg.*
-__pychache__/
