@@ -11,10 +11,8 @@ RUN apt-get -qq update \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Install our package before setting PATH to ensure our designer command (not fsl designer) takes precedenc
 WORKDIR /workspaces/DESIGNER-v2
 COPY . .
-RUN pip install -r requirements.txt && pip install -e .
 
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
