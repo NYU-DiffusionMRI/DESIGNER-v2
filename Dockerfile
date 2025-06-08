@@ -1,6 +1,11 @@
 # Use an official Python runtime as a parent image
 FROM python:3.12.4-bookworm AS base
 
+# Copy dependencies from other images
+COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
+COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+COPY --from=twom/ants:v2.5.4 /usr/local/ants /usr/local/ants
+
 # Install common dependencies
 RUN apt-get -qq update \
     && apt-get install -yq --no-install-recommends \
@@ -19,7 +24,6 @@ RUN apt-get -qq update \
 
 # FFTW build stage
 FROM base AS fftw-builder
-
 
 WORKDIR /tmp
 # Download FFTW (this layer will be cached unless the URL changes)
@@ -41,28 +45,18 @@ RUN wget http://www.fftw.org/fftw-3.3.10.tar.gz \
 
 # Final stage
 FROM base
-# Copy dependencies from other images
-COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
-COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3_build
-COPY --from=twom/ants:v2.5.4 /usr/local/ants /usr/local/ants
-
-# Copy FFTW files from builder stage
 COPY --from=fftw-builder /usr/local/lib/libfftw* /usr/local/lib/
 COPY --from=fftw-builder /usr/local/include/fftw3* /usr/local/include/
 
 # Verify FFTW installation and set up library cache
-RUN ldconfig \
-    && ldconfig -p | grep fftw
+RUN ldconfig && ldconfig -p | grep fftw
 
-# Install Python dependencies
+WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install -r requirements.txt --no-cache-dir
 
-# Set the working directory in the container to /app
-WORKDIR /app
-
-# Add the current directory contents into the container at /app
-COPY . /app
+COPY . .
 
 # Run setup.py
 RUN python -m pip install .
