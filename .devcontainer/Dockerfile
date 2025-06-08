@@ -11,12 +11,16 @@ RUN apt-get -qq update \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
+# Install our package before setting PATH to ensure our designer command (not fsl designer) takes precedenc
+WORKDIR /workspaces/DESIGNER-v2
+COPY . .
+RUN pip install -r requirements.txt && pip install -e .
 
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
 ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/mrtrix3_build/src:/usr/local/mrtrix3_build/core:/usr/local/ants/lib:/app/rpg_cpp/fftw-3.3.10/build/lib"
-ENV PYTHONPATH="${PYTHONPATH}:/usr/local/mrtrix3_build/lib"
+ENV PYTHONPATH="/usr/local/mrtrix3_build/lib"
 
 RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
     -p git -p ssh-agent -p 'history-substring-search' \
