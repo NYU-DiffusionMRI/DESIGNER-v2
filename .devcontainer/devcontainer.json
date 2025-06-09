@@ -31,5 +31,7 @@
 			}
 		}
 	},
-	"postCreateCommand": "pip3 install --user -r requirements.txt && python setup.py build_ext"
+	// while this leave the code editable for instant feedback, it's important to note that the terminal session reflects these changes when running our 'designer' command
+	// otherwise, 'designer' command will be linked to the 'fsl designer' package
+	"postCreateCommand": "pip install -e ."
 }
