@@ -50,9 +50,3 @@ FROM debian:bookworm-slim
 
 # Copy only the necessary files from builder
 COPY --from=builder /usr/local/mrtrix3/build /usr/local/mrtrix3/build
-
-# Clean up any unnecessary files in the final image
-RUN find /usr/local/mrtrix3/build -type f -name "*.h" -delete \
-    && find /usr/local/mrtrix3/build -type f -name "*.hpp" -delete \
-    && find /usr/local/mrtrix3/build -type f -name "*.cmake" -delete \
-    && find /usr/local/mrtrix3/build -type f -name "*.ninja" -delete
