@@ -28,10 +28,9 @@ WORKDIR /usr/local
 RUN mkdir -p mrtrix3/build
 
 # Clone and build mrtrix with optimized settings
-RUN git clone https://github.com/MRtrix3/mrtrix3.git mrtrix3_code \
+RUN git clone --branch dev --single-branch https://github.com/MRtrix3/mrtrix3.git mrtrix3_code \
     && cd mrtrix3_code \
     && git checkout 205dd53ef \
-    && git submodule update --init --recursive \
     && cd /usr/local/mrtrix3/build \
     && cmake \
         -GNinja \
