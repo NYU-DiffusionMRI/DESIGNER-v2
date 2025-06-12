@@ -70,7 +70,7 @@ workflows:
   build-and-push-when-merged-to-main:
     jobs:
       - build:
-          tag: main-test
+          tag: main
           save_image: true
           filters:
             branches:
@@ -80,7 +80,7 @@ workflows:
           context:
             - DockerHub
       - deploy:
-          tag: main-test
+          tag: main
           requires:
             - build
           filters:
