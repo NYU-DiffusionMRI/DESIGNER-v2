@@ -56,13 +56,11 @@ jobs:
             docker push $DOCKERHUB_USERNAME/designer2:<<parameters.tag>>
 
 workflows:
-  build-on-pull-request:
+  build-on-commit:
     jobs:
       - build:
-          tag: pr-${CIRCLE_PULL_REQUEST_NUMBER}
-          filters:
-            branches:
-              ignore: main
+          tag: commit-${CIRCLE_SHA1}
+          filters:  # works on all branches
             tags:
               ignore: /.*/
           context:
@@ -102,7 +100,6 @@ workflows:
               ignore: /.*/
           context:
             - DockerHub
-
       - deploy:
           tag: ${CIRCLE_TAG}
           requires:
