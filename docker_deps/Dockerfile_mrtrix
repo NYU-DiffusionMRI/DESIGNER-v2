@@ -1,7 +1,9 @@
-FROM python:3.12.1-bookworm
+FROM python:3.12.1-bookworm AS builder
 
+# Install build dependencies in a single layer
 RUN apt-get -qq update \
     && apt-get install -yq --no-install-recommends \
+    g++-11 \
     libeigen3-dev \
     libfftw3-dev \
     libgl1-mesa-dev \
@@ -12,12 +14,39 @@ RUN apt-get -qq update \
     ninja-build \
     ccache \
     cmake \
-    && rm -rf /var/lib/apt/lists/*
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
+# Set build arguments and environment variables
+ARG CC=gcc-11
+ARG CXX=g++-11
+ARG BUILD_SHARED_LIBS=ON
+
+# Set up build directory
 WORKDIR /usr/local
-RUN git clone https://github.com/MRtrix3/mrtrix3.git
-WORKDIR /usr/local/mrtrix3
-RUN git checkout dev
-RUN cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local/mrtrix3
-RUN cmake --build build
-RUN cmake --install build
+RUN mkdir -p mrtrix3/build
+
+# Clone and build mrtrix with optimized settings
+RUN git clone --branch dev --single-branch https://github.com/MRtrix3/mrtrix3.git mrtrix3_code \
+    && cd mrtrix3_code \
+    && git checkout 205dd53ef \
+    && cd /usr/local/mrtrix3/build \
+    && cmake \
+        -GNinja \
+        -DCMAKE_INSTALL_PREFIX=/usr/local/mrtrix3 \
+        -DBUILD_SHARED_LIBS=ON \
+        -DMRTRIX_USE_QT5=ON \
+        # Enable release mode optimizations and disable debug info
+        -DCMAKE_BUILD_TYPE=Release \
+        # Enable maximum compiler optimizations (-O3) and CPU-specific optimizations
+        -DCMAKE_CXX_FLAGS="-O3 -march=native" \
+        /usr/local/mrtrix3_code \
+    && cmake --build . --parallel $(nproc) \
+    && cmake --install .
+
+# Final stage
+FROM debian:bookworm-slim
+
+# Copy only the necessary files from builder
+COPY --from=builder /usr/local/mrtrix3/build /usr/local/mrtrix3/build

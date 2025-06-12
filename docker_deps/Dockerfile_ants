@@ -28,8 +28,8 @@ RUN mkdir build ants \
     -DRUN_LONG_TESTS=OFF \
     -DRUN_SHORT_TESTS=OFF \
     ../ANTs \
-    && cmake --build . --parallel 
-WORKDIR /usr/local/build/ANTS-build 
+    && cmake --build . --parallel  $(nproc) \
+WORKDIR /usr/local/build/ANTS-build
 RUN cmake --install .
 
 

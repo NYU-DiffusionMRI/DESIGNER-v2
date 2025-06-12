@@ -48,8 +48,8 @@ FROM base
 COPY --from=fftw-builder /usr/local/lib/libfftw* /usr/local/lib/
 COPY --from=fftw-builder /usr/local/include/fftw3* /usr/local/include/
 
-# Verify FFTW installation and set up library cache
-RUN ldconfig && ldconfig -p | grep fftw
+# Link and cache FFTW library
+RUN ldconfig
 
 WORKDIR /app
 
