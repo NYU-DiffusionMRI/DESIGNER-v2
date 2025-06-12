@@ -4,6 +4,9 @@ jobs:
     parameters:
       tag:
         type: string
+      save_image:
+        type: boolean
+        default: false
     docker:
       - image: cimg/base:2024.01
     steps:
@@ -26,26 +29,69 @@ jobs:
           command: |
             docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
       - run:
-          name: Push docker container to DockerHub
+          name: Save docker image
           command: |
+            if [ "<< parameters.save_image >>" = "true" ]; then
+              docker save $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> > /tmp/image.tar
+            fi
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - image.tar
+  deploy:
+    parameters:
+      tag:
+        type: string
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - attach_workspace:
+          at: /tmp
+      - setup_remote_docker
+      - run:
+          name: Load and push docker image
+          command: |
+            docker load < /tmp/image.tar
             echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
             docker push $DOCKERHUB_USERNAME/designer2:<<parameters.tag>>
+
 workflows:
-  build-and-push-on-commit-to-main:
+  build-on-pull-request:
+    jobs:
+      - build:
+          tag: pr-${CIRCLE_PULL_REQUEST_NUMBER}
+          filters:
+            branches:
+              ignore: main
+            tags:
+              ignore: /.*/
+          context:
+            - DockerHub
+  build-and-push-when-merged-to-main:
     jobs:
       - build:
           tag: main
+          save_image: true
+      - deploy:
+          tag: main
+          requires:
+            - build
           filters:
             branches:
-              only: 
-                - main
-                - update-docker-documentation
+              only: main
+            tags:
+              ignore: /.*/
           context:
             - DockerHub
   build-and-push-on-tag:
     jobs:
       - build:
           tag: ${CIRCLE_TAG}
+          save_image: true
+      - deploy:
+          tag: ${CIRCLE_TAG}
+          requires:
+            - build
           filters:
             tags:
               only: /.*/
@@ -53,4 +99,3 @@ workflows:
               ignore: /.*/
           context:
             - DockerHub
-  
