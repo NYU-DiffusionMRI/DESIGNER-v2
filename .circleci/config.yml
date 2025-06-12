@@ -64,7 +64,9 @@ workflows:
     jobs:
       - build:
           tag: commit-${CIRCLE_SHA1}
-          filters:  # works on all branches
+          filters:
+            branches:
+              ignore: main
             tags:
               ignore: /.*/
           context:
