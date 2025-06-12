@@ -33,6 +33,9 @@ jobs:
           command: |
             if [ "<< parameters.save_image >>" = "true" ]; then
               docker save $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> > /tmp/image.tar
+            else
+            # to prevent persist_to_workspace from failing when save_image is false
+              touch /tmp/image.tar
             fi
       - persist_to_workspace:
           root: /tmp
