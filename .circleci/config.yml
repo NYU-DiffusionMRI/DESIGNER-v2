@@ -60,7 +60,7 @@ jobs:
             docker push $DOCKERHUB_USERNAME/designer2:<<parameters.tag>>
 
 workflows:
-  build-on-commit-test:
+  build-on-commit:
     jobs:
       - build:
           tag: commit-${CIRCLE_SHA1}
