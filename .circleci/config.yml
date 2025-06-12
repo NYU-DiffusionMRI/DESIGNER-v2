@@ -70,10 +70,17 @@ workflows:
   build-and-push-when-merged-to-main:
     jobs:
       - build:
-          tag: main
+          tag: main-test
           save_image: true
+          filters:
+            branches:
+              only: main
+            tags:
+              ignore: /.*/
+          context:
+            - DockerHub
       - deploy:
-          tag: main
+          tag: main-test
           requires:
             - build
           filters:
@@ -88,6 +95,14 @@ workflows:
       - build:
           tag: ${CIRCLE_TAG}
           save_image: true
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+          context:
+            - DockerHub
+
       - deploy:
           tag: ${CIRCLE_TAG}
           requires:
