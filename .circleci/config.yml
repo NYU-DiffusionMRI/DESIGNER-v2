@@ -1,13 +1,11 @@
 version: 2.1
+
 commands:
   build_docker_image:
     parameters:
       tag:
         type: string
     steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true
       - run:
           name: Build and tag docker container
           command: |
@@ -45,7 +43,9 @@ jobs:
     docker:
       - image: cimg/base:2024.01
     steps:
-      - setup_remote_docker
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
       - build_docker_image:
           tag: <<parameters.tag>>
       - run:
@@ -58,7 +58,7 @@ workflows:
   build-on-commit:
     jobs:
       - build:
-          name: "Build Commit 🔨"
+          # name: "Build Commit 🔨"
           tag: commit-${CIRCLE_SHA1}
           filters:
             branches:
@@ -72,7 +72,7 @@ workflows:
   build-and-push-when-merged-to-main:
     jobs:
       - build-and-push:
-          name: "Deploy Main 🚀"
+          # name: "Deploy Main 🚀"
           tag: main
           filters:
             branches:
@@ -86,7 +86,7 @@ workflows:
   build-and-push-on-tag:
     jobs:
       - build-and-push:
-          name: "Deploy Tagged Releases 🚀"
+          # name: "Deploy Tagged Releases 🚀"
           tag: ${CIRCLE_TAG}
           filters:
             tags:
