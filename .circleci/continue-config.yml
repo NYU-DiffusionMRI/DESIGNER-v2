@@ -141,36 +141,36 @@ workflows:
   build-on-commit:
     jobs:
       - build-and-push-fsl:
-          name: Build FSL on Commit
+          # name: Build FSL on Commit
           tag: latest
           context: DockerHub
           filters:
             branches:
               ignore: main
       - build-and-push-mrtrix:
-          name: Build MRtrix on Commit
+          # name: Build MRtrix on Commit
           tag: latest
           context: DockerHub
           filters:
             branches:
               ignore: main
       - build-and-push-ants:
-          name: Build ANTs on Commit
+          # name: Build ANTs on Commit
           tag: latest
           context: DockerHub
           filters:
             branches:
               ignore: main
       - build-and-push-designer:
-          name: Build DESIGNER on Commit
+          # name: Build DESIGNER on Commit
           push_to_registry: false
           tag: build-test
           dependency_tag: latest
           context: DockerHub
           requires:
-            - Build FSL on Commit
-            - Build MRtrix on Commit
-            - Build ANTs on Commit
+            - build-and-push-fsl
+            - build-and-push-mrtrix
+            - build-and-push-ants
           filters:
             branches:
               ignore: main
