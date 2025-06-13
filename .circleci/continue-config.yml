@@ -168,9 +168,9 @@ workflows:
           dependency_tag: latest
           context: DockerHub
           requires:
-            - build-and-push-fsl
-            - build-and-push-mrtrix
-            - build-and-push-ants
+            - Build FSL on Commit
+            - Build MRtrix on Commit
+            - Build ANTs on Commit
           filters:
             branches:
               ignore: main

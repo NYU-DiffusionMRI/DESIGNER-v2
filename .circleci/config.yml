@@ -7,7 +7,7 @@ workflows:
   detect-changes:
     jobs:
       - path-filtering/filter:
-          name: compute-dockerfile-matches
+          name: compute-dependency-dockerfile-matches
           base-revision: main
           mapping: |
             docker_deps/Dockerfile_fsl     run_fsl    true
