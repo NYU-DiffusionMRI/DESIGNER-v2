@@ -1,15 +1,33 @@
 version: 2.1
 
 commands:
-  build_docker_image:
+  run_build_dep_image:
     parameters:
+      dep:
+        type: string
       tag:
         type: string
     steps:
       - run:
-          name: Build and tag docker container
+          name: Build <<parameters.dep>> image
           command: |
-            docker build -t $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> .
+            docker build -f docker_deps/Dockerfile_<<parameters.dep>> -t  $DOCKERHUB_USERNAME/<<parameters.dep>>:<<parameters.tag>> docker_deps
+      - run:
+          name: Test <<parameters.dep>> image
+          command: |
+            docker run --rm  $DOCKERHUB_USERNAME/<<parameters.dep>>:<<parameters.tag>> echo "Image <<parameters.dep>> built successfully"
+
+  run_build_designer_image:
+    parameters:
+      tag:
+        type: string
+      dependency_tag:
+        type: string
+    steps:
+      - run:
+          name: Build designer image
+          command: |
+            docker build --build-arg DEPENDENCY_TAG=<<parameters.dependency_tag>> -t $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> .
       - run:
           name: Test designer command
           command: |
@@ -24,7 +42,7 @@ commands:
             docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
 
 jobs:
-  build:
+  build-fsl:
     parameters:
       tag:
         type: string
@@ -34,9 +52,11 @@ jobs:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-      - build_docker_image:
+      - run_build_dep_image:
+          dep: fsl
           tag: <<parameters.tag>>
-  build-and-push:
+
+  build-mrtrix:
     parameters:
       tag:
         type: string
@@ -46,8 +66,56 @@ jobs:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-      - build_docker_image:
+      - run_build_dep_image:
+          dep: mrtrix
           tag: <<parameters.tag>>
+
+  build-ants:
+    parameters:
+      tag:
+        type: string
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run_build_dep_image:
+          dep: ants
+          tag: <<parameters.tag>>
+
+  build-designer:
+    parameters:
+      tag:
+        type: string
+      dependency_tag:
+        type: string
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run_build_designer_image:
+          tag: <<parameters.tag>>
+          dependency_tag: <<parameters.dependency_tag>>
+
+  build-and-push-designer:
+    parameters:
+      tag:
+        type: string
+      dependency_tag:
+        type: string
+        default: latest
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run_build_designer_image:
+          tag: <<parameters.tag>>
+          dependency_tag: <<parameters.dependency_tag>>
       - run:
           name: push docker image
           command: |
@@ -57,31 +125,52 @@ jobs:
 workflows:
   build-on-commit:
     jobs:
-      - build:
-          name: Build Commit
+      - build-fsl:
+          name: Build FSL on Commit
           tag: build-test
+          filters:
+            paths:
+              only: docker_deps/Dockerfile_fsl
+      - build-mrtrix:
+          name: Build MRtrix on Commit
+          tag: build-test
+          filters:
+            paths:
+              only: docker_deps/Dockerfile_mrtrix3
+      - build-ants:
+          name: Build ANTs on Commit
+          tag: build-test
+          filters:
+            paths:
+              only: docker_deps/Dockerfile_ants
+      - build-designer:
+          name: Build Designer on Commit
+          tag: build-test
+          dependency_tag: build-test
+          requires:
+            - build-fsl
+            - build-mrtrix
+            - build-ants
           filters:
             branches:
               ignore: main
-            tags:
-              ignore: /.*/
           context:
             - DockerHub
+
   build-and-push-when-merged-to-main:
     jobs:
-      - build-and-push:
+      - build-and-push-designer:
           name: Deploy Main
           tag: main
           filters:
             branches:
               only: main
-            tags:
-              ignore: /.*/
           context:
             - DockerHub
+
   build-and-push-on-tag:
     jobs:
-      - build-and-push:
+      - build-and-push-designer:
           name: Deploy Tagged Releases
           tag: ${CIRCLE_TAG}
           filters:
