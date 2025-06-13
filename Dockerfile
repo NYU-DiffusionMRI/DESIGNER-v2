@@ -1,10 +1,12 @@
 # Use an official Python runtime as a parent image
 FROM python:3.12.4-bookworm AS base
 
+ARG DEPENDENCY_TAG=latest
+
 # Copy dependencies from other images
-COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
-COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3_build
-COPY --from=twom/ants:v2.5.4 /usr/local/ants /usr/local/ants
+COPY --from=nyudiffusionmri/fsl:${DEPENDENCY_TAG} /usr/local/fsl /usr/local/fsl
+COPY --from=nyudiffusionmri/mrtrix3:${DEPENDENCY_TAG} /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+COPY --from=nyudiffusionmri/ants:${DEPENDENCY_TAG} /usr/local/ants /usr/local/ants
 
 # Install common dependencies
 RUN apt-get -qq update \
