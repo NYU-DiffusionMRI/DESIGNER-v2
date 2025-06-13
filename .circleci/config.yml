@@ -59,7 +59,7 @@ workflows:
     jobs:
       - build:
           name: Build Commit
-          tag: commit-${CIRCLE_SHA1}
+          tag: build-test
           filters:
             branches:
               ignore: main
