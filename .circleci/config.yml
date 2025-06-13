@@ -1,14 +1,9 @@
 version: 2.1
-jobs:
-  build:
+commands:
+  build_docker_image:
     parameters:
       tag:
         type: string
-      save_image:
-        type: boolean
-        default: false
-    docker:
-      - image: cimg/base:2024.01
     steps:
       - checkout
       - setup_remote_docker:
@@ -29,7 +24,21 @@ jobs:
           name: Test mrtrix command
           command: |
             docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
-  deploy:
+
+jobs:
+  build:
+    parameters:
+      tag:
+        type: string
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - build_docker_image:
+          tag: <<parameters.tag>>
+  build-and-push:
     parameters:
       tag:
         type: string
@@ -37,8 +46,10 @@ jobs:
       - image: cimg/base:2024.01
     steps:
       - setup_remote_docker
+      - build_docker_image:
+          tag: <<parameters.tag>>
       - run:
-          name: Load and push docker image
+          name: push docker image
           command: |
             echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
             docker push $DOCKERHUB_USERNAME/designer2:<<parameters.tag>>
@@ -47,6 +58,7 @@ workflows:
   build-on-commit:
     jobs:
       - build:
+          name: "Build Commit 🔨"
           tag: commit-${CIRCLE_SHA1}
           filters:
             branches:
@@ -59,9 +71,9 @@ workflows:
             - DockerHub
   build-and-push-when-merged-to-main:
     jobs:
-      - build:
+      - build-and-push:
+          name: "Deploy Main 🚀"
           tag: main
-          save_image: true
           filters:
             branches:
               only:
@@ -71,35 +83,11 @@ workflows:
               ignore: /.*/
           context:
             - DockerHub
-      - deploy:
-          tag: main
-          requires:
-            - build
-          filters:
-            branches:
-              only:
-                - main
-                - test/circle-ci
-            tags:
-              ignore: /.*/
-          context:
-            - DockerHub
   build-and-push-on-tag:
     jobs:
-      - build:
+      - build-and-push:
+          name: "Deploy Tagged Releases 🚀"
           tag: ${CIRCLE_TAG}
-          save_image: true
-          filters:
-            tags:
-              only: /.*/
-            branches:
-              ignore: /.*/
-          context:
-            - DockerHub
-      - deploy:
-          tag: ${CIRCLE_TAG}
-          requires:
-            - build
           filters:
             tags:
               only: /.*/
