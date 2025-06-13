@@ -62,9 +62,7 @@ workflows:
           tag: commit-${CIRCLE_SHA1}
           filters:
             branches:
-              ignore:
-                - main
-                - test/circle-ci
+              ignore: main
             tags:
               ignore: /.*/
           context:
@@ -76,9 +74,7 @@ workflows:
           tag: main
           filters:
             branches:
-              only:
-              - main
-              - test/circle-ci
+              only: main
             tags:
               ignore: /.*/
           context:
