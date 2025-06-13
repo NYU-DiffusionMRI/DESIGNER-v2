@@ -29,19 +29,6 @@ jobs:
           name: Test mrtrix command
           command: |
             docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
-      - run:
-          name: Save docker image
-          command: |
-            if [ "<< parameters.save_image >>" = "true" ]; then
-              docker save $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> > /tmp/image.tar
-            else
-            # to prevent persist_to_workspace from failing when save_image is false
-              touch /tmp/image.tar
-            fi
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - image.tar
   deploy:
     parameters:
       tag:
@@ -49,13 +36,10 @@ jobs:
     docker:
       - image: cimg/base:2024.01
     steps:
-      - attach_workspace:
-          at: /tmp
       - setup_remote_docker
       - run:
           name: Load and push docker image
           command: |
-            docker load < /tmp/image.tar
             echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
             docker push $DOCKERHUB_USERNAME/designer2:<<parameters.tag>>
 
@@ -66,7 +50,9 @@ workflows:
           tag: commit-${CIRCLE_SHA1}
           filters:
             branches:
-              ignore: main
+              ignore:
+                - main
+                - test/circle-ci
             tags:
               ignore: /.*/
           context:
@@ -78,7 +64,9 @@ workflows:
           save_image: true
           filters:
             branches:
-              only: main
+              only:
+              - main
+              - test/circle-ci
             tags:
               ignore: /.*/
           context:
@@ -89,7 +77,9 @@ workflows:
             - build
           filters:
             branches:
-              only: main
+              only:
+                - main
+                - test/circle-ci
             tags:
               ignore: /.*/
           context:
