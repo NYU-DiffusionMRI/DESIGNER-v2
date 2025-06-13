@@ -1,0 +1,4 @@
+[submodule "external/mrtrix3"]
+	path = external/mrtrix3
+	url = https://github.com/MRtrix3/mrtrix3.git
+	branch = dev

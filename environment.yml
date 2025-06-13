@@ -1,0 +1,13 @@
+name: designer2
+channels:
+  - conda-forge
+  - MRtrix3
+  - defaults
+dependencies:
+  - python=3.12.4
+  - fftw=3.3.10
+  - mrtrix3
+  - libstdcxx-ng
+  - pip
+  - pip:
+    - -r requirements.txt

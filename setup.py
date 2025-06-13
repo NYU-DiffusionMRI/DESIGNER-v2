@@ -19,6 +19,8 @@ class CustomBuildExt(build_ext):
         ext.library_dirs.append('/usr/local/lib')
         super().build_extension(ext)
 
+conda_prefix = os.environ.get('CONDA_PREFIX')
+
 class get_pybind_include:
     """Helper class to determine the pybind11 include path"""
 
@@ -26,16 +28,21 @@ class get_pybind_include:
         import pybind11
         return pybind11.get_include()
 
+# System or Conda FFTW headers
+include_path = '/usr/local/include' if not conda_prefix else os.path.join(conda_prefix, 'include')
+# System or Conda FFTW libraries
+lib_path = '/usr/local/lib' if not conda_prefix else os.path.join(conda_prefix, 'lib')
+
 ext_modules = [
     Extension(
         "lib.rpg",
         ["rpg_cpp/unring_rpg_pybind.cpp"],
         include_dirs=[
             get_pybind_include(),
-            '/usr/local/include',  # System FFTW headers
+            include_path,
         ],
         library_dirs=[
-            '/usr/local/lib',  # System FFTW libraries
+            lib_path,
         ],
         libraries=["fftw3", "fftw3_threads", "m"],
         extra_compile_args=["-std=c++11"],
