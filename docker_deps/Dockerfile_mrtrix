@@ -19,9 +19,7 @@ RUN apt-get -qq update \
     && apt-get clean
 
 # Set build arguments and environment variables
-ARG CC=gcc-11
-ARG CXX=g++-11
-ARG BUILD_SHARED_LIBS=ON
+ARG CC=gcc-11 CXX=g++-11
 
 # Set up build directory
 WORKDIR /usr/local
