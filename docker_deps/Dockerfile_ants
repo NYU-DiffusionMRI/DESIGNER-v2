@@ -1,37 +1,28 @@
 FROM python:3.12.4-bookworm AS builder
 
-# Install necessary dependencies
+# Install download/unpack tools
 RUN --mount=type=cache,sharing=private,target=/var/cache/apt \
     apt-get update && \
-    apt-get install -yq --no-install-recommends \
-    g++-11 \
-    cmake \
-    make \
-    ninja-build \
-    git \
+    apt-get install -y --no-install-recommends \
+      curl \
+      unzip \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /usr/local
-
-ARG CC=gcc-11 CXX=g++-11 BUILD_SHARED_LIBS=ON
-
-# Clone and build ANTs
-# https://github.com/ANTsX/ANTs/wiki/Compiling-ANTs-on-Linux-and-Mac-OS
-RUN git clone --branch v2.5.4 --single-branch https://github.com/stnava/ANTs.git
-RUN mkdir build ants \
-    && cd build \
-    && cmake \
-    -GNinja \
-    -DCMAKE_INSTALL_PREFIX=/usr/local/ants \
-    -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS} \
-    -DBUILD_TESTING=OFF \
-    -DRUN_LONG_TESTS=OFF \
-    -DRUN_SHORT_TESTS=OFF \
-    ../ANTs \
-    && cmake --build . --parallel  $(nproc) \
-WORKDIR /usr/local/build/ANTS-build
-RUN cmake --install .
+# Fetch the Ubuntu 22.04 X64 build of ANTs v2.5.4
+WORKDIR /usr/local/ants
+RUN curl -sSL \
+      -o /tmp/ants.zip \
+      https://github.com/ANTsX/ANTs/releases/download/v2.5.4/ants-2.5.4-ubuntu-22.04-X64-gcc.zip && \
+    unzip /tmp/ants.zip && \
+    mv ants-2.5.4/* . && \
+    rm -rf /tmp/ants.zip ants-2.5.4
 
 
-FROM docker.io/debian:bookworm-slim AS base
-COPY --from=builder /usr/local/ants /usr/local/ants
+FROM docker.io/debian:bookworm-slim
+
+RUN mkdir -p /usr/local/ants/bin/
+RUN mkdir -p /usr/local/ants/lib/
+
+# Only copy the N4BiasFieldCorrection binary and library
+COPY --from=builder /usr/local/ants/bin/N4BiasFieldCorrection /usr/local/ants/bin/N4BiasFieldCorrection
+COPY --from=builder /usr/local/ants/lib/libl_N4BiasFieldCorrection.a /usr/local/ants/lib/libl_N4BiasFieldCorrection.a
