@@ -83,7 +83,7 @@ docker run --rm -it --platform=linux/amd64 designer2:test /bin/bash
 
 # Inside the container, run these commands to verify the installation:
 designer -version
-flirt -version
+flirt -version  # verify FSL installation
 mrinfo -version
 N4BiasFieldCorrection --help  # Verify ANTs command
 python -c "from lib import rpg; rpg.unring()"  # Verify function availability
@@ -104,4 +104,4 @@ docker push nyudiffusionmri/mrtrix3:2025-06-16
 4. Update this README by adding the new image information (tag, commit hash for Docker file, and dependency version) to the appropriate table.
 <br>
 
-5. Create a Pull Request and verify that the new build passes the CI pipeline. If the build fails, modify the dependency Docker file and repeat the process from step 1. Once the PR is approved and merged to the main branch, the **nyudiffusionmri/designer2:main** image will be automatically built and pushed to Docker Hub.
+5. Push to GitHub and verify that the new build passes the CI pipeline (`build_on_commit`). If the build fails, modify the dependency Docker file and repeat the process from step 1. Otherwise, create a Pull Request. Once the PR is approved and merged to the main branch, the **nyudiffusionmri/designer2:main** image will be automatically built and pushed to Docker Hub.
