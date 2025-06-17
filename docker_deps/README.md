@@ -70,6 +70,7 @@ For example:
 ```sh
 docker build --platform=linux/amd64 -f docker_deps/Dockerfile_mrtrix -t nyudiffusionmri/mrtrix3:2025-06-16 .
 ```
+<br>
 
 2. Update the `COPY` instruction in the main DESIGNER Dockerfile (located in the project root) with the new `$NEW_DATE_TAG`. Then build and test the DESIGNER image locally to ensure compatibility with the updated dependency. You can run tests similar to those in `.circleci/config.yml`:
 
@@ -87,6 +88,7 @@ mrinfo -version
 N4BiasFieldCorrection --help  # Verify ANTs command
 python -c "from lib import rpg; rpg.unring()"  # Verify function availability
 ```
+<br>
 
 3. After successful local testing, push the new dependency image to Docker Hub:
 ```sh
@@ -97,7 +99,9 @@ For example:
 ```sh
 docker push nyudiffusionmri/mrtrix3:2025-06-16
 ```
+<br>
 
 4. Update this README by adding the new image information (tag, commit hash for Docker file, and dependency version) to the appropriate table.
+<br>
 
 5. Create a Pull Request and verify that the new build passes the CI pipeline. If the build fails, you'll need to modify the dependency Docker file and repeat the process from step 1. Once the PR is approved and merged to the main branch, the **nyudiffusionmri/designer2:main** image will be automatically built and pushed to Docker Hub.
