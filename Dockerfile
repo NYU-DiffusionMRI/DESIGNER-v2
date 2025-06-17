@@ -2,9 +2,9 @@
 FROM python:3.12.4-bookworm AS base
 
 # Copy dependencies from other images
-COPY --from=twom/fsl:6.0 /usr/local/fsl /usr/local/fsl
-COPY --from=twom/mrtrix3:dev-latest /usr/local/mrtrix3/build /usr/local/mrtrix3_build
-COPY --from=twom/ants:v2.5.4 /usr/local/ants /usr/local/ants
+COPY --from=nyudiffusionmri/fsl:2025-06-16 /usr/local/fsl /usr/local/fsl
+COPY --from=nyudiffusionmri/mrtrix3:2025-06-16 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+COPY --from=nyudiffusionmri/ants:2025-06-16 /usr/local/ants /usr/local/ants
 
 # Install common dependencies
 RUN apt-get -qq update \
