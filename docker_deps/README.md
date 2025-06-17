@@ -1,9 +1,9 @@
 This folder contains Docker files for DESIGNER's main dependencies. All images are hosted on the [nyudiffusionmri Docker Hub](https://hub.docker.com/u/nyudiffusionmri).
 
 The following Docker files are included:
-- `Dockerfile_mrtrix`: For MRtrix3 dependency
-- `Dockerfile_fsl`: For FSL dependency
-- `Dockerfile_ants`: For ANTs dependency
+- `Dockerfile_mrtrix`: MRtrix3 dependency
+- `Dockerfile_fsl`: FSL dependency
+- `Dockerfile_ants`: ANTs dependency
 <br>
 
 All Docker images are tagged with dates in the `YYYY-MM-DD` format.
@@ -27,7 +27,7 @@ Dependency versions are listed in both the Docker files and the tables below.
 
 
 Notes:
-- Due to MRtrix3's API changes (and subsequent deprecation of their dev branch), we've pinned the commit for the `2025-06-16` image. The pinned version can be found in the [MRtrix3 Github](https://github.com/MRtrix3/mrtrix3/tree/205dd53ef).
+- Due to MRtrix3's API changes and subsequent deprecation of their dev branch, we've pinned the commit for the `2025-06-16` image. The pinned version can be found in the [MRtrix3 Github](https://github.com/MRtrix3/mrtrix3/tree/205dd53ef).
 - The `2024-02-09` image is identical to [twom/mrtrix3:dev-latest](https://hub.docker.com/layers/twom/mrtrix3/dev-latest/images/sha256-7630a4cd709cd7b9967f6db5dae112cd3f7be694fb5fc69c6e8ce1c0c3689d0c).
 
 
@@ -59,7 +59,7 @@ Notes:
 
 ## Updating Dependencies
 
-After modifying a dependency's Docker file, follow these steps to update the image:
+When modifying a dependency's Docker file, follow these steps to update the image:
 
 1. Build the image using:
 ```sh
@@ -104,4 +104,4 @@ docker push nyudiffusionmri/mrtrix3:2025-06-16
 4. Update this README by adding the new image information (tag, commit hash for Docker file, and dependency version) to the appropriate table.
 <br>
 
-5. Create a Pull Request and verify that the new build passes the CI pipeline. If the build fails, you'll need to modify the dependency Docker file and repeat the process from step 1. Once the PR is approved and merged to the main branch, the **nyudiffusionmri/designer2:main** image will be automatically built and pushed to Docker Hub.
+5. Create a Pull Request and verify that the new build passes the CI pipeline. If the build fails, modify the dependency Docker file and repeat the process from step 1. Once the PR is approved and merged to the main branch, the **nyudiffusionmri/designer2:main** image will be automatically built and pushed to Docker Hub.
