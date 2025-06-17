@@ -22,6 +22,10 @@ commands:
           name: Test mrtrix command
           command: |
             docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
+      - run:
+          name: Test ANTs N4BiasFieldCorrection command
+          command: |
+            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> N4BiasFieldCorrection --help
 
 jobs:
   build:
