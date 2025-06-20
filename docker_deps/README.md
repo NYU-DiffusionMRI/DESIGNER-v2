@@ -50,10 +50,12 @@ Notes:
 
 | Docker Tag | Commit Hash for Docker File | Dependency Version |
 | :--------: | :-------------------------: | :----------------: |
+| 2025-06-20 |           26a0284           |       2.5.4        |
 | 2025-06-16 |           9abe8fa           |       2.5.4        |
 | 2025-05-14 |             N/A             |       2.5.4        |
 
 Notes:
+- The `2025-06-16` image has a bug with `N4BiasFieldCorrection` binary. **Do not use this image.**
 - The `2025-05-14` image is identical to [twom/ants:v2.5.4](https://hub.docker.com/layers/twom/ants/v2.5.4/images/sha256-eb186b9a6959c60e360a4c6d38f36adbfac6709e1cc464a63b4fef4635d5fbfc).
 
 

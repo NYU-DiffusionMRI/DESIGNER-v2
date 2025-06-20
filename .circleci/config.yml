@@ -23,6 +23,7 @@ commands:
           command: |
             docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
       - run:
+      # Although this command verifies that the N4BiasFieldCorrection binary is installed, it doesn’t necessarily guarantee that dwibiascorrect ants -bias ... will function correctly.
           name: Test ANTs N4BiasFieldCorrection command
           command: |
             docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> N4BiasFieldCorrection --help
