@@ -1,0 +1,30 @@
+# Testing dependencies for DESIGNER-v2
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-html>=3.1.0
+pytest-xdist>=3.0.0
+pytest-mock>=3.10.0
+pytest-benchmark>=4.0.0
+psutil>=5.9.0
+coverage>=6.5.0
+codecov>=2.1.12
+
+# Additional testing utilities
+tox>=4.0.0
+pytest-timeout>=2.1.0
+pytest-randomly>=3.12.0
+pytest-sugar>=0.9.6
+pytest-clarity>=1.0.1
+
+# For mocking external dependencies
+responses>=0.22.0
+requests-mock>=1.10.0
+
+# Development and linting
+black>=22.0.0
+flake8>=5.0.0
+mypy>=0.991
+pre-commit>=2.20.0
+
+# Documentation testing
+pytest-doctestplus>=0.12.1

@@ -1,0 +1,34 @@
+{
+  "timestamp": "2025-06-20 02:41:42",
+  "python_version": "3.12.1 (main, Feb  1 2024, 04:22:19) [GCC 12.2.0]",
+  "platform": "posix",
+  "dependencies": {
+    "mrtrix3": true,
+    "fsl": false,
+    "ants": false,
+    "python": true,
+    "pytest": false
+  },
+  "test_artifacts": {
+    "mock_coverage_xml": {
+      "exists": false,
+      "path": "coverage_mock.xml"
+    },
+    "mock_coverage_html": {
+      "exists": false,
+      "path": "htmlcov_mock/index.html"
+    },
+    "real_coverage_xml": {
+      "exists": false,
+      "path": "coverage_real.xml"
+    },
+    "real_coverage_html": {
+      "exists": false,
+      "path": "htmlcov_real/index.html"
+    },
+    "test_results": {
+      "exists": false,
+      "path": "test-results.xml"
+    }
+  }
+}
