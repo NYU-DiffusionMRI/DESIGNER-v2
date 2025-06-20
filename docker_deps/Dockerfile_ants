@@ -1,28 +1,52 @@
 FROM python:3.12.4-bookworm AS builder
 
-# Install download/unpack tools
-RUN --mount=type=cache,sharing=private,target=/var/cache/apt \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-      curl \
-      unzip \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get -qq update \
+    && apt-get install -yq --no-install-recommends \
+    wget \
+    cmake \
+    gcc-11 \
+    g++-11 \
+    make \
+    ccache \
+    ninja-build \
+    git \
+    libopenblas-dev \
+    liblapack-dev \
+    && rm -rf /var/lib/apt/lists/
 
-# Fetch the Ubuntu 22.04 X64 build of ANTs v2.5.4
+ARG CC=gcc-11 CXX=g++-11
+ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G
+
 WORKDIR /usr/local/ants
-RUN curl -sSL \
-      -o /tmp/ants.zip \
-      https://github.com/ANTsX/ANTs/releases/download/v2.5.4/ants-2.5.4-ubuntu-22.04-X64-gcc.zip && \
-    unzip /tmp/ants.zip && \
-    mv ants-2.5.4/* . && \
-    rm -rf /tmp/ants.zip ants-2.5.4
+RUN wget -q https://github.com/ANTsX/ANTs/archive/refs/tags/v2.5.4.tar.gz \
+    && tar -xzf v2.5.4.tar.gz \
+    && rm v2.5.4.tar.gz \
+    && mv ANTs-2.5.4 ants_code
+
+RUN mkdir build install
+
+# Use a buildkit cache mount for ccache
+RUN --mount=type=cache,id=ccache,target=/root/.ccache \
+    cd build \
+    && cmake \
+        -S ../ants_code \
+        -G Ninja \
+        -DCMAKE_INSTALL_PREFIX=/usr/local/ants/install \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_TESTING=OFF \
+        -DRUN_LONG_TESTS=OFF \
+        -DRUN_SHORT_TESTS=OFF \
+        -DBUILD_SHARED_LIBS=ON \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+        # solves "illegal instruction error"
+        -DSuperBuild_ANTS_C_OPTIMIZATION_FLAGS="-O3 -mtune=generic -march=x86-64" \
+        -DSuperBuild_ANTS_CXX_OPTIMIZATION_FLAGS="-O3 -mtune=generic -march=x86-64" \
+    && cmake --build . --parallel $(nproc) \
+    && cd ANTS-build \
+    && cmake --install .
 
 
-FROM docker.io/debian:bookworm-slim
+FROM debian:bookworm-slim
 
-RUN mkdir -p /usr/local/ants/bin/
-RUN mkdir -p /usr/local/ants/lib/
-
-# Only copy the N4BiasFieldCorrection binary and library
-COPY --from=builder /usr/local/ants/bin/N4BiasFieldCorrection /usr/local/ants/bin/N4BiasFieldCorrection
-COPY --from=builder /usr/local/ants/lib/libl_N4BiasFieldCorrection.a /usr/local/ants/lib/libl_N4BiasFieldCorrection.a
+COPY --from=builder /usr/local/ants/install /usr/local/ants
