@@ -51,7 +51,13 @@ designer2_test.mif designer2_params_test
 
 ### Using Dev Container
 
-DESIGNER-v2 provides a development container configuration that ensures all developers work with the same development environment, making it easier to collaborate and avoid "it works on my machine" issues. This setup is particularly useful for ones who want to contribute to DESIGNER.
+DESIGNER-v2 provides a dev container setup with the following benefits:
+- **Consistent development environment**
+Ensures all developers use the same setup, avoiding “it works on my machine” issues.
+- **Fast and accurate testing**
+The dev container mirrors the production Docker environment, enabling DESIGNER commands to be tested without rebuilding the production image each time.
+
+This setup is ideal for contributors who want a reliable and reproducible development workflow.
 
 #### Prerequisites
 
