@@ -49,7 +49,7 @@ designer2_test.mif designer2_params_test
 
 ## Development Setup
 
-### Using Dev Container (Recommended)
+### Using Dev Container
 
 DESIGNER-v2 provides a development container configuration that ensures all developers work with the same development environment, making it easier to collaborate and avoid "it works on my machine" issues. This setup is particularly useful for ones who want to contribute to DESIGNER.
 
@@ -91,8 +91,9 @@ DESIGNER-v2 provides a development container configuration that ensures all deve
   - Type "Dev Containers: Rebuild Container" and select it
 
 - If using SSH-configured repositories, `git push` from the dev container's terminal will fail (container cannot access local SSH config). Workarounds:
-  - Use VS Code's Source Control panel (recommended), or
-  - Use your local machine's terminal
+  - Use VS Code's Source Control panel, or
+  - Use your local machine's terminal, or
+  - Follow instructions in [VS Code Dev Container Git Credentials](https://code.visualstudio.com/remote/advancedcontainers/sharing-git-credentials)
 
 #### Notes
 
