@@ -106,6 +106,8 @@ def execute(): #pylint: disable=unused-variable
     import numpy as np
     import os
 
+    from pathlib import Path
+
     # create a temporary directory to store processing files
     app.make_scratch_dir()
     
@@ -129,6 +131,12 @@ def execute(): #pylint: disable=unused-variable
                   index = shell_rows)
     print('input DWI data has properties:')
     print(shell_df)
+
+    outpath = Path(app.ARGS.output)
+    abs_outpath = outpath.resolve()
+    abs_outpath.parent.mkdir(parents=True, exist_ok=True)
+    if abs_outpath.suffix == '':
+        abs_outpath = abs_outpath.with_suffix('.nii')
 
     app.goto_scratch_dir()
     
@@ -191,37 +199,33 @@ def execute(): #pylint: disable=unused-variable
     orig_stride = dwi_metadata['stride']
     run.command('mrconvert -force -stride %s -datatype float32le working.mif dwi_designer.nii' %
                 (orig_stride), show=False)
-
-    outpath = app.ARGS.output
-    (head, fname) = os.path.split(outpath)
-    full_outname = fname.split(os.extsep)
-    oname = full_outname[0]
-    if len(full_outname) == 1:
-        outpath += '.nii'
+    
+    dir_path = abs_outpath.parent
+    out_name = abs_outpath.stem
 
     if app.ARGS.datatype:
         run.command('mrconvert -force -stride %s -datatype %s -export_grad_fsl "%s" "%s" %s "%s"' % 
             (orig_stride,
              app.ARGS.datatype, 
-            os.path.join(head, oname + '.bvec'),
-            os.path.join(head, oname + '.bval'),
+            dir_path / f"{out_name}.bvec",
+            dir_path / f"{out_name}.bval",
             'working.mif',
-            outpath))
+            abs_outpath))
     else:
         run.command('mrconvert -force -stride %s -export_grad_fsl "%s" "%s" %s "%s"' % 
             (orig_stride,
-            os.path.join(head, oname + '.bvec'),
-            os.path.join(head, oname + '.bval'),
+            dir_path / f"{out_name}.bvec",
+            dir_path / f"{out_name}.bval",
             'working.mif', 
-            outpath))
+            abs_outpath))
 
     bshapes = dwi_metadata['bshape_per_volume']
     tes = dwi_metadata['echo_time_per_volume']
     if len(set(bshapes)) > 1:
-        np.savetxt(os.path.join(head, oname + '.bshape'), bshapes, fmt='%s', delimiter=' ', newline=' ')
+        np.savetxt(dir_path / f"{out_name}.bshape", bshapes, fmt='%s', delimiter=' ', newline=' ')
 
     if len(set(tes)) > 1:
-        np.savetxt(os.path.join(head, oname + '.echotime'), tes, fmt='%s', delimiter=' ', newline=' ')
+        np.savetxt(dir_path / f"{out_name}.echotime", tes, fmt='%s', delimiter=' ', newline=' ')
 
     #eddy_quad
     if app.ARGS.eddy:
