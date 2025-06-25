@@ -1,5 +1,6 @@
 import subprocess
 import shutil
+import json
 from pathlib import Path
 
 import numpy as np
@@ -8,17 +9,21 @@ import pytest
 
 from tests.utils import create_binary_mask_from_fa, extract_mean_b0, compute_roi_mean_and_std
 
+
+ground_truth = json.load(open("tests/MESO_nonsquare_ground_truth.json"))
+
+
 @pytest.fixture(scope="module")
 def paths():
     data_dir = Path("tests/data/D1/")
-
-    tmp_dir = Path("tests/tmp/D1/")
-    scratch_dir = tmp_dir / "processing"
+    tmp_dir = Path("tests/tmp/D1_wo_bids/")
+    
+    processing_dir = tmp_dir / "processing"
     params_dir = tmp_dir / "params"
 
     return {
-        # scratch and parameters directories for the pipeline
-        "scratch": scratch_dir,
+        # processing and parameters directories for the pipeline
+        "processing": processing_dir,
         "params": params_dir,
         # images to be processed by pipeline
         "dwi_images": [data_dir / "meso_slice_crop.nii", data_dir / "research_slice_crop.nii"],
@@ -36,42 +41,49 @@ def paths():
         "roi2": data_dir / "roi2.nii",
         "voxel": data_dir / "voxel.nii",
         # Intermediate image (after denoising)
-        "dwidn": scratch_dir / "dwidn.nii",
-        "dwidn_bvec": scratch_dir / "dwidn.bvec",
-        "dwidn_bval": scratch_dir / "dwidn.bval",
+        "dwidn": processing_dir / "dwidn.nii",
+        "dwidn_bvec": processing_dir / "dwidn.bvec",
+        "dwidn_bval": processing_dir / "dwidn.bval",
         # Intermediate image (after degibbs)
-        "dwidg": scratch_dir / "working_rpg.nii",
-        "dwidg_bvec": scratch_dir / "working_rpg.bvec",
-        "dwidg_bval": scratch_dir / "working_rpg.bval",
+        "dwidg": processing_dir / "working_rpg.nii",
+        "dwidg_bvec": processing_dir / "working_rpg.bvec",
+        "dwidg_bval": processing_dir / "working_rpg.bval",
         # Intermediate image (after b1correct)
-        "dwibc": scratch_dir / "dwibc.nii",
-        "dwibc_bvec": scratch_dir / "dwibc.bvec",
-        "dwibc_bval": scratch_dir / "dwibc.bval",
+        "dwibc": processing_dir / "dwibc.nii",
+        "dwibc_bvec": processing_dir / "dwibc.bvec",
+        "dwibc_bval": processing_dir / "dwibc.bval",
         # Intermediate image (after rician correction)
-        "dwirc": scratch_dir / "dwirc.nii",
-        "dwirc_bvec": scratch_dir / "dwirc.bvec",
-        "dwirc_bval": scratch_dir / "dwirc.bval",
+        "dwirc": processing_dir / "dwirc.nii",
+        "dwirc_bvec": processing_dir / "dwirc.bvec",
+        "dwirc_bval": processing_dir / "dwirc.bval",
     }
+
+
+@pytest.fixture(scope="module")
+def ground_truth_data():
+    return ground_truth
 
 
 @pytest.fixture(scope="module", autouse=True)
 def run_pipeline(paths):
     dwi_args=",".join([str(path) for path in paths["dwi_images"]])
 
-    processing_dir=paths["scratch"]
+    processing_dir=paths["processing"]
     params_dir=paths["params"]
     designer_image_path = paths["dwi_designer"]
 
     if processing_dir.exists():
         shutil.rmtree(processing_dir)
 
-    subprocess.run(["designer", "-denoise", "-shrinkage", "frob", "-adaptive_patch", "-rician", "-degibbs", "-b1correct", "-normalize", "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
+    ret = subprocess.run(["designer", "-denoise", "-shrinkage", "frob", "-adaptive_patch", "-rician", "-pf", "6/8", "-pe_dir", "AP", "-degibbs", "-b1correct", "-normalize", "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
+    assert ret.returncode == 0
     assert designer_image_path.exists()
 
     if params_dir.exists():
         shutil.rmtree(params_dir)
 
-    subprocess.run(["tmi", "-SMI", "-DKI", "-WDKI", "-DTI", "-mask", str(processing_dir / "brain_mask.nii"), str(designer_image_path), str(params_dir)])
+    ret = subprocess.run(["tmi", "-SMI", "-DKI", "-WDKI", "-DTI", "-sigma", str(processing_dir / "sigma.nii"), "-mask", str(processing_dir / "brain_mask.nii"), str(designer_image_path), str(params_dir)])
+    assert ret.returncode == 0
     assert params_dir.exists()
 
     yield
@@ -84,55 +96,43 @@ def white_matter_roi(paths):
     return create_binary_mask_from_fa(paths["fa_dki"], threshold=0.3)
 
 
-def test_white_matter_voxel_count(white_matter_roi):
+def test_white_matter_voxel_count(white_matter_roi, ground_truth_data):
     wm_voxel_cnt = np.count_nonzero(white_matter_roi)
-
-    assert wm_voxel_cnt == 10789
+    expected_count = ground_truth_data["white_matter_voxel_count"]
+    assert wm_voxel_cnt == expected_count
 
 
 # full pipeline
-def test_b0_stats(paths, white_matter_roi):
+def test_b0_stats(paths, white_matter_roi, ground_truth_data):
     b0_data = extract_mean_b0(paths["dwi_designer"], paths["bval"])
+    expected_values = ground_truth_data["b0_stats"]["full_pipeline"]
 
     wm_mean, wm_std = compute_roi_mean_and_std(b0_data, white_matter_roi)
-    assert np.isclose(wm_mean, 231.368)
-    assert np.isclose(wm_std, 105.784, rtol=2e-3)
+    assert np.isclose(wm_mean, expected_values["wm"][0])
+    assert np.isclose(wm_std, expected_values["wm"][1], rtol=2e-3)
 
     roi1 = nib.load(paths["roi1"]).get_fdata()
     roi1_mean, roi1_std = compute_roi_mean_and_std(b0_data, roi1)
-    assert np.isclose(roi1_mean, 222.263)
-    assert np.isclose(roi1_std, 29.9254, rtol=2e-3)
+    assert np.isclose(roi1_mean, expected_values["roi1"][0])
+    assert np.isclose(roi1_std, expected_values["roi1"][1], rtol=2e-3)
     
     roi2 = nib.load(paths["roi2"]).get_fdata()
     roi2_mean, roi2_std = compute_roi_mean_and_std(b0_data, roi2)
-    assert np.isclose(roi2_mean, 237.977)
-    assert np.isclose(roi2_std, 31.7704, rtol=2e-3)
+    assert np.isclose(roi2_mean, expected_values["roi2"][0])
+    assert np.isclose(roi2_std, expected_values["roi2"][1], rtol=2e-3)
 
     single_voxel = nib.load(paths["voxel"]).get_fdata()
     single_voxel_mean, _ = compute_roi_mean_and_std(b0_data, single_voxel)
-    assert np.isclose(single_voxel_mean, 192.126)
+    assert np.isclose(single_voxel_mean, expected_values["voxel"])
 
 
-@pytest.mark.parametrize("fa_type, expected_values", [
-    ("fa_dti", {
-        "wm": (0.455159, 0.17331),
-        "roi1": (0.701169, 0.123107),
-        "roi2": (0.615107, 0.0898764),
-        "voxel": 0.867286
-    }),
-    ("fa_dki", {
-        "wm": (0.520315, 0.1688541),
-        "roi1": (0.75445, 0.126123),
-        "roi2": (0.681549, 0.108101),
-        "voxel": 0.94263
-    }),
-    ("fa_wdki", {
-        "wm": (0.520315, 0.1688541),
-        "roi1": (0.75445, 0.126123),
-        "roi2": (0.681549, 0.108101),
-        "voxel": 0.94263
-    })
-])
+def get_fa_test_params(ground_truth):
+    """Generate test parameters for FA stats from ground truth data."""
+    fa_stats = ground_truth["fa_stats"]
+    return [(fa_type, values) for fa_type, values in fa_stats.items()]
+
+
+@pytest.mark.parametrize("fa_type, expected_values", get_fa_test_params(ground_truth))
 def test_fa_stats(paths, white_matter_roi, fa_type, expected_values):
     fa_data = nib.load(paths[fa_type]).get_fdata()
     fa_data = np.nan_to_num(fa_data, nan=0.0)
@@ -156,32 +156,17 @@ def test_fa_stats(paths, white_matter_roi, fa_type, expected_values):
     assert np.isclose(single_voxel_mean, expected_values["voxel"])
 
 
-@pytest.mark.parametrize("dwi_key, bval_key, expected_values", [
-    ("dwidn", "dwidn_bval", {
-        "wm": (227.365, 111.864),
-        "roi1": (210.935, 23.1792),
-        "roi2": (237.642, 33.3991),
-        "voxel": 212.14
-    }),
-    ("dwidg", "dwidg_bval", {
-        "wm": (229.873, 105.359),
-        "roi1": (219.175, 29.4502),
-        "roi2": (237.716, 32.1328),
-        "voxel": 190.403
-    }),
-    ("dwibc", "dwibc_bval", {
-        "wm": (233.302, 107.624),
-        "roi1": (223.835, 30.2657),
-        "roi2": (242.031, 32.2505),
-        "voxel": 197.618
-    }),
-    ("dwirc", "dwirc_bval", {
-        "wm": (232.783, 107.745),
-        "roi1": (223.161, 30.3397),
-        "roi2": (241.496, 32.2885),
-        "voxel": 196.919
-    })
-])
+def get_b0_each_step_test_params(ground_truth):
+    """Generate test parameters for B0 stats each step from ground truth data."""
+    b0_stats = ground_truth["b0_stats_each_step"]
+    params = []
+    for dwi_key, values in b0_stats.items():
+        bval_key = f"{dwi_key}_bval"
+        params.append((dwi_key, bval_key, values))
+    return params
+
+
+@pytest.mark.parametrize("dwi_key, bval_key, expected_values", get_b0_each_step_test_params(ground_truth))
 def test_b0_stats_each_step(paths, white_matter_roi, dwi_key, bval_key, expected_values):
     b0_data = extract_mean_b0(paths[dwi_key], paths[bval_key])
 
