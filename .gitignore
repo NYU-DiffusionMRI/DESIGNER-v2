@@ -12,6 +12,9 @@ meta.yaml
 lib/rpg*
 build-wheels.sh
 
+tests/data/
+tests/tmp/
+
 # Ignore FFTW build artifacts but keep source (in case when not using dev container)
 rpg_cpp/fftw-3.3.10/build/
 rpg_cpp/fftw-3.3.10/*.o

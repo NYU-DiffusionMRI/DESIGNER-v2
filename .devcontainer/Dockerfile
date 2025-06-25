@@ -3,7 +3,7 @@ FROM --platform=linux/amd64 python:3.12.1-bookworm AS base
 # Copy dependencies from other images
 COPY --from=nyudiffusionmri/fsl:2025-06-16 /usr/local/fsl /usr/local/fsl
 COPY --from=nyudiffusionmri/mrtrix3:2025-06-16 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
-COPY --from=nyudiffusionmri/ants:2025-06-16 /usr/local/ants /usr/local/ants
+COPY --from=nyudiffusionmri/ants:2025-06-20 /usr/local/ants /usr/local/ants
 
 # Install common dependencies
 RUN apt-get -qq update \

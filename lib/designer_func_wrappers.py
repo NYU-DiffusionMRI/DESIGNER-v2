@@ -42,8 +42,8 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
     else: 
         extent = [5,5,5]
 
-    run.command('mrconvert dwi.mif -export_grad_mrtrix grad.txt tmp_dwi.nii', show=False)
-    nii = image_read('tmp_dwi.nii')
+    run.command('mrconvert -export_grad_fsl dwidn.bvec dwidn.bval dwi.mif dwidn.nii', show=False) # for e2e testing
+    nii = image_read('dwidn.nii')
     dwi = nii.numpy()
 
     # note adaptive patch does not include mpcomplex
@@ -73,7 +73,7 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
 
     out = from_numpy(
         Signal, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
-    image_write(out, 'tmp_dwidn.nii')
+    image_write(out, 'dwidn.nii')
     out = from_numpy(
         Sigma, origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
     image_write(out, 'sigma_fixed_strides.nii')
@@ -81,15 +81,16 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
         Nparameters, origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
     image_write(out, 'Npars_fixed_strides.nii')
 
-    run.command('mrconvert -grad grad.txt tmp_dwidn.nii dwidn.mif', show=False)
+    run.command('mrconvert -fslgrad dwidn.bvec dwidn.bval dwidn.nii dwidn.mif', show=False)
 
     stride=dwi_metadata['stride_3dim']
     run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
     run.command('mrconvert -force -strides %s Npars_fixed_strides.nii Npars.nii' % (stride), show=False)
     run.command('mrconvert -strides -1,+2,+3,+4 sigma.nii noisemap.mif', show=False)
-    app.cleanup('tmp_dwi.nii')
-    app.cleanup('tmp_dwidn.nii')
-    app.cleanup('grad.txt')
+    app.cleanup('dwidn.nii')
+    app.cleanup('dwidn.nii')
+    app.cleanup('dwidn.bvec')
+    app.cleanup('dwidn.bval')
     
     #run.command('dwidenoise -noise fullnoisemap.mif -estimator Exp2 working.mif dwidn.mif')
     run.command('mrconvert -force dwidn.mif working.mif', show=False)
@@ -180,7 +181,7 @@ def run_degibbs(pf, pe_dir,orig_stride):
     # rpg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'rpg_cpp')
 
     # convert working.mif to nii
-    run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+    run.command('mrconvert -force -export_grad_fsl working_rpg.bvec working_rpg.bval working.mif working.nii', show=False)
     nii = image_read('working.nii')
     dwi = nii.numpy()
 
@@ -230,7 +231,7 @@ def run_degibbs(pf, pe_dir,orig_stride):
     image_write(out, 'working_rpg.nii')
 
     #convert gibbs corrected nii to .mif
-    run.command('mrconvert -force -fslgrad working.bvec working.bval working_rpg.nii working.mif', show=False)
+    run.command('mrconvert -force -fslgrad working_rpg.bvec working_rpg.bval working_rpg.nii working.mif', show=False)
 
     # End timer
     end_time = time.time()
@@ -1003,9 +1004,12 @@ def run_b1correct(dwi_metadata):
                 (str(idx), str(idx), str(idx)))
             run.command(cmd)
             miflist.append('dwibc' + str(idx) + '.mif')
-            DWImif = ' '.join(miflist)
+
+        DWImif = ' '.join(miflist)
         run.command('mrcat -axis 3 ' + DWImif + ' dwibc.mif')
+
     run.command('mrconvert -force dwibc.mif working.mif', show=False)
+    run.command('mrconvert -export_grad_fsl dwibc.bvec dwibc.bval dwibc.mif dwibc.nii', show=False) # for e2e testing
 
     # End timer
     end_time = time.time()
@@ -1044,6 +1048,7 @@ def run_rice_bias_correct(dwi_metadata):
     if app.ARGS.denoise:
         run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
         run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+        run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
     else:
         if app.ARGS.noisemap:
             stride=dwi_metadata['designer_stride_3dim']
@@ -1055,6 +1060,7 @@ def run_rice_bias_correct(dwi_metadata):
             run.command('dwidenoise -noise lowbnoisemap.mif -estimator Exp2 dwi.mif dwitmp.mif', show=False)
             app.cleanup('dwitmp.mif')
         run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+        run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
         if not app.ARGS.degibbs:
             run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
         run.command('mrconvert -force -fslgrad working.bvec working.bval dwirc.mif working.mif', show=False)
