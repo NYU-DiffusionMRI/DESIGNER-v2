@@ -90,10 +90,9 @@ def test_white_matter_voxel_count(white_matter_roi, ground_truth_data):
     assert wm_voxel_cnt == expected_count
 
 
-# full pipeline
 def test_b0_stats(paths, white_matter_roi, ground_truth_data):
     b0_data = extract_mean_b0(paths["dwi_designer"], paths["bval"])
-    expected_values = ground_truth_data["b0_stats"]["full_pipeline"]
+    expected_values = ground_truth_data["b0_stats"]
 
     wm_mean, wm_std = compute_roi_mean_and_std(b0_data, white_matter_roi)
     assert np.isclose(wm_mean, expected_values["wm"][0])
