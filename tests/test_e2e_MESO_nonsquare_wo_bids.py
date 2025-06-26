@@ -26,20 +26,19 @@ def paths():
         "processing_dir": processing_dir,
         "params_dir": params_dir,
         # images to be processed by pipeline
-        "dwi_images": [data_dir / "meso_slice_crop2.nii", data_dir / "research_slice_crop2.nii"],
+        "dwi_images": [data_dir / "meso_slice_crop2.nii.gz", data_dir / "research_slice_crop2.nii.gz"],
         # Designer output image
         "dwi_designer": tmp_dir / "dwi_designer.nii",
         "bvec": tmp_dir / "dwi_designer.bvec",
         "bval": tmp_dir / "dwi_designer.bval",
-        "b0": params_dir / "b0.nii",
         # FA images
         "fa_dki": params_dir / "fa_dki.nii",
         "fa_dti": params_dir / "fa_dti.nii",
         "fa_wdki": params_dir / "fa_wdki.nii",
         # ROI images
-        "roi1": data_dir / "roi1.nii",
-        "roi2": data_dir / "roi2.nii",
-        "voxel": data_dir / "voxel.nii",
+        "roi1": data_dir / "roi1.nii.gz",
+        "roi2": data_dir / "roi2.nii.gz",
+        "voxel": data_dir / "voxel.nii.gz",
         # Intermediate image (after denoising)
         "dwidn": processing_dir / "dwidn.nii",
         "dwidn_bvec": processing_dir / "dwidn.bvec",
@@ -75,21 +74,23 @@ def run_pipeline(paths):
     if processing_dir.exists():
         shutil.rmtree(processing_dir)
 
-    ret = subprocess.run(["designer", "-denoise", "-shrinkage", "frob", "-adaptive_patch", "-rician", "-pf", "6/8", "-pe_dir", "AP", "-degibbs", "-b1correct", "-normalize", "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
-    assert ret.returncode == 0
-    assert designer_image_path.exists()
+    try:
+        ret = subprocess.run(["designer", "-denoise", "-shrinkage", "frob", "-adaptive_patch", "-rician", "-pf", "6/8", "-pe_dir", "AP", "-degibbs", "-b1correct", "-normalize", "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
+        assert ret.returncode == 0
+        assert designer_image_path.exists()
 
-    if params_dir.exists():
-        shutil.rmtree(params_dir)
+        if params_dir.exists():
+            shutil.rmtree(params_dir)
 
-    ret = subprocess.run(["tmi", "-SMI", "-DKI", "-WDKI", "-DTI", "-sigma", str(processing_dir / "sigma.nii"), "-mask", str(processing_dir / "brain_mask.nii"), str(designer_image_path), str(params_dir)])
-    assert ret.returncode == 0
-    assert params_dir.exists()
+        ret = subprocess.run(["tmi", "-SMI", "-DKI", "-WDKI", "-DTI", "-sigma", str(processing_dir / "sigma.nii"), "-mask", str(processing_dir / "brain_mask.nii"), str(designer_image_path), str(params_dir)])
+        assert ret.returncode == 0
+        assert params_dir.exists()
 
-    yield
+        yield
 
-    if paths["tmp_dir"].exists():
-        shutil.rmtree(paths["tmp_dir"])
+    finally:
+        if paths["tmp_dir"].exists():
+            shutil.rmtree(paths["tmp_dir"])
 
 
 @pytest.fixture(scope="module")
@@ -103,7 +104,6 @@ def test_white_matter_voxel_count(white_matter_roi, ground_truth_data):
     assert wm_voxel_cnt == expected_count
 
 
-# full pipeline
 def test_b0_stats(paths, white_matter_roi, ground_truth_data):
     b0_data = extract_mean_b0(paths["dwi_designer"], paths["bval"])
     expected_values = ground_truth_data["b0_stats"]

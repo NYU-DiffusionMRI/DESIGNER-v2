@@ -26,22 +26,23 @@ def paths():
         "processing_dir": processing_dir,
         "params_dir": params_dir,
         # images to be processed by pipeline
-        "dwi_images": [data_dir / "meso_ds2.nii", data_dir / "research_ds2.nii"],
+        "dwi_images": [data_dir / "meso_ds2.nii.gz", data_dir / "research_ds2.nii.gz"],
         # PA image
-        "pa_image": data_dir / "pa_ds2.nii",
+        "pa_image": data_dir / "pa_ds2.nii.gz",
+        # Topup output image
+        "dwi_topup": processing_dir / "eddy_processing" / "dwi_pe_0_applytopup.nii.gz",
         # Designer output image
         "dwi_designer": tmp_dir / "dwi_designer.nii",
         "bvec": tmp_dir / "dwi_designer.bvec",
         "bval": tmp_dir / "dwi_designer.bval",
-        "b0": params_dir / "b0.nii",
         # FA images
         "fa_dki": params_dir / "fa_dki.nii",
         "fa_dti": params_dir / "fa_dti.nii",
         "fa_wdki": params_dir / "fa_wdki.nii",
         # ROI images
-        "roi1": data_dir / "roi1.nii",
-        "roi2": data_dir / "roi2.nii",
-        "voxel": data_dir / "voxel.nii",
+        "roi1": data_dir / "roi1.nii.gz",
+        "roi2": data_dir / "roi2.nii.gz",
+        "voxel": data_dir / "voxel.nii.gz",
     }
 
 
@@ -61,22 +62,24 @@ def run_pipeline(paths):
     if processing_dir.exists():
         shutil.rmtree(processing_dir)
 
-    # TODO: passing relative path for pa_image doesn't work. need to fix it in DESIGNER app code.
-    ret = subprocess.run(["designer", "-set_seed", "-eddy", "-rpe_pair", str(paths["pa_image"].resolve()), "-pf", "6/8", "-pe_dir", "AP", "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
-    assert ret.returncode == 0
-    assert designer_image_path.exists()
+    try:
+        # TODO: passing relative path for pa_image doesn't work. need to fix it in DESIGNER app code.
+        ret = subprocess.run(["designer", "-set_seed", "-eddy", "-rpe_pair", str(paths["pa_image"].resolve()), "-pf", "6/8", "-pe_dir", "AP", "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
+        assert ret.returncode == 0
+        assert designer_image_path.exists()
 
-    if params_dir.exists():
-        shutil.rmtree(params_dir)
+        if params_dir.exists():
+            shutil.rmtree(params_dir)
 
-    ret = subprocess.run(["tmi", "-SMI", "-DKI", "-WDKI", "-DTI", "-mask", str(processing_dir / "brain_mask.nii"), str(designer_image_path), str(params_dir)])
-    assert ret.returncode == 0
-    assert params_dir.exists()
+        ret = subprocess.run(["tmi", "-SMI", "-DKI", "-WDKI", "-DTI", "-mask", str(processing_dir / "brain_mask.nii"), str(designer_image_path), str(params_dir)])
+        assert ret.returncode == 0
+        assert params_dir.exists()
 
-    yield
+        yield
 
-    if paths["tmp_dir"].exists():
-        shutil.rmtree(paths["tmp_dir"])
+    finally:
+        if paths["tmp_dir"].exists():
+            shutil.rmtree(paths["tmp_dir"])
 
 
 @pytest.fixture(scope="module")
@@ -87,7 +90,7 @@ def white_matter_roi(paths):
 def test_white_matter_voxel_count(white_matter_roi, ground_truth_data):
     wm_voxel_cnt = np.count_nonzero(white_matter_roi)
     expected_count = ground_truth_data["white_matter_voxel_count"]
-    print("wm_voxel_cnt:", wm_voxel_cnt)
+
     assert wm_voxel_cnt == expected_count
 
 
@@ -108,7 +111,7 @@ def test_b0_stats(paths, white_matter_roi, ground_truth_data):
     roi2_mean, roi2_std = compute_roi_mean_and_std(b0_data, roi2)
     assert np.isclose(roi2_mean, expected_values["roi2"][0])
     assert np.isclose(roi2_std, expected_values["roi2"][1])
-
+    
     single_voxel = nib.load(paths["voxel"]).get_fdata()
     single_voxel_mean, _ = compute_roi_mean_and_std(b0_data, single_voxel)
     assert np.isclose(single_voxel_mean, expected_values["voxel"])
@@ -128,7 +131,7 @@ def test_fa_stats(paths, white_matter_roi, fa_type, expected_values):
     wm_mean, wm_std = compute_roi_mean_and_std(fa_data, white_matter_roi)
     assert np.isclose(wm_mean, expected_values["wm"][0])
     assert np.isclose(wm_std, expected_values["wm"][1])
-
+    
     roi1 = nib.load(paths["roi1"]).get_fdata()
     roi1_mean, roi1_std = compute_roi_mean_and_std(fa_data, roi1)
     assert np.isclose(roi1_mean, expected_values["roi1"][0])
@@ -141,4 +144,27 @@ def test_fa_stats(paths, white_matter_roi, fa_type, expected_values):
     
     single_voxel = nib.load(paths["voxel"]).get_fdata()
     single_voxel_mean, _ = compute_roi_mean_and_std(fa_data, single_voxel)
+    assert np.isclose(single_voxel_mean, expected_values["voxel"])
+
+
+def test_b0_stats_after_topup(paths, white_matter_roi, ground_truth_data):
+    b0_data = extract_mean_b0(paths["dwi_topup"], paths["bval"])
+    expected_values = ground_truth_data["b0_stats_topup"]
+
+    wm_mean, wm_std = compute_roi_mean_and_std(b0_data, white_matter_roi)
+    assert np.isclose(wm_mean, expected_values["wm"][0])
+    assert np.isclose(wm_std, expected_values["wm"][1])
+
+    roi1 = nib.load(paths["roi1"]).get_fdata()
+    roi1_mean, roi1_std = compute_roi_mean_and_std(b0_data, roi1)
+    assert np.isclose(roi1_mean, expected_values["roi1"][0])
+    assert np.isclose(roi1_std, expected_values["roi1"][1])
+
+    roi2 = nib.load(paths["roi2"]).get_fdata()
+    roi2_mean, roi2_std = compute_roi_mean_and_std(b0_data, roi2)
+    assert np.isclose(roi2_mean, expected_values["roi2"][0])
+    assert np.isclose(roi2_std, expected_values["roi2"][1])
+
+    single_voxel = nib.load(paths["voxel"]).get_fdata()
+    single_voxel_mean, _ = compute_roi_mean_and_std(b0_data, single_voxel)
     assert np.isclose(single_voxel_mean, expected_values["voxel"])
