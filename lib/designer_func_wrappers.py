@@ -451,7 +451,10 @@ def run_eddy(shell_table, dwi_metadata):
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     run.command('mrconvert -force -fslgrad working.bvec working.bval -json_import working.json working.nii working.mif', show=False)
 
-    eddyopts = '" --cnr_maps --repol --data_is_shelled "'
+    eddyopts_list = ['--cnr_maps', '--repol', '--data_is_shelled']
+    if app.ARGS.set_seed:
+        eddyopts_list.append('--initrand')
+    eddyopts = ' '.join(eddyopts_list)
 
     fsl_suffix = fsl.suffix()
 
@@ -676,7 +679,7 @@ def run_eddy(shell_table, dwi_metadata):
                     ('topup_corrected_' + str(i) + '_mean.nii', 
                     'topup_corrected_' + str(i) + '_brain'))
                 
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
                     ('eddy_processing_' + str(i), 
                     eddyopts, 
                     'topup_corrected_' + str(i) + '_brain_mask' + fsl_suffix,
@@ -687,7 +690,7 @@ def run_eddy(shell_table, dwi_metadata):
                 
             elif app.ARGS.rpe_none:
 
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -pe_dir "%s" "%s" "%s"' % 
                     ('eddy_processing_' + str(i), 
                     eddyopts, 
                     pe_dir,
@@ -699,7 +702,7 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
                 run.command('mrconvert -strides ' + stride + ' -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_all -pe_dir "%s" "%s" "%s"' %
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
                     ('eddy_processing',
                      eddyopts, 
                      pe_dir, 
@@ -709,7 +712,7 @@ def run_eddy(shell_table, dwi_metadata):
 
             elif app.ARGS.rpe_header:
 
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_header "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header "%s" "%s"' % 
                 ('eddy_processing',
                  eddyopts,
                 'dwi_pre_eddy_' + str(i) + '.mif',
@@ -820,7 +823,7 @@ def run_eddy(shell_table, dwi_metadata):
                 'topup_corrected_brain'))
             
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
                         ('eddy_processing', 
                         eddyopts, 
                         'topup_corrected_brain_mask' + fsl_suffix,
@@ -829,7 +832,7 @@ def run_eddy(shell_table, dwi_metadata):
                         'working.mif',
                         'dwiec.mif'))
             else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
                         ('eddy_processing',
                         'fakeb_grad.txt', 
                         eddyopts, 
@@ -847,7 +850,7 @@ def run_eddy(shell_table, dwi_metadata):
                 'b0_pe_brain'))
             
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
                         ('eddy_processing', 
                         eddyopts, 
                         'b0_pe_brain_mask' + fsl_suffix,
@@ -855,7 +858,7 @@ def run_eddy(shell_table, dwi_metadata):
                         'working.mif',
                         'dwiec.mif'))
             else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
                         ('eddy_processing', 
                         'fakeb_grad.txt', 
                         eddyopts, 
@@ -937,14 +940,14 @@ def run_eddy(shell_table, dwi_metadata):
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
             
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
                             ('eddy_processing',
                             eddyopts, 
                             pe_dir,
                             'topup_corrected_brain_mask' + fsl_suffix
                             ))
             else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
+                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
                             ('eddy_processing',
                             'fakeb_grad.txt',
                             eddyopts, 
@@ -955,10 +958,10 @@ def run_eddy(shell_table, dwi_metadata):
 
         elif app.ARGS.rpe_header:
             if app.ARGS.eddy_fakeb is None: 
-                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -eddy_options %s -rpe_header working.mif dwiec.mif' % 
+                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
                     ('eddy_processing',eddyopts))
             else:
-                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options %s -rpe_header working.mif dwiec.mif' % 
+                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
                     ('eddy_processing','fakeb_grad.txt', eddyopts))
             run.command(cmd)
 

@@ -13,7 +13,7 @@ lib/rpg*
 build-wheels.sh
 
 tests/data/
-tests/tmp/
+tests/tmp_*/
 
 # Ignore FFTW build artifacts but keep source (in case when not using dev container)
 rpg_cpp/fftw-3.3.10/build/
