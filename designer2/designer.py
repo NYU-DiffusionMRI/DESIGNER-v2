@@ -100,13 +100,22 @@ def usage(cmdline): #pylint: disable=unused-variable
     rpe_options.add_argument('-eddy_quad_output', metavar=('<path>'), help='path to a not yet existing directory you want to save eddy_quad output to')
     rpe_options.add_argument('-eddy_quad_off', action='store_true', help='skip eddy_quad')
 
+    etc_options = cmdline.add_argument_group('Other options')
+    etc_options.add_argument('-set_seed', action='store_true', help='set random seed and make eddy deterministic', default=False)
+
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
     import pandas as pd
     import numpy as np
     import os
+    import random
 
     from pathlib import Path
+    
+    if app.ARGS.set_seed:
+        seed = 42
+        np.random.seed(seed)
+        random.seed(seed) 
 
     # create a temporary directory to store processing files
     app.make_scratch_dir()

@@ -10,19 +10,19 @@ import pytest
 from tests.utils import create_binary_mask_from_fa, extract_mean_b0, compute_roi_mean_and_std
 
 
-ground_truth = json.load(open("tests/MESO_nonsquare_ground_truth.json"))
+ground_truth = json.load(open("tests/ground_truth_statistics/D1.json"))
 
 
 @pytest.fixture(scope="module")
 def paths():
     data_dir = Path("tests/data/D1/")
-    tmp_dir = Path("tests/tmp/D1/")
-    
+    tmp_dir = Path("tests/tmp_D1/")
     processing_dir = tmp_dir / "processing"
     params_dir = tmp_dir / "params"
 
     return {
         # processing and parameters directories for the pipeline
+        "tmp_dir": tmp_dir,
         "processing": processing_dir,
         "params": params_dir,
         # images to be processed by pipeline
@@ -88,7 +88,8 @@ def run_pipeline(paths):
 
     yield
 
-    # cleanup?
+    if paths["tmp_dir"].exists():
+        shutil.rmtree(paths["tmp_dir"])
 
 
 @pytest.fixture(scope="module")
@@ -109,17 +110,17 @@ def test_b0_stats(paths, white_matter_roi, ground_truth_data):
 
     wm_mean, wm_std = compute_roi_mean_and_std(b0_data, white_matter_roi)
     assert np.isclose(wm_mean, expected_values["wm"][0])
-    assert np.isclose(wm_std, expected_values["wm"][1], rtol=2e-3)
+    assert np.isclose(wm_std, expected_values["wm"][1])
 
     roi1 = nib.load(paths["roi1"]).get_fdata()
     roi1_mean, roi1_std = compute_roi_mean_and_std(b0_data, roi1)
     assert np.isclose(roi1_mean, expected_values["roi1"][0])
-    assert np.isclose(roi1_std, expected_values["roi1"][1], rtol=2e-3)
+    assert np.isclose(roi1_std, expected_values["roi1"][1])
     
     roi2 = nib.load(paths["roi2"]).get_fdata()
     roi2_mean, roi2_std = compute_roi_mean_and_std(b0_data, roi2)
     assert np.isclose(roi2_mean, expected_values["roi2"][0])
-    assert np.isclose(roi2_std, expected_values["roi2"][1], rtol=2e-3)
+    assert np.isclose(roi2_std, expected_values["roi2"][1])
 
     single_voxel = nib.load(paths["voxel"]).get_fdata()
     single_voxel_mean, _ = compute_roi_mean_and_std(b0_data, single_voxel)
@@ -139,17 +140,17 @@ def test_fa_stats(paths, white_matter_roi, fa_type, expected_values):
 
     wm_mean, wm_std = compute_roi_mean_and_std(fa_data, white_matter_roi)
     assert np.isclose(wm_mean, expected_values["wm"][0])
-    assert np.isclose(wm_std, expected_values["wm"][1], rtol=2e-3)
+    assert np.isclose(wm_std, expected_values["wm"][1])
 
     roi1 = nib.load(paths["roi1"]).get_fdata()
     roi1_mean, roi1_std = compute_roi_mean_and_std(fa_data, roi1)
     assert np.isclose(roi1_mean, expected_values["roi1"][0])
-    assert np.isclose(roi1_std, expected_values["roi1"][1], rtol=2e-3)
+    assert np.isclose(roi1_std, expected_values["roi1"][1])
     
     roi2 = nib.load(paths["roi2"]).get_fdata()
     roi2_mean, roi2_std = compute_roi_mean_and_std(fa_data, roi2)
     assert np.isclose(roi2_mean, expected_values["roi2"][0])
-    assert np.isclose(roi2_std, expected_values["roi2"][1], rtol=2e-3)
+    assert np.isclose(roi2_std, expected_values["roi2"][1])
 
     single_voxel = nib.load(paths["voxel"]).get_fdata()
     single_voxel_mean, _ = compute_roi_mean_and_std(fa_data, single_voxel)
@@ -172,17 +173,17 @@ def test_b0_stats_each_step(paths, white_matter_roi, dwi_key, bval_key, expected
 
     wm_mean, wm_std = compute_roi_mean_and_std(b0_data, white_matter_roi)
     assert np.isclose(wm_mean, expected_values["wm"][0])
-    assert np.isclose(wm_std, expected_values["wm"][1], rtol=2e-3)
+    assert np.isclose(wm_std, expected_values["wm"][1])
 
     roi1 = nib.load(paths["roi1"]).get_fdata()
     roi1_mean, roi1_std = compute_roi_mean_and_std(b0_data, roi1)
     assert np.isclose(roi1_mean, expected_values["roi1"][0])
-    assert np.isclose(roi1_std, expected_values["roi1"][1], rtol=2e-3)
+    assert np.isclose(roi1_std, expected_values["roi1"][1])
 
     roi2 = nib.load(paths["roi2"]).get_fdata()
     roi2_mean, roi2_std = compute_roi_mean_and_std(b0_data, roi2)
     assert np.isclose(roi2_mean, expected_values["roi2"][0])
-    assert np.isclose(roi2_std, expected_values["roi2"][1], rtol=2e-3)
+    assert np.isclose(roi2_std, expected_values["roi2"][1])
 
     single_voxel = nib.load(paths["voxel"]).get_fdata()
     single_voxel_mean, _ = compute_roi_mean_and_std(b0_data, single_voxel)
