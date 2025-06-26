@@ -23,8 +23,8 @@ def paths():
     return {
         # processing and parameters directories for the pipeline
         "tmp_dir": tmp_dir,
-        "processing": processing_dir,
-        "params": params_dir,
+        "processing_dir": processing_dir,
+        "params_dir": params_dir,
         # images to be processed by pipeline
         "dwi_images": [data_dir / "meso_slice_crop.nii", data_dir / "research_slice_crop.nii"],
         # Designer output image
@@ -68,8 +68,8 @@ def ground_truth_data():
 def run_pipeline(paths):
     dwi_args=",".join([str(path) for path in paths["dwi_images"]])
 
-    processing_dir=paths["processing"]
-    params_dir=paths["params"]
+    processing_dir=paths["processing_dir"]
+    params_dir=paths["params_dir"]
     designer_image_path = paths["dwi_designer"]
 
     if processing_dir.exists():
@@ -106,7 +106,7 @@ def test_white_matter_voxel_count(white_matter_roi, ground_truth_data):
 # full pipeline
 def test_b0_stats(paths, white_matter_roi, ground_truth_data):
     b0_data = extract_mean_b0(paths["dwi_designer"], paths["bval"])
-    expected_values = ground_truth_data["b0_stats"]["full_pipeline"]
+    expected_values = ground_truth_data["b0_stats"]
 
     wm_mean, wm_std = compute_roi_mean_and_std(b0_data, white_matter_roi)
     assert np.isclose(wm_mean, expected_values["wm"][0])
