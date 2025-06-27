@@ -1,8 +1,34 @@
 from pathlib import Path
-from typing import Optional, SupportsFloat
+from typing import Optional, Union, List
 
 import numpy as np
 import nibabel as nib
+
+
+def assert_roi_mean_and_std(data: np.ndarray, roi: Union[Path, np.ndarray], expected_values: List[float]):
+    """Assert the mean and standard deviation of the data within the ROI are close to the expected values.
+
+    Args:
+        data: Input data array (e.g., image data) with shape (X, Y, Z)
+        roi: ROI specification - can be file path (Path) or numpy array
+        expected_values: Expected [mean, std] or [mean] values
+    """
+    if isinstance(roi, np.ndarray):
+        roi_data = roi
+    elif isinstance(roi, Path):
+        roi_data = nib.load(roi).get_fdata()
+    else:
+        raise ValueError(f"Invalid ROI type: {type(roi)}")
+
+    mean, std = compute_roi_mean_and_std(data, roi_data)
+    # print(f"mean: {mean}, std: {std}")
+    if len(expected_values) == 2:
+        assert np.isclose(mean, expected_values[0])
+        assert np.isclose(std, expected_values[1])
+    elif len(expected_values) == 1:
+        assert np.isclose(mean, expected_values[0])
+    else:
+        raise ValueError(f"Expected values must be a list of length 1 or 2, got {len(expected_values)}")
 
 
 def create_binary_mask_from_fa(fa_file: Path, output_file: Optional[Path] = None, *, threshold: float) -> np.ndarray:
