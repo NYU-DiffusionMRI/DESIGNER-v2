@@ -95,8 +95,7 @@ def white_matter_roi(paths):
 def test_white_matter_voxel_count(white_matter_roi, ground_truth_data):
     wm_voxel_cnt = np.count_nonzero(white_matter_roi)
     expected_count = ground_truth_data["white_matter_voxel_count"]
-    print(f"wm_voxel_cnt: {wm_voxel_cnt}")
-    # assert wm_voxel_cnt == expected_count
+    assert wm_voxel_cnt == expected_count
 
 
 def test_b0_stats(paths, white_matter_roi, ground_truth_data):

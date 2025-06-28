@@ -1,5 +1,5 @@
 {
-  "dataset": "D2_MESO_downsampled",
+  "dataset": "D2_MESO_eddy",
   "white_matter_voxel_count": 816,
   "b0_stats": {
     "wm": [148.09892479268726, 112.5478797092804],

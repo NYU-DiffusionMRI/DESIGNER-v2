@@ -1,5 +1,5 @@
 {
-  "dataset": "D2_MESO_downsampled_wo_bids",
+  "dataset": "D2_MESO_eddy_wo_bids",
   "white_matter_voxel_count": 898,
   "b0_stats": {
     "wm": [136.28716002735507, 113.18263917014102],

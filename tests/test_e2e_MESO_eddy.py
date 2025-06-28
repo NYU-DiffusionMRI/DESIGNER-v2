@@ -27,8 +27,8 @@ def paths():
         "params_dir": params_dir,
         # images to be processed by pipeline
         "dwi_images": [data_dir / "meso_ds.nii.gz", data_dir / "research_ds.nii.gz"],
-        # PA image
-        "pa_image": data_dir / "pa_ds.nii.gz",
+        # Phase Encoding image
+        "phase_encoding_image": data_dir / "pa_ds.nii.gz",
         # Topup output image
         "dwi_topup": processing_dir / "eddy_processing" / "dwi_pe_0_applytopup.nii.gz",
         # Designer output image
@@ -63,8 +63,8 @@ def run_pipeline(paths):
         shutil.rmtree(processing_dir)
 
     try:
-        # TODO: passing relative path for pa_image doesn't work. need to fix it in DESIGNER app code.
-        ret = subprocess.run(["designer", "-set_seed", "-eddy", "-rpe_pair", str(paths["pa_image"].resolve()), "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
+        # TODO: passing relative path for phase_encoding_image doesn't work. need to fix it in DESIGNER app code.
+        ret = subprocess.run(["designer", "-set_seed", "-eddy", "-rpe_pair", str(paths["phase_encoding_image"].resolve()), "-mask", "-scratch", str(processing_dir), "-nocleanup", dwi_args, str(designer_image_path)])
         assert ret.returncode == 0
         assert designer_image_path.exists()
 
