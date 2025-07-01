@@ -238,7 +238,7 @@ def execute(): #pylint: disable=unused-variable
         if app.ARGS.DTI:
             from lib.mpunits import vectorize
             logger.info("Starting DTI fit...")
-            dtishell = (bval <= 0.1) | ((bval > .5) & (bval <= 1.5))
+            dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= 1.5))
             dwi_dti = dwi[:,:,:,dtishell]
             bval_dti = bval[dtishell]
             bvec_dti = bvec[:,dtishell]
@@ -410,7 +410,7 @@ def execute(): #pylint: disable=unused-variable
                     continue
                 
                 logger.info(f"Starting DTI fit for TE={te}...")
-                dtishell = (bval <= 0.1) | ((bval > .5) & (bval <= 1.5))
+                dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= 1.5))
                 dwi_dti = dwi[:,:,:,dtishell]
                 bval_dti = bval[dtishell]
                 bvec_dti = bvec[:,dtishell]

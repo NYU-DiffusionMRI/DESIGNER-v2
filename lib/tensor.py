@@ -206,6 +206,9 @@ class TensorFitting(object):
 
         
         parameters = {}
+        parameters['L1'] = l1
+        parameters['L2'] = l2
+        parameters['L3'] = l3
         if extract_dti:
             parameters['md'] = md
             parameters['rd'] = rd

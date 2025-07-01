@@ -82,11 +82,16 @@ def save_params(paramDict, niiex, model, outdir):
 
     params = paramDict.keys()
     for key in params:
-        outpath = os.path.join(r"{}".format(outdir), ("%s_%s.nii" % (key, model)))
-        vol = paramDict[key]
-        ndims = vol.ndim
+        if 'L' in key:
+            outpath = os.path.join(r"{}".format(outdir), ("%s.nii" % (key)))
+        else:
+            outpath = os.path.join(r"{}".format(outdir), ("%s_%s.nii" % (key, model)))
 
-        out = from_numpy(
-        paramDict[key], origin=niiex.origin[:ndims], spacing=niiex.spacing[:ndims], direction=niiex.direction[:ndims,:])
-        image_write(out, outpath)
+        if not os.path.exists(outpath):
+            vol = paramDict[key]
+            ndims = vol.ndim
+
+            out = from_numpy(
+            paramDict[key], origin=niiex.origin[:ndims], spacing=niiex.spacing[:ndims], direction=niiex.direction[:ndims,:])
+            image_write(out, outpath)
 
