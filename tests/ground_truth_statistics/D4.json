@@ -1,5 +1,5 @@
 {
-    "dataset": "D4_MESO_high_resolution",
+    "dataset": "D4_high_resolution",
     "white_matter_voxel_count": 75108,
     "b0_stats": {
       "wm": [3142.834010180479, 1070.8951504245981],

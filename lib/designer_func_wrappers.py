@@ -969,6 +969,7 @@ def run_eddy(shell_table, dwi_metadata):
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
 
     run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)
+    run.command('mrconvert -export_grad_fsl dwiec.bvec dwiec.bval dwiec.mif dwiec.nii', show=False)
     # End timer
     end_time = time.time()
     elapsed_time = end_time - start_time
