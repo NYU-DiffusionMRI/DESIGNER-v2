@@ -21,7 +21,7 @@ def assert_roi_mean_and_std(data: np.ndarray, roi: Union[Path, np.ndarray], expe
         raise ValueError(f"Invalid ROI type: {type(roi)}")
 
     mean, std = compute_roi_mean_and_std(data, roi_data)
-    # print(f"mean: {mean}, std: {std}")
+
     if len(expected_values) == 2:
         assert np.isclose(mean, expected_values[0])
         assert np.isclose(std, expected_values[1])
@@ -81,7 +81,8 @@ def extract_mean_b0(img_path: Path, bval_path: Path) -> np.ndarray:
         raise ValueError("No b=0 volumes found in the data")
 
     b0_data = data[..., b0_indices]
-    mean_b0 = np.mean(b0_data, axis=3)
+    b0_data_no_nan = np.nan_to_num(b0_data, nan=0.0)
+    mean_b0 = np.mean(b0_data_no_nan, axis=3)
 
     return mean_b0
 
