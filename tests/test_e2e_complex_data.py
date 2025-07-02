@@ -3,10 +3,12 @@ import shutil
 import json
 from typing import List
 from pathlib import Path
+from typing import List, Tuple, Dict
 from functools import reduce
 
 import numpy as np
 import nibabel as nib
+from nibabel.nifti1 import Nifti1Image
 import pytest
 
 from tests.utils import create_binary_mask_from_fa, extract_mean_b0, assert_roi_mean_and_std
@@ -14,6 +16,7 @@ from tests.utils import create_binary_mask_from_fa, extract_mean_b0, assert_roi_
 
 ground_truth = json.load(open("tests/ground_truth_statistics/D5.json"))
 te_list = [60.0, 92.0]
+
 
 @pytest.fixture(scope="module")
 def paths():
@@ -33,8 +36,8 @@ def paths():
         "phase_images": [data_dir / "phase1_ds.nii.gz", data_dir / "phase2_ds.nii.gz", data_dir / "phase3_ds.nii.gz"],
         # Designer output image
         "dwi_designer": tmp_dir / "dwi_designer.nii",
-        "bvec": tmp_dir / "dwi_designer.bvec",
-        "bval": tmp_dir / "dwi_designer.bval",
+        "dwi_designer_bvec": tmp_dir / "dwi_designer.bvec",
+        "dwi_designer_bval": tmp_dir / "dwi_designer.bval",
         # FA images
         "fa_dki": [params_dir / f"fa_dki_te{te}.nii" for te in te_list],
         "fa_dti": [params_dir / f"fa_dti_te{te}.nii" for te in te_list],
@@ -44,17 +47,17 @@ def paths():
         "roi2": data_dir / "roi2.nii.gz",
         "voxel": data_dir / "voxel.nii.gz",
         # Intermediate image (after denoising)
-        "dwidn": processing_dir / "dwidn.nii",
-        "dwidn_bvec": processing_dir / "dwidn.bvec",
-        "dwidn_bval": processing_dir / "dwidn.bval",
+        "dwi_denoising": processing_dir / "dwidn.nii",
+        "dwi_denoising_bvec": processing_dir / "dwidn.bvec",
+        "dwi_denoising_bval": processing_dir / "dwidn.bval",
         # Intermediate image (after degibbs)
-        "dwidg": processing_dir / "working_rpg.nii",
-        "dwidg_bvec": processing_dir / "working_rpg.bvec",
-        "dwidg_bval": processing_dir / "working_rpg.bval",
+        "dwi_degibbs": processing_dir / "working_rpg.nii",
+        "dwi_degibbs_bvec": processing_dir / "working_rpg.bvec",
+        "dwi_degibbs_bval": processing_dir / "working_rpg.bval",
         # Intermediate image (after eddy/topup)
-        "dwiec": processing_dir / "dwiec.nii",
-        "dwiec_bvec": processing_dir / "dwiec.bvec",
-        "dwiec_bval": processing_dir / "dwiec.bval",
+        "dwi_eddy": processing_dir / "dwiec.nii",
+        "dwi_eddy_bvec": processing_dir / "dwiec.bvec",
+        "dwi_eddy_bval": processing_dir / "dwiec.bval",
     }
 
 
@@ -96,63 +99,25 @@ def run_pipeline(paths):
 
 
 @pytest.fixture(scope="module")
-def white_matter_roi_list(paths) -> List[np.ndarray]:
-    return [create_binary_mask_from_fa(fa_file, threshold=0.3) for fa_file in paths["fa_dki"]]
+def white_matter_roi_list(paths) -> List[Nifti1Image]:
+    return [create_binary_mask_from_fa(fa_file) for fa_file in paths["fa_dki"]]
 
 @pytest.fixture(scope="module")
-def white_matter_roi(white_matter_roi_list) -> np.ndarray:
-    return reduce(np.bitwise_or, white_matter_roi_list)
+def white_matter_roi(white_matter_roi_list) -> Nifti1Image:
+    wm_roi = reduce(np.bitwise_or, [roi.get_fdata().astype(bool) for roi in white_matter_roi_list])
+
+    return Nifti1Image(wm_roi, white_matter_roi_list[0].affine, white_matter_roi_list[0].header)
 
 
 def test_white_matter_voxel_count(white_matter_roi, ground_truth_data):
-    wm_voxel_cnt = np.count_nonzero(white_matter_roi)
+    wm_voxel_cnt = np.count_nonzero(white_matter_roi.get_fdata())
     expected_count = ground_truth_data["white_matter_voxel_count"]
     assert wm_voxel_cnt == expected_count
 
 
-def test_b0_stats(paths, white_matter_roi, ground_truth_data):
-    b0_data = extract_mean_b0(paths["dwi_designer"], paths["bval"])
-    expected_values = ground_truth_data["b0_stats"]
-
-    assert_roi_mean_and_std(b0_data, white_matter_roi, expected_values["wm"])
-    assert_roi_mean_and_std(b0_data, paths["roi1"], expected_values["roi1"])
-    assert_roi_mean_and_std(b0_data, paths["roi2"], expected_values["roi2"])
-    assert_roi_mean_and_std(b0_data, paths["voxel"], [expected_values["voxel"]])
-
-
-def get_fa_test_params(ground_truth):
-    """Generate test parameters for FA stats from ground truth data."""
-    fa_stats = ground_truth["fa_stats"]
-    ret_params = []
-    
-    for fa_type, echo_time_stats in fa_stats.items():
-        sorted_echo_times = sorted(echo_time_stats.keys())
-        fa_stats_by_echo_time = [echo_time_stats[echo_time] for echo_time in sorted_echo_times]
-        ret_params.append((fa_type, fa_stats_by_echo_time))
-
-    return ret_params
-
-
-@pytest.mark.parametrize("fa_type, expected_values_list", get_fa_test_params(ground_truth))
-def test_fa_stats(paths, white_matter_roi_list, fa_type, expected_values_list):
-    fa_file_list = paths[fa_type]
-    fa_data_list = []
-    for fa_file in fa_file_list:
-        fa_data = nib.load(fa_file).get_fdata()
-        no_nan_fa_data = np.nan_to_num(fa_data, nan=0.0)
-
-        fa_data_list.append(no_nan_fa_data)
-
-    for fa_data, white_matter_roi, expected_values in zip(fa_data_list, white_matter_roi_list, expected_values_list):
-        assert_roi_mean_and_std(fa_data, white_matter_roi, expected_values["wm"])
-        assert_roi_mean_and_std(fa_data, paths["roi1"], expected_values["roi1"])
-        assert_roi_mean_and_std(fa_data, paths["roi2"], expected_values["roi2"])
-        assert_roi_mean_and_std(fa_data, paths["voxel"], [expected_values["voxel"]])
-
-
-def get_b0_each_step_test_params(ground_truth):
+def get_b0_test_params(ground_truth) -> List[Tuple[str, str, Dict]]:
     """Generate test parameters for B0 stats each step from ground truth data."""
-    b0_stats = ground_truth["b0_stats_each_step"]
+    b0_stats = ground_truth["b0_stats"]
     params = []
     for dwi_key, values in b0_stats.items():
         bval_key = f"{dwi_key}_bval"
@@ -160,11 +125,45 @@ def get_b0_each_step_test_params(ground_truth):
     return params
 
 
-@pytest.mark.parametrize("dwi_key, bval_key, expected_values", get_b0_each_step_test_params(ground_truth))
-def test_b0_stats_each_step(paths, white_matter_roi, dwi_key, bval_key, expected_values):
-    b0_data = extract_mean_b0(paths[dwi_key], paths[bval_key])
+@pytest.mark.parametrize("dwi_key, bval_key, expected_values", get_b0_test_params(ground_truth))
+def test_b0_stats(paths, white_matter_roi, dwi_key, bval_key, expected_values):
+    b0_image = extract_mean_b0(paths[dwi_key], paths[bval_key])
 
-    assert_roi_mean_and_std(b0_data, white_matter_roi, expected_values["wm"])
-    assert_roi_mean_and_std(b0_data, paths["roi1"], expected_values["roi1"])
-    assert_roi_mean_and_std(b0_data, paths["roi2"], expected_values["roi2"])
-    assert_roi_mean_and_std(b0_data, paths["voxel"], [expected_values["voxel"]])
+    assert_roi_mean_and_std(b0_image, white_matter_roi, expected_values["wm"])
+    assert_roi_mean_and_std(b0_image, paths["roi1"], expected_values["roi1"])
+    assert_roi_mean_and_std(b0_image, paths["roi2"], expected_values["roi2"])
+    assert_roi_mean_and_std(b0_image, paths["voxel"], [expected_values["voxel"]])
+
+
+def get_fa_test_params(ground_truth) -> List[Tuple[str, Dict, int]]:
+    """Generate test parameters for FA stats from ground truth data."""
+    fa_stats = ground_truth["fa_stats"]
+    params = []
+    
+    for fa_type, values in fa_stats.items():
+        if '_te' in fa_type:    # multi-TE case
+            base_type, te_part = fa_type.split('_te')
+            te_idx = te_list.index(float(te_part))
+        else:   # TODO: not needed if there will be separate multi-TE test base class
+            base_type = fa_type
+            te_idx = 0
+            
+        params.append((base_type, values, te_idx))
+            
+    return params
+
+
+@pytest.mark.parametrize("fa_type, expected_values, te_idx", get_fa_test_params(ground_truth))
+def test_fa_stats(paths, white_matter_roi_list, fa_type, expected_values, te_idx):
+    fa_path = paths[fa_type][te_idx]
+    fa_image = nib.load(fa_path)
+    fa_data = fa_image.get_fdata()
+    fa_data_no_nan = np.nan_to_num(fa_data, nan=0.0, posinf=0.0, neginf=0.0)
+    fa_image_no_nan = Nifti1Image(fa_data_no_nan, fa_image.affine, fa_image.header)
+    
+    white_matter_roi = white_matter_roi_list[te_idx]
+    
+    assert_roi_mean_and_std(fa_image_no_nan, white_matter_roi, expected_values["wm"])
+    assert_roi_mean_and_std(fa_image_no_nan, paths["roi1"], expected_values["roi1"])
+    assert_roi_mean_and_std(fa_image_no_nan, paths["roi2"], expected_values["roi2"])
+    assert_roi_mean_and_std(fa_image_no_nan, paths["voxel"], [expected_values["voxel"]])
