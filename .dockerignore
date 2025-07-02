@@ -1,6 +1,9 @@
 # Exclude test suite
 tests/
 
+# Documentation
+docs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
