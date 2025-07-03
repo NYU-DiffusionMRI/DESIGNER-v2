@@ -5,6 +5,8 @@ import numpy as np
 import nibabel as nib
 from nibabel.nifti1 import Nifti1Image
 
+from tests.types import StatsDict
+
 
 def assert_roi_mean_and_std(image: Nifti1Image, roi: Union[Path, Nifti1Image], expected_values: List[float]):
     """Assert the mean and standard deviation of the data within the ROI are close to the expected values.
@@ -31,6 +33,12 @@ def assert_roi_mean_and_std(image: Nifti1Image, roi: Union[Path, Nifti1Image], e
         assert np.isclose(mean, expected_values[0])
     else:
         raise ValueError(f"Expected values must be a list of length 1 or 2, got {len(expected_values)}")
+
+
+def assert_stats(stats: StatsDict, expected_stats: StatsDict):
+    for roi, stats_values in stats.items():
+        for val, expected_val in zip(stats_values, expected_stats[roi]):
+            assert np.isclose(val, expected_val)
 
 
 def create_binary_mask_from_fa(fa_file: Path, threshold: float = 0.3) -> Nifti1Image:
