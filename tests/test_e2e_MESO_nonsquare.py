@@ -3,45 +3,49 @@ from pathlib import Path
 
 import pytest
 
-from tests.utils import assert_stats
-from tests.e2e_runner import MESONonsquareRunner
+from tests.e2e_runner import prepare_meso_nonsquare_e2e_runner, E2ERunner
 from tests.types import DWIStage, FAType, StatsDict
-from tests.e2e_runner import DesignerRunner, TMIRunner
+from tests.utils import assert_stats
 
 
-ground_truth = json.load(open("tests/ground_truth_statistics/D1_MESO_nonsquare.json"))
+# ground_truth = json.load(open("tests/ground_truth_statistics/D1_MESO_nonsquare.json"))
+ground_truth = json.load(open("tests/ground_truth_statistics/D1_MESO_nonsquare_benchmark.json"))
 
 
 @pytest.fixture(scope="module", autouse=True)
-def runner():
+def pipeline():
+    test_dir = Path("tests/")
+    data_dir = test_dir / "data/D1/"
+    scratch_dir = test_dir / "tmp_D1/"
 
-    tmp_dir = Path("tests") / "tmp_D1"
-
-    designer = DesignerRunner.init_meso_nonsquare(tmp_dir)
-    tmi = TMIRunner.init_all_fa(tmp_dir)
-    meso_runner = MESONonsquareRunner(designer, tmi, tmp_dir=tmp_dir)
+    test_runner = prepare_meso_nonsquare_e2e_runner(scratch_dir, data_dir)
 
     try:
-        meso_runner.run_pipeline()
-        yield meso_runner
+        input_files = ["meso_slice_crop.nii.gz", "research_slice_crop.nii.gz"]
+        input_paths = [data_dir / file for file in input_files]
+
+        test_runner.run(input_paths)
+
+        yield test_runner
 
     finally:
-        meso_runner.cleanup()
+        pass
+        # test_runner.cleanup()
 
 
-def test_white_matter_voxel_count(runner: MESONonsquareRunner):
-    wm_voxel_cnt = runner.count_white_matter_voxels()
+def test_white_matter_voxel_count(pipeline: E2ERunner):
+    wm_voxel_cnt = pipeline.count_white_matter_voxels()
     expected_cnt = ground_truth["white_matter_voxel_count"]
     assert wm_voxel_cnt == expected_cnt
 
 
 @pytest.mark.parametrize("preproc_stage, expected_stats", ground_truth["b0_stats"].items())
-def test_b0_stats(runner: MESONonsquareRunner, preproc_stage: DWIStage, expected_stats: StatsDict):
-    b0_stats = runner.compute_dwi_b0_stats(preproc_stage)
+def test_b0_stats(pipeline: E2ERunner, preproc_stage: DWIStage, expected_stats: StatsDict):
+    b0_stats = pipeline.compute_b0_roi_stats(preproc_stage)
     assert_stats(b0_stats, expected_stats)
 
 
 @pytest.mark.parametrize("fa_type, expected_stats", ground_truth["fa_stats"].items())
-def test_fa_stats(runner: MESONonsquareRunner, fa_type: FAType, expected_stats: StatsDict):
-    fa_stats = runner.compute_fa_stats(fa_type)
+def test_fa_stats(pipeline: E2ERunner, fa_type: FAType, expected_stats: StatsDict):
+    fa_stats = pipeline.compute_fa_roi_stats(fa_type)
     assert_stats(fa_stats, expected_stats)

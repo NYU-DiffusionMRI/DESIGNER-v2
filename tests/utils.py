@@ -8,6 +8,7 @@ from nibabel.nifti1 import Nifti1Image
 from tests.types import StatsDict
 
 
+# will not be used anymore
 def assert_roi_mean_and_std(image: Nifti1Image, roi: Union[Path, Nifti1Image], expected_values: List[float]):
     """Assert the mean and standard deviation of the data within the ROI are close to the expected values.
 
