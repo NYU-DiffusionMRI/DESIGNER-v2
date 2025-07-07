@@ -3,35 +3,34 @@ from pathlib import Path
 
 import pytest
 
-from tests.e2e_runner import prepare_meso_nonsquare_e2e_runner, E2ERunner
+from tests.e2e_runner import E2ERunner
+from tests.e2e_runner_factory import prepare_meso_eddy_e2e_runner
 from tests.types import DWIStage, FAType, StatsDict
 from tests.utils import assert_stats
 
 
-# D1 MESO non-square without BIDS benchmark is the same as the one with BIDS.
-# ground_truth = json.load(open("tests/ground_truth_statistics/D1_MESO_nonsquare.json"))
-ground_truth = json.load(open("tests/ground_truth_statistics/D1_MESO_nonsquare_benchmark.json"))
+ground_truth = json.load(open("tests/benchmark/D2_meso_eddy_wo_bids.json"))
 
 
 @pytest.fixture(scope="module", autouse=True)
 def pipeline():
     test_dir = Path("tests/")
-    data_dir = test_dir / "data/D1/"
-    scratch_dir = test_dir / "tmp_D1_wo_bids/"
+    data_dir = test_dir / "data/D2/"
+    scratch_dir = test_dir / "tmp_D2_wo_bids/"
 
-    test_runner = prepare_meso_nonsquare_e2e_runner(scratch_dir, data_dir, without_bids=True)
+    test_runner: E2ERunner = prepare_meso_eddy_e2e_runner(scratch_dir, data_dir, without_bids=True)
 
     try:
-        input_files = ["meso_slice_crop2.nii.gz", "research_slice_crop2.nii.gz"]
+        # input files are suffixed with 2 since DESIGNER automatically checks BIDS with the same input file names.
+        input_files = ["meso_ds2.nii.gz", "research_ds2.nii.gz"]
         input_paths = [data_dir / file for file in input_files]
 
         test_runner.run(input_paths)
-        
+
         yield test_runner
 
     finally:
-        pass
-        # test_runner.cleanup()
+        test_runner.cleanup()
 
 
 def test_white_matter_voxel_count(pipeline: E2ERunner):

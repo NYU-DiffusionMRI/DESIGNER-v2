@@ -1,12 +1,14 @@
 from pathlib import Path
 import shutil
 import subprocess
-from typing import List, Tuple, Optional, Dict
-import json
 from functools import reduce
+import json
+from typing import List, Tuple, Optional, Dict
 
-from nibabel.nifti1 import Nifti1Image
 import numpy as np
+import nibabel as nib
+from nibabel.nifti1 import Nifti1Image
+from nipreps.synthstrip.wrappers.nipype import SynthStrip
 
 from tests.types import DWIStage, FAType, DWIImagePath, StatsDict
 from tests.utils import compute_roi_mean_and_std, create_binary_mask_from_fa, extract_mean_b0
@@ -81,7 +83,8 @@ class TMIRunner:
 
     # TODO: improve removing boolean flags
     def __init__(self, scratch_dir: Path, cli_options: List[str], *, with_sigma: bool = True, with_mask: bool = True):
-        self.params_dir = scratch_dir / "params"
+        self.scratch_dir = scratch_dir
+        self.params_dir = self.scratch_dir / "params"
         self.cli_options = cli_options
 
         self.with_sigma = with_sigma
@@ -127,11 +130,23 @@ class TMIRunner:
 
 class StatsComputer:
 
-    def __init__(self, designer: DesignerRunner, tmi: TMIRunner, roi_dir: Path, *, valid_echo_times: Optional[List[float]] = None, with_skull_stripping: bool = False):
+    def __init__(
+        self, 
+        designer: DesignerRunner, 
+        tmi: TMIRunner, 
+        roi_dir: Path, 
+        *, 
+        valid_echo_times: Optional[List[float]] = None, 
+        with_skull_stripping: bool = False
+    ):  
         self.designer = designer
         self.tmi = tmi
         self.valid_echo_times = valid_echo_times
         self.with_skull_stripping = with_skull_stripping
+
+        self.processing_dir = self.designer.processing_dir
+        self.params_dir = self.tmi.params_dir
+        self.scratch_dir = self.designer.scratch_dir
         
         self.roi1 = Nifti1Image.from_filename(roi_dir / "roi1.nii.gz")
         self.roi2 = Nifti1Image.from_filename(roi_dir / "roi2.nii.gz")
@@ -145,13 +160,36 @@ class StatsComputer:
         """Initialize white matter ROI(s) after FA images have been generated."""
         if self.valid_echo_times is None and not self.with_skull_stripping:
             self.wm_roi = create_binary_mask_from_fa(self.tmi.get_fa_path("dki"))
-        elif self.valid_echo_times is not None and not self.with_skull_stripping:
+        elif self.valid_echo_times is not None and not self.with_skull_stripping:   # TODO: modularize this
             self.echo_to_wm_roi = {te: create_binary_mask_from_fa(self.tmi.get_fa_path("dki", te)) for te in self.valid_echo_times}
             merged_wm_roi = reduce(np.bitwise_or, [roi.get_fdata().astype(bool) for roi in self.echo_to_wm_roi.values()])
             first_echo_time = self.valid_echo_times[0]
             self.wm_roi = Nifti1Image(merged_wm_roi, self.echo_to_wm_roi[first_echo_time].affine, self.echo_to_wm_roi[first_echo_time].header)
-        elif self.valid_echo_times is None and self.with_skull_stripping:
-            pass
+        elif self.valid_echo_times is None and self.with_skull_stripping:   # TODO: modularize this too (same threshold is used in multiple places)
+            synth = SynthStrip()
+    
+            synth.inputs.in_file = str(self.processing_dir / "b0bc.nii")
+            synth.inputs.model = "tests/models/synthstrip_v7.4.1_.1.pt"
+            synth.inputs.out_file = str(self.scratch_dir / "brain.nii.gz")  # this is not used
+            synth.inputs.out_mask = str(self.scratch_dir / "brain_mask.nii")
+            synth.inputs.use_gpu = False
+            result = synth.run()
+        
+            assert Path(result.outputs.out_mask).exists()
+
+            dti_path = self.tmi.get_fa_path("dti")
+            dti_image = Nifti1Image.from_filename(dti_path)
+            brain_mask = Nifti1Image.from_filename(result.outputs.out_mask)
+
+            fa_dti_can = nib.as_closest_canonical(dti_image)
+            mask_can = nib.as_closest_canonical(brain_mask)
+
+            brain = fa_dti_can.get_fdata() * mask_can.get_fdata()
+            brain_no_nan = np.nan_to_num(brain, nan=0.0, posinf=0.0, neginf=0.0)
+
+            threshold = 0.3
+            wm_roi = (brain_no_nan >= threshold).astype(np.uint8)
+            self.wm_roi = Nifti1Image(wm_roi, fa_dti_can.affine, fa_dti_can.header)
         else:
             raise ValueError("Invalid combination of echo times and skull stripping. Currently not supported.")
 
@@ -166,8 +204,8 @@ class StatsComputer:
         if self.wm_roi is None:
             raise RuntimeError("white matter ROI has not been initialized. Call init_wm_roi() first.")
             
-        image_path = self.designer.get_dwi_path(stage)
-        b0_image = extract_mean_b0(image_path.nifti, image_path.bval)
+        image_path: DWIImagePath = self.designer.get_dwi_path(stage)
+        b0_image: Nifti1Image = extract_mean_b0(image_path.nifti, image_path.bval)
 
         wm_mean, wm_std = compute_roi_mean_and_std(b0_image, self.wm_roi)
         roi1_mean, roi1_std = compute_roi_mean_and_std(b0_image, self.roi1)
@@ -200,7 +238,6 @@ class StatsComputer:
             wm_roi_for_stats = self.echo_to_wm_roi[echo_time]
 
         wm_mean, wm_std = compute_roi_mean_and_std(fa_image_no_nan, wm_roi_for_stats)
-        
         roi1_mean, roi1_std = compute_roi_mean_and_std(fa_image_no_nan, self.roi1)
         roi2_mean, roi2_std = compute_roi_mean_and_std(fa_image_no_nan, self.roi2)
         voxel_mean, _ = compute_roi_mean_and_std(fa_image_no_nan, self.single_voxel)
@@ -213,7 +250,13 @@ class StatsComputer:
         } 
 
     
-    def save_benchmark(self, save_path: Path, stages: List[DWIStage], fa_types: List[FAType], valid_echo_times: Optional[List[float]] = None):
+    def save_benchmark(
+        self, 
+        save_path: Path, 
+        stages: List[DWIStage], 
+        fa_types: List[FAType], 
+        valid_echo_times: Optional[List[float]] = None
+    ):
         if self.wm_roi is None:
             raise RuntimeError("white matter ROI has not been initialized. Call init_wm_roi() first.")
             
@@ -272,66 +315,3 @@ class E2ERunner:
     def __getattr__(self, name: str):
         """Forward any unknown attribute/method access to stats_computer instance."""
         return getattr(self.stats_computer, name)
-
-
-def prepare_meso_nonsquare_e2e_runner(scratch_dir: Path, data_dir: Path, *, without_bids: bool = False) -> E2ERunner:
-    cmd_config = [
-        "-denoise", 
-        "-shrinkage", "frob", 
-        "-adaptive_patch", 
-        "-rician", 
-        "-degibbs", 
-        "-b1correct", 
-        "-normalize"
-    ]
-
-    if without_bids:
-        cmd_config.extend([
-            "-pf", "6/8",
-            "-pe_dir", "AP",
-        ])
-    
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_all_fa(scratch_dir)
-    stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
-    e2e_runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
-
-    return e2e_runner
-
-
-def prepare_complex_data_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERunner:
-    phase_image_paths=[
-        data_dir / "phase1_ds.nii.gz", 
-        data_dir / "phase2_ds.nii.gz", 
-        data_dir / "phase3_ds.nii.gz"
-    ]
-
-    rpe_image_path=data_dir / "rpe_ds.nii.gz"
-
-    echo_times = [60.0, 78.0, 92.0]
-    valid_echo_times = [60.0, 92.0]
-
-    phase_args = ",".join([str(path) for path in phase_image_paths])
-    te_args = ",".join([str(time / 1000) for time in echo_times])   # convert ms to s
-    
-    cmd_config = [
-    "-set_seed", 
-        "-denoise", 
-        "-shrinkage", "frob", 
-        "-phase", phase_args,
-        "-degibbs", 
-        "-eddy", 
-        "-rpe_pair", str(rpe_image_path.resolve()), 
-        "-eddy_fakeb", "0.85,1.2,1", 
-        "-rpe_te", "60", 
-        "-bshape", "1,0.6,1", 
-        "-echo_time", te_args,
-        "-normalize"
-    ]
-
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_all_fa(scratch_dir)
-    stats_computer = StatsComputer(designer, tmi, data_dir, valid_echo_times=valid_echo_times)
-    e2e_runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
-
-    return e2e_runner

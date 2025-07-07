@@ -18,7 +18,7 @@ def assert_roi_mean_and_std(image: Nifti1Image, roi: Union[Path, Nifti1Image], e
         expected_values: Expected [mean, std] or [mean] values
     """
     if isinstance(roi, Path):
-        roi_image = nib.load(roi)
+        roi_image = Nifti1Image.from_filename(roi)
     elif isinstance(roi, Nifti1Image):
         roi_image = roi
     else:
@@ -52,7 +52,7 @@ def create_binary_mask_from_fa(fa_file: Path, threshold: float = 0.3) -> Nifti1I
     Returns:
         Binary mask as Nifti1Image
     """
-    img = nib.load(str(fa_file))
+    img = Nifti1Image.from_filename(fa_file)
     data = img.get_fdata()
 
     data_no_nan = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
@@ -74,7 +74,7 @@ def extract_mean_b0(img_path: Path, bval_path: Path) -> Nifti1Image:
     Raises:
         ValueError: If no b=0 volumes found or if image dimensions don't match bvals
     """
-    img = nib.load(img_path)
+    img = Nifti1Image.from_filename(img_path)
     data = img.get_fdata()
     
     img_shape = data.shape

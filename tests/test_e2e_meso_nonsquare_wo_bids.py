@@ -4,28 +4,31 @@ from pathlib import Path
 import pytest
 
 from tests.e2e_runner import E2ERunner
-from tests.e2e_runner_factory import prepare_complex_data_e2e_runner
+from tests.e2e_runner_factory import prepare_meso_nonsquare_e2e_runner
 from tests.types import DWIStage, FAType, StatsDict
 from tests.utils import assert_stats
 
 
-ground_truth = json.load(open("tests/benchmark/D5_complex_data.json"))
+# D1 MESO non-square without BIDS benchmark is the same as the one with BIDS.
+ground_truth = json.load(open("tests/benchmark/D1_meso_nonsquare.json"))
 
 
 @pytest.fixture(scope="module", autouse=True)
 def pipeline():
     test_dir = Path("tests/")
-    data_dir = test_dir / "data/D5/"
-    scratch_dir = test_dir / "tmp_D5/"
+    data_dir = test_dir / "data/D1/"
+    scratch_dir = test_dir / "tmp_D1_wo_bids/"
 
-    test_runner: E2ERunner = prepare_complex_data_e2e_runner(scratch_dir, data_dir)
+    test_runner: E2ERunner = prepare_meso_nonsquare_e2e_runner(scratch_dir, data_dir, without_bids=True)
 
     try:
-        input_files = ["dwi1_ds.nii.gz", "dwi2_ds.nii.gz", "dwi3_ds.nii.gz"]
+        # Input files are suffixed with 2 since DESIGNER automatically checks BIDS with the same input file names.
+        # "meso_slice_crop.nii.gz" and "research_slice_crop.nii.gz" are used for testing with BIDS in test_e2e_meso_nonsquare.py.
+        input_files = ["meso_slice_crop2.nii.gz", "research_slice_crop2.nii.gz"]
         input_paths = [data_dir / file for file in input_files]
 
         test_runner.run(input_paths)
-
+        
         yield test_runner
 
     finally:
@@ -44,17 +47,7 @@ def test_b0_stats(pipeline: E2ERunner, preproc_stage: DWIStage, expected_stats: 
     assert_stats(b0_stats, expected_stats)
 
 
-def parse_fa_with_te(fa_with_te: str) -> tuple[str, float]:
-    fa_type, echo_time = fa_with_te.split("_te")
-    return fa_type, float(echo_time)
-
-
-fa_test_cases = [
-    (*parse_fa_with_te(fa_with_te), gt_stats) 
-    for fa_with_te, gt_stats in ground_truth["fa_stats"].items()
-]
-
-@pytest.mark.parametrize("fa_type, echo_time, expected_stats", fa_test_cases)
-def test_fa_stats(pipeline: E2ERunner, fa_type: FAType, echo_time: float, expected_stats: StatsDict):
-    fa_stats = pipeline.compute_fa_roi_stats(fa_type, echo_time)
+@pytest.mark.parametrize("fa_type, expected_stats", ground_truth["fa_stats"].items())
+def test_fa_stats(pipeline: E2ERunner, fa_type: FAType, expected_stats: StatsDict):
+    fa_stats = pipeline.compute_fa_roi_stats(fa_type)
     assert_stats(fa_stats, expected_stats)
