@@ -23,7 +23,7 @@ def prepare_meso_nonsquare_e2e_runner(scratch_dir: Path, data_dir: Path, *, with
         ])
     
     designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_all_fa(scratch_dir)
+    tmi = TMIRunner.create_with_all_models(scratch_dir)
     stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
     runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
 
@@ -47,7 +47,7 @@ def prepare_meso_eddy_e2e_runner(scratch_dir: Path, data_dir: Path, *, without_b
         ])
 
     designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_all_fa(scratch_dir, with_sigma=False)
+    tmi = TMIRunner.create_with_all_models(scratch_dir, with_sigma=False)
     stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
     runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
 
@@ -58,7 +58,7 @@ def prepare_meso_degibbs_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
     cmd_config = ["-degibbs"]
     
     designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_all_fa(scratch_dir, with_sigma=False)
+    tmi = TMIRunner.create_with_all_models(scratch_dir, with_sigma=False)
     stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
     runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
 
@@ -81,7 +81,7 @@ def prepare_high_resolution_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2E
     ]
     
     designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_all_fa(scratch_dir)
+    tmi = TMIRunner.create_with_all_models(scratch_dir)
     stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
     runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
 
@@ -119,7 +119,7 @@ def prepare_complex_data_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
     ]
 
     designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_all_fa(scratch_dir)
+    tmi = TMIRunner.create_with_all_models(scratch_dir)
     stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir, valid_echo_times=valid_echo_times)
     runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
 
@@ -137,7 +137,7 @@ def prepare_heal_coronal_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
     ]
 
     designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.init_dti(scratch_dir, with_sigma=False, with_mask=True)
+    tmi = TMIRunner.create_dti_only(scratch_dir, with_sigma=False, with_mask=True)
     stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir, with_skull_stripping=True)
     runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
 

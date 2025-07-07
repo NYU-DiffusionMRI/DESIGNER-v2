@@ -116,16 +116,22 @@ class TMIRunner:
             return self.params_dir / f"fa_{fa_type}_te{echo_time}.nii"
 
 
-    # TODO: improve
-    @classmethod
-    def init_all_fa(cls, scratch_dir: Path, *, with_sigma: bool = True, with_mask: bool = True):
-        return cls(scratch_dir, ["-SMI", "-DKI", "-WDKI", "-DTI"], with_sigma=with_sigma, with_mask=with_mask)
+    DIFFUSION_MODELS = {
+        "SMI": "-SMI",    # Simple Model of diffusion Imaging
+        "DKI": "-DKI",    # Diffusion Kurtosis Imaging
+        "WDKI": "-WDKI",  # White matter Diffusion Kurtosis Imaging
+        "DTI": "-DTI"     # Diffusion Tensor Imaging
+    }
 
 
-    # TODO: improve
     @classmethod
-    def init_dti(cls, scratch_dir: Path, *, with_sigma: bool = True, with_mask: bool = True):
-        return cls(scratch_dir, ["-DTI"], with_sigma=with_sigma, with_mask=with_mask)    
+    def create_with_all_models(cls, scratch_dir: Path, *, with_sigma: bool = True, with_mask: bool = True) -> "TMIRunner":
+        return cls(scratch_dir, list(cls.DIFFUSION_MODELS.values()), with_sigma=with_sigma, with_mask=with_mask)
+
+
+    @classmethod
+    def create_dti_only(cls, scratch_dir: Path, *, with_sigma: bool = True, with_mask: bool = True) -> "TMIRunner":
+        return cls(scratch_dir, [cls.DIFFUSION_MODELS["DTI"]], with_sigma=with_sigma, with_mask=with_mask)
 
 
 class StatsComputer:
@@ -159,39 +165,64 @@ class StatsComputer:
     def init_wm_roi(self):
         """Initialize white matter ROI(s) after FA images have been generated."""
         if self.valid_echo_times is None and not self.with_skull_stripping:
-            self.wm_roi = create_binary_mask_from_fa(self.tmi.get_fa_path("dki"))
-        elif self.valid_echo_times is not None and not self.with_skull_stripping:   # TODO: modularize this
-            self.echo_to_wm_roi = {te: create_binary_mask_from_fa(self.tmi.get_fa_path("dki", te)) for te in self.valid_echo_times}
-            merged_wm_roi = reduce(np.bitwise_or, [roi.get_fdata().astype(bool) for roi in self.echo_to_wm_roi.values()])
-            first_echo_time = self.valid_echo_times[0]
-            self.wm_roi = Nifti1Image(merged_wm_roi, self.echo_to_wm_roi[first_echo_time].affine, self.echo_to_wm_roi[first_echo_time].header)
-        elif self.valid_echo_times is None and self.with_skull_stripping:   # TODO: modularize this too (same threshold is used in multiple places)
-            synth = SynthStrip()
-    
-            synth.inputs.in_file = str(self.processing_dir / "b0bc.nii")
-            synth.inputs.model = "tests/models/synthstrip_v7.4.1_.1.pt"
-            synth.inputs.out_file = str(self.scratch_dir / "brain.nii.gz")  # this is not used
-            synth.inputs.out_mask = str(self.scratch_dir / "brain_mask.nii")
-            synth.inputs.use_gpu = False
-            result = synth.run()
-        
-            assert Path(result.outputs.out_mask).exists()
-
-            dti_path = self.tmi.get_fa_path("dti")
-            dti_image = Nifti1Image.from_filename(dti_path)
-            brain_mask = Nifti1Image.from_filename(result.outputs.out_mask)
-
-            fa_dti_can = nib.as_closest_canonical(dti_image)
-            mask_can = nib.as_closest_canonical(brain_mask)
-
-            brain = fa_dti_can.get_fdata() * mask_can.get_fdata()
-            brain_no_nan = np.nan_to_num(brain, nan=0.0, posinf=0.0, neginf=0.0)
-
-            threshold = 0.3
-            wm_roi = (brain_no_nan >= threshold).astype(np.uint8)
-            self.wm_roi = Nifti1Image(wm_roi, fa_dti_can.affine, fa_dti_can.header)
+            self._init_single_wm_roi()
+        elif self.valid_echo_times is not None and not self.with_skull_stripping:
+            self._init_multi_echo_wm_roi()
+        elif self.valid_echo_times is None and self.with_skull_stripping:
+            self._init_skull_stripped_wm_roi()
         else:
             raise ValueError("Invalid combination of echo times and skull stripping. Currently not supported.")
+
+
+    def _init_single_wm_roi(self):
+        self.wm_roi = create_binary_mask_from_fa(self.tmi.get_fa_path("dki"))
+
+
+    def _init_multi_echo_wm_roi(self):
+        assert self.valid_echo_times is not None
+
+        self.echo_to_wm_roi = {
+                te: create_binary_mask_from_fa(self.tmi.get_fa_path("dki", te))
+                for te in self.valid_echo_times
+            }
+        merged_wm_roi = reduce(
+            np.bitwise_or,
+            [roi.get_fdata().astype(bool) for roi in self.echo_to_wm_roi.values()]
+        )
+        first_echo_time = self.valid_echo_times[0]
+        self.wm_roi = Nifti1Image(
+            merged_wm_roi,
+            self.echo_to_wm_roi[first_echo_time].affine,
+            self.echo_to_wm_roi[first_echo_time].header
+        )
+
+
+    # TODO: improve (same threshold for creating wm roi is used in multiple places)
+    def _init_skull_stripped_wm_roi(self):
+        synth = SynthStrip()
+
+        synth.inputs.in_file = str(self.processing_dir / "b0bc.nii")
+        synth.inputs.model = "tests/models/synthstrip_v7.4.1_.1.pt"
+        synth.inputs.out_file = str(self.scratch_dir / "brain.nii.gz")  # this is not used
+        synth.inputs.out_mask = str(self.scratch_dir / "brain_mask.nii")
+        synth.inputs.use_gpu = False
+        result = synth.run()
+
+        assert Path(result.outputs.out_mask).exists()
+
+        dti_path = self.tmi.get_fa_path("dti")
+        dti_image = Nifti1Image.from_filename(dti_path)
+        brain_mask = Nifti1Image.from_filename(result.outputs.out_mask)
+
+        fa_dti_can = nib.as_closest_canonical(dti_image)
+        mask_can = nib.as_closest_canonical(brain_mask)
+
+        brain = fa_dti_can.get_fdata() * mask_can.get_fdata()
+        brain_no_nan = np.nan_to_num(brain, nan=0.0, posinf=0.0, neginf=0.0)
+
+        threshold = 0.3
+        wm_roi = (brain_no_nan >= threshold).astype(np.uint8)
+        self.wm_roi = Nifti1Image(wm_roi, fa_dti_can.affine, fa_dti_can.header)
 
 
     def count_white_matter_voxels(self) -> int:

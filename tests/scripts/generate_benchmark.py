@@ -179,6 +179,7 @@ def save_heal_coronal_benchmark(save_path: Path):
         return benchmark_runner
 
 
+# This wrapper is needed since the labmda function cannot be pickled (not serializable) during multiprocessing.
 def save_meso_eddy_wo_bids_benchmark(save_path: Path):
     """Wrapper function for save_meso_eddy_benchmark with without_bids=True"""
     return save_meso_eddy_benchmark(save_path, without_bids=True)
