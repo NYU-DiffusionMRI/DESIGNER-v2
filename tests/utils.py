@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Union, List
 
 import numpy as np
 import nibabel as nib
@@ -8,35 +7,16 @@ from nibabel.nifti1 import Nifti1Image
 from tests.types import StatsDict
 
 
-# will not be used anymore
-def assert_roi_mean_and_std(image: Nifti1Image, roi: Union[Path, Nifti1Image], expected_values: List[float]):
-    """Assert the mean and standard deviation of the data within the ROI are close to the expected values.
+def assert_stats(stats: StatsDict, expected_stats: StatsDict):
+    """Compare two StatsDict objects for approximate equality.
 
     Args:
-        image: Input image
-        roi: ROI specification - can be file path (Path) or Nifti1Image
-        expected_values: Expected [mean, std] or [mean] values
+        stats: The StatsDict containing the actual statistics to compare
+        expected_stats: The StatsDict containing the expected statistics to compare against
+
+    Raises:
+        AssertionError: If any corresponding values between the two StatsDicts are not approximately equal
     """
-    if isinstance(roi, Path):
-        roi_image = Nifti1Image.from_filename(roi)
-    elif isinstance(roi, Nifti1Image):
-        roi_image = roi
-    else:
-        raise ValueError(f"Invalid ROI type: {type(roi)}")
-    
-    mean, std = compute_roi_mean_and_std(image, roi_image)
-    # print(f"mean: {mean}, std: {std}")
-
-    if len(expected_values) == 2:
-        assert np.isclose(mean, expected_values[0])
-        assert np.isclose(std, expected_values[1])
-    elif len(expected_values) == 1:
-        assert np.isclose(mean, expected_values[0])
-    else:
-        raise ValueError(f"Expected values must be a list of length 1 or 2, got {len(expected_values)}")
-
-
-def assert_stats(stats: StatsDict, expected_stats: StatsDict):
     for roi, stats_values in stats.items():
         for val, expected_val in zip(stats_values, expected_stats[roi]):
             assert np.isclose(val, expected_val)
