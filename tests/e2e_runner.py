@@ -202,7 +202,7 @@ class StatsComputer:
         synth = SynthStrip()
 
         synth.inputs.in_file = str(self.processing_dir / "b0bc.nii")
-        synth.inputs.model = "tests/models/synthstrip_v7.4.1_.1.pt"
+        synth.inputs.model = "tests/models/synthstrip_v7.3.2.pt"
         synth.inputs.out_file = str(self.scratch_dir / "brain.nii.gz")  # this is not used
         synth.inputs.out_mask = str(self.scratch_dir / "brain_mask.nii")
         synth.inputs.use_gpu = False
