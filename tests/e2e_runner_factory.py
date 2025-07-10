@@ -7,6 +7,7 @@ from tests.e2e_runner import E2ERunner, DesignerRunner, TMIRunner, StatsComputer
 
 def prepare_meso_nonsquare_e2e_runner(scratch_dir: Path, data_dir: Path, *, without_bids: bool = False) -> E2ERunner:
     cmd_config = [
+        "-set_seed",
         "-denoise", 
         "-shrinkage", "frob", 
         "-adaptive_patch", 

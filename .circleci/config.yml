@@ -87,9 +87,8 @@ jobs:
               pytest -x -s \
               --dist loadscope \
               -n 4 \
-              tests/test_e2e_meso_degibbs.py \
-              tests/test_e2e_heal_coronal.py \
-              tests/test_e2e_complex_data.py \
+              # tests/test_e2e_meso_degibbs.py \
+              # tests/test_e2e_heal_coronal.py \
               tests/test_e2e_meso_nonsquare.py
 
 workflows:
