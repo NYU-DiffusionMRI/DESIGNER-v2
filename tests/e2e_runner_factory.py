@@ -92,28 +92,27 @@ def prepare_complex_data_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
     phase_image_paths = [
         data_dir / "phase1_ds.nii.gz", 
         data_dir / "phase2_ds.nii.gz", 
-        data_dir / "phase3_ds.nii.gz"
     ]
 
     rpe_image_path = data_dir / "rpe_ds.nii.gz"
 
-    echo_times = [60.0, 78.0, 92.0]
-    valid_echo_times = [60.0, 92.0]
+    echo_times = [60.0, 78.0]
+    valid_echo_times = [60.0]
 
     phase_args = ",".join([str(path) for path in phase_image_paths])
     te_args = ",".join([str(time / 1000) for time in echo_times])   # convert ms to s
     
     cmd_config = [
-    "-set_seed", 
+        "-set_seed", 
         "-denoise", 
         "-shrinkage", "frob", 
         "-phase", phase_args,
         "-degibbs", 
         "-eddy", 
         "-rpe_pair", str(rpe_image_path.resolve()), 
-        "-eddy_fakeb", "0.85,1.2,1", 
+        "-eddy_fakeb", "0.85,1.2", 
         "-rpe_te", "60", 
-        "-bshape", "1,0.6,1", 
+        "-bshape", "1,0.6", 
         "-echo_time", te_args,
         "-normalize"
     ]

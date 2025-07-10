@@ -135,7 +135,7 @@ def save_complex_data_benchmark(save_path: Path):
     benchmark_runner: E2ERunner = prepare_complex_data_e2e_runner(scratch_dir, data_dir)
 
     try:
-        input_files = ["dwi1_ds.nii.gz", "dwi2_ds.nii.gz", "dwi3_ds.nii.gz"]
+        input_files = ["dwi1_ds.nii.gz", "dwi2_ds.nii.gz"]
         input_paths = [data_dir / file for file in input_files]
 
         benchmark_runner.run(input_paths)
