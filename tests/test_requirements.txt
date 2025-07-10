@@ -1,3 +1,9 @@
+# Use CPU only for synthstrip
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+
 pytest==8.3.5
 pytest-xdist==3.7.0
 nibabel==5.1.0

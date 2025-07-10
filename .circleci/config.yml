@@ -9,7 +9,7 @@ commands:
       - run:
           name: Build and tag docker container
           command: |
-            docker build -t $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> .
+            docker build --platform=linux/amd64 --target production -t $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> .
       - run:
           name: Test designer command
           command: |
@@ -58,6 +58,34 @@ jobs:
           command: |
             echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
             docker push $DOCKERHUB_USERNAME/designer2:<<parameters.tag>>
+  
+  e2e-test:
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build test image
+          command: |
+            docker build \
+              --platform=linux/amd64 \
+              --build-context test-context=./tests \
+              --target test \
+              -t designer:test \
+              .
+      - run:
+          name: Run e2e tests
+          command: |
+            docker run --rm \
+              -w /app \
+              designer:test \
+              pytest -s \
+                --dist loadscope \
+                -n 2 \
+                tests/test_e2e_meso_degibbs.py \
+                tests/test_e2e_heal_coronal.py
 
 workflows:
   build-on-commit:
@@ -96,3 +124,10 @@ workflows:
               ignore: /.*/
           context:
             - DockerHub
+  
+  run-e2e-test:
+    jobs:
+      - e2e-test:
+          filters:
+            branches:
+              ignore: main
