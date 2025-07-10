@@ -12,12 +12,6 @@ meta.yaml
 lib/rpg*
 build-wheels.sh
 
-tests/data/*
-
-!tests/data/D3/
-!tests/data/D6/
-
-
 tests/tmp_*/
 
 # Ignore FFTW build artifacts but keep source (in case when not using dev container)
