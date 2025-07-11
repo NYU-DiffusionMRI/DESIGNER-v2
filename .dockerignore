@@ -1,6 +1,9 @@
 # Exclude test suite
 tests/
 
+# Exclude scripts
+scripts/
+
 # Documentation
 docs/
 

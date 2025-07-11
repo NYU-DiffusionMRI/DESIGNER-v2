@@ -7,7 +7,7 @@ FS_URL="https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-
 FS_MODEL_PATH="freesurfer/models/synthstrip.1.pt"
 
 MODEL_DIR="tests/models"
-MODEL_OUT="${MODEL_DIR}/synthstrip_v7.3.2.pt"
+MODEL_OUT="${MODEL_DIR}/synthstrip_v7.3.2_test.pt"
 
 wget -O "${FS_TGZ}" "${FS_URL}"
 mkdir -p "${MODEL_DIR}"

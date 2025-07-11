@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
-from tests.e2e_runner import E2ERunner
+from tests.e2e_runner import E2ERunner, StatsComputer
 from tests.e2e_runner_factory import (
     prepare_meso_nonsquare_e2e_runner,
     prepare_meso_eddy_e2e_runner,
@@ -22,161 +22,156 @@ from tests.types import DWIStage, DiffusionModelType
 def save_meso_nonsquare_benchmark(save_path: Path):
     test_dir = Path("tests/")
     data_dir = test_dir / "data/D1/"
-
     scratch_dir = test_dir / "tmp_D1_benchmark/"
-    input_files = ["meso_slice_crop.nii.gz", "research_slice_crop.nii.gz"]
+    benchmark_runner: E2ERunner | None = None
 
     try:
-        benchmark_runner: E2ERunner = prepare_meso_nonsquare_e2e_runner(scratch_dir, data_dir)
-        input_paths = [data_dir / file for file in input_files]
-        
-        benchmark_runner.run(input_paths)
+        benchmark_runner = prepare_meso_nonsquare_e2e_runner(scratch_dir, data_dir)
+        benchmark_runner.run()
 
         stages: List[DWIStage] = ["denoising", "degibbs", "b1correct", "rician", "designer"]
         fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
-        benchmark_runner.save_benchmark(
-            save_path=save_path,
-            stages=stages,
-            fa_models=fa_models
-        )
-
-    finally:
+        stats_computer = StatsComputer(benchmark_runner, roi_dir=data_dir)
+        stats_computer.save_benchmark(save_path, stages, fa_models)
+        
         return benchmark_runner
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to run meso nonsquare benchmark: {str(e)}") from e
+    finally:
+        if benchmark_runner is not None:
+            benchmark_runner.cleanup()
 
 
 def save_meso_eddy_benchmark(save_path: Path, *, without_bids: bool = False):
     test_dir = Path("tests/")
     data_dir = test_dir / "data/D2/"
+    benchmark_runner: E2ERunner | None = None
 
     if without_bids:
         scratch_dir = test_dir / "tmp_D2_wo_bids_benchmark/"
-        input_files = ["meso_ds2.nii.gz", "research_ds2.nii.gz"]
     else:
         scratch_dir = test_dir / "tmp_D2_benchmark/"
-        input_files = ["meso_ds.nii.gz", "research_ds.nii.gz"]
-
+   
     try:
-        benchmark_runner: E2ERunner = prepare_meso_eddy_e2e_runner(scratch_dir, data_dir, without_bids=without_bids)
-        input_paths = [data_dir / file for file in input_files]
-        
-        benchmark_runner.run(input_paths)
+        benchmark_runner = prepare_meso_eddy_e2e_runner(scratch_dir, data_dir, without_bids=without_bids)
+        benchmark_runner.run()
 
         stages: List[DWIStage] = ["topup", "designer"]
         fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
-
-        benchmark_runner.save_benchmark(
-            save_path=save_path,
-            stages=stages,
-            fa_models=fa_models
-        )
-
-    finally:
+        
+        stats_computer = StatsComputer(benchmark_runner, roi_dir=data_dir)
+        stats_computer.save_benchmark(save_path, stages, fa_models)
+        
         return benchmark_runner
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to run meso eddy benchmark: {str(e)}") from e
+    finally:
+        if benchmark_runner is not None:
+            benchmark_runner.cleanup()
 
 
 def save_meso_degibbs_benchmark(save_path: Path):
     test_dir = Path("tests/")
     data_dir = test_dir / "data/D3/"
-
     scratch_dir = test_dir / "tmp_D3_benchmark/"
-    input_files = ["meso_slice.nii.gz", "research_slice.nii.gz"]
+    benchmark_runner: E2ERunner | None = None
 
     try:
-        benchmark_runner: E2ERunner = prepare_meso_degibbs_e2e_runner(scratch_dir, data_dir)
-        input_paths = [data_dir / file for file in input_files]
-        
-        benchmark_runner.run(input_paths)
+        benchmark_runner = prepare_meso_degibbs_e2e_runner(scratch_dir, data_dir)
+        benchmark_runner.run()
 
         stages: List[DWIStage] = ["designer"]
         fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
-        benchmark_runner.save_benchmark(
-            save_path=save_path,
-            stages=stages,
-            fa_models=fa_models
-        )
-
-    finally:
+        stats_computer = StatsComputer(benchmark_runner, roi_dir=data_dir)
+        stats_computer.save_benchmark(save_path, stages, fa_models)
+        
         return benchmark_runner
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to run meso degibbs benchmark: {str(e)}") from e
+    finally:
+        if benchmark_runner is not None:
+            benchmark_runner.cleanup()
 
 
 def save_high_resolution_benchmark(save_path: Path):
     test_dir = Path("tests/")
     data_dir = test_dir / "data/D4/"
-
     scratch_dir = test_dir / "tmp_D4_benchmark/"
-    input_files = ["dif1_slice.nii.gz", "dif2_slice.nii.gz"]
+    benchmark_runner: E2ERunner | None = None
 
     try:
-        benchmark_runner: E2ERunner = prepare_high_resolution_e2e_runner(scratch_dir, data_dir)
-        input_paths = [data_dir / file for file in input_files]
-        
-        benchmark_runner.run(input_paths)
+        benchmark_runner = prepare_high_resolution_e2e_runner(scratch_dir, data_dir)
+        benchmark_runner.run()
 
         stages: List[DWIStage] = ["denoising", "degibbs", "designer"]
         fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
-        benchmark_runner.save_benchmark(
-            save_path=save_path,
-            stages=stages,
-            fa_models=fa_models
-        )
-
-    finally:
+        stats_computer = StatsComputer(benchmark_runner, roi_dir=data_dir)
+        stats_computer.save_benchmark(save_path, stages, fa_models)
+        
         return benchmark_runner
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to run high resolution benchmark: {str(e)}") from e
+    finally:
+        if benchmark_runner is not None:
+            benchmark_runner.cleanup()
 
 
 def save_complex_data_benchmark(save_path: Path):
     test_dir = Path("tests/")
     data_dir = test_dir / "data/D5/"
     scratch_dir = test_dir / "tmp_D5_benchmark/"
-
-    benchmark_runner: E2ERunner = prepare_complex_data_e2e_runner(scratch_dir, data_dir)
+    benchmark_runner: E2ERunner | None = None
 
     try:
-        input_files = ["dwi1_ds.nii.gz", "dwi2_ds.nii.gz"]
-        input_paths = [data_dir / file for file in input_files]
-
-        benchmark_runner.run(input_paths)
+        benchmark_runner = prepare_complex_data_e2e_runner(scratch_dir, data_dir)
+        benchmark_runner.run()
 
         stages: List[DWIStage] = ["denoising", "degibbs", "eddy", "designer"]
         fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
-        benchmark_runner.save_benchmark(
-            save_path=save_path,
-            stages=stages,
-            fa_models=fa_models,
-            valid_echo_times=benchmark_runner.valid_echo_times
-        )
-
-    finally:
+        valid_echo_times = [60.0]
+        stats_computer = StatsComputer(benchmark_runner, roi_dir=data_dir, valid_echo_times=valid_echo_times)
+        stats_computer.save_benchmark(save_path, stages, fa_models, valid_echo_times)
+        
         return benchmark_runner
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to run complex data benchmark: {str(e)}") from e
+    finally:
+        if benchmark_runner is not None:
+            benchmark_runner.cleanup()
 
 
 def save_heal_coronal_benchmark(save_path: Path):
     test_dir = Path("tests/")
     data_dir = test_dir / "data/D6/"
-
     scratch_dir = test_dir / "tmp_D6_benchmark/"
-    input_files = ["dwi1_ds.nii.gz", "dwi2_ds.nii.gz"]
+    benchmark_runner: E2ERunner | None = None
 
-    benchmark_runner: E2ERunner = prepare_heal_coronal_e2e_runner(scratch_dir, data_dir)
     try:
-        input_paths = [data_dir / file for file in input_files]
-        
-        benchmark_runner.run(input_paths)
+        benchmark_runner = prepare_heal_coronal_e2e_runner(scratch_dir, data_dir)
+        benchmark_runner.run()
 
         stages: List[DWIStage] = ["denoising", "degibbs", "designer"]
         fa_models: List[DiffusionModelType] = ["dti"]
 
-        benchmark_runner.save_benchmark(
-            save_path=save_path,
-            stages=stages,
-            fa_models=fa_models
-        )
-    finally:
+        stats_computer = StatsComputer(benchmark_runner, roi_dir=data_dir, with_skull_stripping=True)
+        stats_computer.save_benchmark(save_path, stages, fa_models)
+        
         return benchmark_runner
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to run heal coronal benchmark: {str(e)}") from e
+    finally:
+        if benchmark_runner is not None:
+            benchmark_runner.cleanup()
 
 
 # This wrapper is needed since the labmda function cannot be pickled (not serializable) during multiprocessing.
@@ -267,15 +262,11 @@ def parse_args() -> argparse.Namespace:
 def run_single_benchmark(func: Callable, save_path: Path) -> Tuple[str, bool, str]:
     """Run a single benchmark with proper error handling and cleanup.
     Returns: (benchmark_name, success, error_message)"""
-    runner = None
     try:
-        runner = func(save_path)
+        func(save_path)  # Don't store the runner - it's cleaned up in the function
         return (save_path.name, True, "")
     except Exception as e:
         return (save_path.name, False, str(e))
-    finally:
-        if runner is not None:
-            runner.cleanup()
 
 
 def main():
