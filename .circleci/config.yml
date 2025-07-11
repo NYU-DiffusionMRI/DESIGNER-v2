@@ -84,10 +84,10 @@ jobs:
             docker run --rm \
               -w /app \
               designer2:test \
-              pytest -x -s \
+              pytest -s \
               --dist loadscope \
               -n 4 \
-              tests/test_e2e_meso_nonsquare.py
+              tests
 
 workflows:
   build-on-commit:
