@@ -15,7 +15,7 @@ from tests.e2e_runner_factory import (
     prepare_meso_degibbs_e2e_runner,
     prepare_high_resolution_e2e_runner,
 )
-from tests.types import DWIStage, FAType
+from tests.types import DWIStage, DiffusionModelType
 
 
 # No need of MESO non-square without BIDS benchmark since it is the same as the one with BIDS.
@@ -33,12 +33,12 @@ def save_meso_nonsquare_benchmark(save_path: Path):
         benchmark_runner.run(input_paths)
 
         stages: List[DWIStage] = ["denoising", "degibbs", "b1correct", "rician", "designer"]
-        fa_types: List[FAType] = ["dti", "dki", "wdki"]
+        fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
         benchmark_runner.save_benchmark(
             save_path=save_path,
             stages=stages,
-            fa_types=fa_types
+            fa_models=fa_models
         )
 
     finally:
@@ -63,12 +63,12 @@ def save_meso_eddy_benchmark(save_path: Path, *, without_bids: bool = False):
         benchmark_runner.run(input_paths)
 
         stages: List[DWIStage] = ["topup", "designer"]
-        fa_types: List[FAType] = ["dti", "dki", "wdki"]
+        fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
         benchmark_runner.save_benchmark(
             save_path=save_path,
             stages=stages,
-            fa_types=fa_types
+            fa_models=fa_models
         )
 
     finally:
@@ -89,12 +89,12 @@ def save_meso_degibbs_benchmark(save_path: Path):
         benchmark_runner.run(input_paths)
 
         stages: List[DWIStage] = ["designer"]
-        fa_types: List[FAType] = ["dti", "dki", "wdki"]
+        fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
         benchmark_runner.save_benchmark(
             save_path=save_path,
             stages=stages,
-            fa_types=fa_types
+            fa_models=fa_models
         )
 
     finally:
@@ -115,12 +115,12 @@ def save_high_resolution_benchmark(save_path: Path):
         benchmark_runner.run(input_paths)
 
         stages: List[DWIStage] = ["denoising", "degibbs", "designer"]
-        fa_types: List[FAType] = ["dti", "dki", "wdki"]
+        fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
         benchmark_runner.save_benchmark(
             save_path=save_path,
             stages=stages,
-            fa_types=fa_types
+            fa_models=fa_models
         )
 
     finally:
@@ -141,12 +141,12 @@ def save_complex_data_benchmark(save_path: Path):
         benchmark_runner.run(input_paths)
 
         stages: List[DWIStage] = ["denoising", "degibbs", "eddy", "designer"]
-        fa_types: List[FAType] = ["dti", "dki", "wdki"]
+        fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
 
         benchmark_runner.save_benchmark(
             save_path=save_path,
             stages=stages,
-            fa_types=fa_types,
+            fa_models=fa_models,
             valid_echo_times=benchmark_runner.valid_echo_times
         )
 
@@ -168,12 +168,12 @@ def save_heal_coronal_benchmark(save_path: Path):
         benchmark_runner.run(input_paths)
 
         stages: List[DWIStage] = ["denoising", "degibbs", "designer"]
-        fa_types: List[FAType] = ["dti"]
+        fa_models: List[DiffusionModelType] = ["dti"]
 
         benchmark_runner.save_benchmark(
             save_path=save_path,
             stages=stages,
-            fa_types=fa_types
+            fa_models=fa_models
         )
     finally:
         return benchmark_runner

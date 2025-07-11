@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union, Optional
 
 import numpy as np
 import nibabel as nib
@@ -22,23 +23,36 @@ def assert_stats(stats: StatsDict, expected_stats: StatsDict):
             assert np.isclose(val, expected_val)
 
 
-def create_binary_mask_from_fa(fa_file: Path, threshold: float = 0.3) -> Nifti1Image:
-    """Create a binary mask from a fractional anisotropy (FA) image.
+def create_binary_mask_from_fa(
+    fa: Union[Path, Nifti1Image],
+    brain_mask: Optional[Union[Path, Nifti1Image]] = None,
+    threshold: float = 0.3
+) -> Nifti1Image:
+    """
+    Generate a binary mask from a fractional anisotropy (FA) image, optionally restricted by a brain mask.
 
     Args:
-        fa_file: Path to the FA NIfTI file
-        threshold: FA threshold value to create binary mask (voxels >= threshold become 1, default: 0.3)
+        fa: Path or Nifti1Image of the FA image.
+        threshold: Voxels with FA >= threshold are set to 1 (default: 0.3).
+        brain_mask: Optional path or Nifti1Image of a brain mask. If provided, restricts the mask to this region.
 
     Returns:
-        Binary mask as Nifti1Image
+        Nifti1Image: Binary mask (uint8) in the same space as the canonicalized FA image.
     """
-    img = Nifti1Image.from_filename(fa_file)
-    data = img.get_fdata()
+    img = Nifti1Image.from_filename(fa) if isinstance(fa, Path) else fa
+    fa_can = nib.as_closest_canonical(img)
+    data = fa_can.get_fdata()
+
+    # optionally load & apply skull-strip mask
+    if brain_mask is not None:
+        mask_img = Nifti1Image.from_filename(brain_mask) if isinstance(brain_mask, Path) else brain_mask
+        mask_can = nib.as_closest_canonical(mask_img)
+        data *= mask_can.get_fdata()
 
     data_no_nan = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
-    binary_data = (data_no_nan >= threshold).astype(np.uint8)
+    binary = (data_no_nan >= threshold).astype(np.uint8)
 
-    return Nifti1Image(binary_data, img.affine, img.header)
+    return Nifti1Image(binary, fa_can.affine, fa_can.header)
 
 
 def extract_mean_b0(img_path: Path, bval_path: Path) -> Nifti1Image:

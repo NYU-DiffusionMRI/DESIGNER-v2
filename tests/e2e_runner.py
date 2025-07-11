@@ -6,19 +6,20 @@ import json
 from typing import List, Tuple, Optional, Dict
 
 import numpy as np
-import nibabel as nib
 from nibabel.nifti1 import Nifti1Image
 from nipreps.synthstrip.wrappers.nipype import SynthStrip
 
-from tests.types import DWIStage, FAType, DWIImagePath, StatsDict
+from tests.types import DWIStage, DiffusionModelType, DWIImagePath, StatsDict
 from tests.utils import compute_roi_mean_and_std, create_binary_mask_from_fa, extract_mean_b0
 
 
 class DesignerRunner:
 
-    def __init__(self, scratch_dir: Path, cli_options: List[str]):
+    def __init__(self, scratch_dir: Path, input_dwi_paths: List[Path], cli_options: List[str]):
         self.scratch_dir = scratch_dir
         self.processing_dir = self.scratch_dir / "processing"
+        self.input_dwi_paths = input_dwi_paths
+
         self.cli_options = cli_options
 
         self.out_path = DWIImagePath(
@@ -28,8 +29,8 @@ class DesignerRunner:
         )
 
 
-    def run(self,  input_image_paths: List[Path]) -> Tuple[DWIImagePath, Path, Path]:
-        dwi_args=",".join([str(path) for path in input_image_paths])
+    def run(self) -> Tuple[DWIImagePath, Path, Path]:
+        dwi_args=",".join([str(path) for path in self.input_dwi_paths])
 
         if self.processing_dir.exists():
             shutil.rmtree(self.processing_dir)
@@ -82,123 +83,146 @@ class DesignerRunner:
 class TMIRunner:
 
     # TODO: improve removing boolean flags
-    def __init__(self, scratch_dir: Path, cli_options: List[str], *, with_sigma: bool = True, with_mask: bool = True):
+    def __init__(self, scratch_dir: Path, input_dwi_path: Path, diffusion_models: List[DiffusionModelType], *, with_sigma: bool = True, with_mask: bool = True):
         self.scratch_dir = scratch_dir
         self.params_dir = self.scratch_dir / "params"
-        self.cli_options = cli_options
+        self.input_dwi_path = input_dwi_path
+
+        self.diffusion_models = diffusion_models
 
         self.with_sigma = with_sigma
         self.with_mask = with_mask
     
 
-    def run(self, input_image_path: Path, sigma_path: Path, brain_mask_path: Path):
+    def run(self, sigma_path: Path, brain_mask_path: Path):
         if self.params_dir.exists():
             shutil.rmtree(self.params_dir)
 
-        cmd = ["tmi", *self.cli_options]
+        diffusion_args = [f"-{model.upper()}" for model in self.diffusion_models]
+        cmd = ["tmi", *diffusion_args]
+
         # if sigma_path is not None:
         if self.with_sigma:
             cmd.extend(["-sigma", str(sigma_path)])
         # if brain_mask_path is not None:
         if self.with_mask:
             cmd.extend(["-mask", str(brain_mask_path)])
-        cmd.extend([str(input_image_path), str(self.params_dir)])
+        cmd.extend([str(self.input_dwi_path), str(self.params_dir)])
 
         ret = subprocess.run(cmd)
         assert ret.returncode == 0
         assert self.params_dir.exists()
 
 
-    def get_fa_path(self, fa_type: FAType, echo_time: Optional[float] = None) -> Path:
+    def get_fa_path(self, fa_model: DiffusionModelType, echo_time: Optional[float] = None) -> Path:
         if echo_time is None:
-            return self.params_dir / f"fa_{fa_type}.nii"
+            return self.params_dir / f"fa_{fa_model}.nii"
         else:
-            return self.params_dir / f"fa_{fa_type}_te{echo_time}.nii"
+            return self.params_dir / f"fa_{fa_model}_te{echo_time}.nii"
 
 
-    DIFFUSION_MODELS = {
-        "SMI": "-SMI",    # Simple Model of diffusion Imaging
-        "DKI": "-DKI",    # Diffusion Kurtosis Imaging
-        "WDKI": "-WDKI",  # White matter Diffusion Kurtosis Imaging
-        "DTI": "-DTI"     # Diffusion Tensor Imaging
-    }
+class E2ERunner:
+
+    def __init__(
+        self,
+        scratch_dir: Path,
+        input_dwi_paths: List[Path],
+        designer_cli_options: List[str],
+        diffusion_models: List[DiffusionModelType],
+        *,
+        with_sigma: bool = True,
+        with_mask: bool = True
+    ):
+        self.scratch_dir = scratch_dir
+
+        self.designer = DesignerRunner(scratch_dir, input_dwi_paths, designer_cli_options)
+
+        tmi_input_path = self.designer.get_dwi_path("designer").nifti
+        self.tmi = TMIRunner(scratch_dir, tmi_input_path, diffusion_models, with_sigma=with_sigma, with_mask=with_mask)
+
+        self.processing_dir = self.designer.processing_dir
+        self.params_dir = self.tmi.params_dir
 
 
-    @classmethod
-    def create_with_all_models(cls, scratch_dir: Path, *, with_sigma: bool = True, with_mask: bool = True) -> "TMIRunner":
-        return cls(scratch_dir, list(cls.DIFFUSION_MODELS.values()), with_sigma=with_sigma, with_mask=with_mask)
+    def run(self):
+        _, sigma_path, brain_mask_path = self.designer.run()
+
+        self.tmi.run(sigma_path, brain_mask_path)
+        
+
+    def cleanup(self):
+        if self.scratch_dir.exists():
+            shutil.rmtree(self.scratch_dir)
 
 
-    @classmethod
-    def create_dti_only(cls, scratch_dir: Path, *, with_sigma: bool = True, with_mask: bool = True) -> "TMIRunner":
-        return cls(scratch_dir, [cls.DIFFUSION_MODELS["DTI"]], with_sigma=with_sigma, with_mask=with_mask)
+    def get_dwi_path(self, stage: DWIStage) -> DWIImagePath:
+        return self.designer.get_dwi_path(stage)
+
+
+    def get_fa_path(self, fa_model: DiffusionModelType, echo_time: Optional[float] = None) -> Path:
+        return self.tmi.get_fa_path(fa_model, echo_time)
 
 
 class StatsComputer:
 
     def __init__(
         self, 
-        designer: DesignerRunner, 
-        tmi: TMIRunner, 
+        e2e_runner: E2ERunner,
         roi_dir: Path, 
         *, 
         valid_echo_times: Optional[List[float]] = None, 
         with_skull_stripping: bool = False
     ):  
-        self.designer = designer
-        self.tmi = tmi
+        self.e2e_runner = e2e_runner
         self.valid_echo_times = valid_echo_times
         self.with_skull_stripping = with_skull_stripping
 
-        self.processing_dir = self.designer.processing_dir
-        self.params_dir = self.tmi.params_dir
-        self.scratch_dir = self.designer.scratch_dir
+        self.processing_dir = self.e2e_runner.processing_dir
+        self.params_dir = self.e2e_runner.params_dir
+        self.scratch_dir = self.e2e_runner.scratch_dir
         
         self.roi1 = Nifti1Image.from_filename(roi_dir / "roi1.nii.gz")
         self.roi2 = Nifti1Image.from_filename(roi_dir / "roi2.nii.gz")
         self.single_voxel = Nifti1Image.from_filename(roi_dir / "voxel.nii.gz")
         
-        self.wm_roi: Optional[Nifti1Image] = None
         self.echo_to_wm_roi: Optional[Dict[float, Nifti1Image]] = None
 
-
-    def init_wm_roi(self):
-        """Initialize white matter ROI(s) after FA images have been generated."""
         if self.valid_echo_times is None and not self.with_skull_stripping:
-            self._init_single_wm_roi()
+            self.wm_roi = self._generate_single_wm_roi()
         elif self.valid_echo_times is not None and not self.with_skull_stripping:
-            self._init_multi_echo_wm_roi()
+            self.wm_roi, self.echo_to_wm_roi = self._generate_multi_echo_wm_roi()
         elif self.valid_echo_times is None and self.with_skull_stripping:
-            self._init_skull_stripped_wm_roi()
+            self.wm_roi = self._generate_skull_stripped_wm_roi()
         else:
             raise ValueError("Invalid combination of echo times and skull stripping. Currently not supported.")
 
 
-    def _init_single_wm_roi(self):
-        self.wm_roi = create_binary_mask_from_fa(self.tmi.get_fa_path("dki"))
+    def _generate_single_wm_roi(self) -> Nifti1Image:
+        return create_binary_mask_from_fa(self.e2e_runner.get_fa_path("dki"))
 
 
-    def _init_multi_echo_wm_roi(self):
+    def _generate_multi_echo_wm_roi(self) -> Tuple[Nifti1Image, Dict[float, Nifti1Image]]:
         assert self.valid_echo_times is not None
 
-        self.echo_to_wm_roi = {
-                te: create_binary_mask_from_fa(self.tmi.get_fa_path("dki", te))
+        echo_to_wm_roi = {
+                te: create_binary_mask_from_fa(self.e2e_runner.get_fa_path("dki", te))
                 for te in self.valid_echo_times
             }
         merged_wm_roi = reduce(
             np.bitwise_or,
-            [roi.get_fdata().astype(bool) for roi in self.echo_to_wm_roi.values()]
+            [roi.get_fdata().astype(bool) for roi in echo_to_wm_roi.values()]
         )
         first_echo_time = self.valid_echo_times[0]
-        self.wm_roi = Nifti1Image(
+        merged_wm_image = Nifti1Image(
             merged_wm_roi,
-            self.echo_to_wm_roi[first_echo_time].affine,
-            self.echo_to_wm_roi[first_echo_time].header
+            echo_to_wm_roi[first_echo_time].affine,
+            echo_to_wm_roi[first_echo_time].header
         )
 
+        return merged_wm_image, echo_to_wm_roi
 
-    # TODO: improve (same threshold for creating wm roi is used in multiple places)
-    def _init_skull_stripped_wm_roi(self):
+
+    def _generate_skull_stripped_wm_roi(self) -> Nifti1Image:
         synth = SynthStrip()
 
         synth.inputs.in_file = str(self.processing_dir / "b0bc.nii")
@@ -208,34 +232,20 @@ class StatsComputer:
         synth.inputs.use_gpu = False
         result = synth.run()
 
-        assert Path(result.outputs.out_mask).exists()
+        mask_path = Path(result.outputs.out_mask)
+        assert mask_path.exists()
 
-        dti_path = self.tmi.get_fa_path("dti")
-        dti_image = Nifti1Image.from_filename(dti_path)
-        brain_mask = Nifti1Image.from_filename(result.outputs.out_mask)
+        fa_path = self.e2e_runner.get_fa_path("dti")
 
-        fa_dti_can = nib.as_closest_canonical(dti_image)
-        mask_can = nib.as_closest_canonical(brain_mask)
-
-        brain = fa_dti_can.get_fdata() * mask_can.get_fdata()
-        brain_no_nan = np.nan_to_num(brain, nan=0.0, posinf=0.0, neginf=0.0)
-
-        threshold = 0.3
-        wm_roi = (brain_no_nan >= threshold).astype(np.uint8)
-        self.wm_roi = Nifti1Image(wm_roi, fa_dti_can.affine, fa_dti_can.header)
+        return create_binary_mask_from_fa(fa_path, brain_mask=mask_path)
 
 
     def count_white_matter_voxels(self) -> int:
-        if self.wm_roi is None:
-            raise RuntimeError("white matter ROI has not been initialized. Call init_wm_roi() first.")
         return np.count_nonzero(self.wm_roi.get_fdata())
 
 
     def compute_b0_roi_stats(self, stage: DWIStage) -> StatsDict:
-        if self.wm_roi is None:
-            raise RuntimeError("white matter ROI has not been initialized. Call init_wm_roi() first.")
-            
-        image_path: DWIImagePath = self.designer.get_dwi_path(stage)
+        image_path: DWIImagePath = self.e2e_runner.get_dwi_path(stage)
         b0_image: Nifti1Image = extract_mean_b0(image_path.nifti, image_path.bval)
 
         wm_mean, wm_std = compute_roi_mean_and_std(b0_image, self.wm_roi)
@@ -251,11 +261,8 @@ class StatsComputer:
         }        
     
 
-    def compute_fa_roi_stats(self, fa_type: FAType, echo_time: Optional[float] = None) -> StatsDict:
-        if self.wm_roi is None:
-            raise RuntimeError("white matter ROI has not been initialized. Call init_wm_roi() first.")
-            
-        image_path = self.tmi.get_fa_path(fa_type, echo_time)
+    def compute_fa_roi_stats(self, fa_model: DiffusionModelType, echo_time: Optional[float] = None) -> StatsDict:
+        image_path = self.e2e_runner.get_fa_path(fa_model, echo_time)
         fa_image = Nifti1Image.from_filename(image_path)
         fa_data = fa_image.get_fdata()
         fa_data_no_nan = np.nan_to_num(fa_data, nan=0.0, posinf=0.0, neginf=0.0)
@@ -264,7 +271,7 @@ class StatsComputer:
         if echo_time is None:
             wm_roi_for_stats = self.wm_roi
         else:
-            # self.echo_to_wm_roi is not None if self.wm_roi is not None
+            assert self.valid_echo_times is not None
             assert self.echo_to_wm_roi is not None
             wm_roi_for_stats = self.echo_to_wm_roi[echo_time]
 
@@ -285,12 +292,9 @@ class StatsComputer:
         self, 
         save_path: Path, 
         stages: List[DWIStage], 
-        fa_types: List[FAType], 
+        fa_models: List[DiffusionModelType], 
         valid_echo_times: Optional[List[float]] = None
     ):
-        if self.wm_roi is None:
-            raise RuntimeError("white matter ROI has not been initialized. Call init_wm_roi() first.")
-            
         b0_stats: Dict[DWIStage, StatsDict] = {}
         fa_stats: Dict[str, StatsDict] = {}
 
@@ -300,14 +304,14 @@ class StatsComputer:
             stats = self.compute_b0_roi_stats(stage)
             b0_stats[stage] = stats
         
-        for fa_type in fa_types:
+        for fa_model in fa_models:
             if valid_echo_times is None:
-                stats = self.compute_fa_roi_stats(fa_type)
-                fa_stats[fa_type] = stats
+                stats = self.compute_fa_roi_stats(fa_model)
+                fa_stats[fa_model] = stats
             else:
                 for echo_time in valid_echo_times:
-                    stats = self.compute_fa_roi_stats(fa_type, echo_time)
-                    fa_stats[f"{fa_type}_te{echo_time}"] = stats
+                    stats = self.compute_fa_roi_stats(fa_model, echo_time)
+                    fa_stats[f"{fa_model}_te{echo_time}"] = stats
 
         benchmark_data = {
             "white_matter_voxel_count": wm_voxel_cnt,
@@ -317,32 +321,3 @@ class StatsComputer:
 
         with open(save_path, "w") as f:
             json.dump(benchmark_data, f, indent=2)
-
-
-class E2ERunner:
-
-    def __init__(self, designer: DesignerRunner, tmi: TMIRunner, stats_computer: StatsComputer, *, scratch_dir: Path):
-        self.designer = designer
-        self.tmi = tmi
-        self.stats_computer = stats_computer
-
-        self.scratch_dir = scratch_dir
-
-
-    def run(self, input_image_paths: List[Path]):
-        dwi_designer_path, sigma_path, brain_mask_path = self.designer.run(input_image_paths)
-
-        self.tmi.run(dwi_designer_path.nifti, sigma_path, brain_mask_path)
-        
-        # Initialize ROIs after FA images have been generated
-        self.stats_computer.init_wm_roi()
-
-
-    def cleanup(self):
-        if self.scratch_dir.exists():
-            shutil.rmtree(self.scratch_dir)
-
-
-    def __getattr__(self, name: str):
-        """Forward any unknown attribute/method access to stats_computer instance."""
-        return getattr(self.stats_computer, name)

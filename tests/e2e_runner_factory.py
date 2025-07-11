@@ -1,12 +1,14 @@
 from pathlib import Path
+from typing import List
 
-from tests.e2e_runner import E2ERunner, DesignerRunner, TMIRunner, StatsComputer
+from tests.e2e_runner import E2ERunner
+from tests.types import DiffusionModelType
 
 
 # BELOW ARE FACTORY FUNCTIONS FOR E2E RUNNERS
 
 def prepare_meso_nonsquare_e2e_runner(scratch_dir: Path, data_dir: Path, *, without_bids: bool = False) -> E2ERunner:
-    cmd_config = [
+    designer_config = [
         "-set_seed",
         "-denoise", 
         "-shrinkage", "frob", 
@@ -18,15 +20,26 @@ def prepare_meso_nonsquare_e2e_runner(scratch_dir: Path, data_dir: Path, *, with
     ]
 
     if without_bids:
-        cmd_config.extend([
+        designer_config.extend([
             "-pf", "6/8",
             "-pe_dir", "AP",
         ])
+
+    if without_bids:
+        # input files are suffixed with 2 since DESIGNER automatically checks BIDS with the same input file names.
+        input_files = ["meso_slice_crop2.nii.gz", "research_slice_crop2.nii.gz"]
+    else:
+        input_files = ["meso_slice_crop.nii.gz", "research_slice_crop.nii.gz"]
+    input_paths = [data_dir / file for file in input_files]
+
+    diffusion_models: List[DiffusionModelType] = ["smi", "dti", "dki", "wdki"]
     
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.create_with_all_models(scratch_dir)
-    stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
-    runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
+    runner = E2ERunner(
+        scratch_dir=scratch_dir,
+        input_dwi_paths=input_paths,
+        designer_cli_options=designer_config,
+        diffusion_models=diffusion_models
+    )
 
     return runner
 
@@ -34,7 +47,7 @@ def prepare_meso_nonsquare_e2e_runner(scratch_dir: Path, data_dir: Path, *, with
 def prepare_meso_eddy_e2e_runner(scratch_dir: Path, data_dir: Path, *, without_bids: bool = False) -> E2ERunner:
     rpe_image_path = data_dir / "pa_ds.nii.gz"
     
-    cmd_config = [
+    designer_config = [
         "-set_seed", 
         "-eddy", 
         # TODO: passing relative path doesn't work. need to fix it in DESIGNER code.
@@ -42,26 +55,44 @@ def prepare_meso_eddy_e2e_runner(scratch_dir: Path, data_dir: Path, *, without_b
     ]
 
     if without_bids:
-        cmd_config.extend([
+        designer_config.extend([
             "-pf", "6/8",
             "-pe_dir", "AP",
         ])
+        # input files are suffixed with 2 since DESIGNER automatically checks BIDS with the same input file names.
+        input_files = ["meso_ds2.nii.gz", "research_ds2.nii.gz"]
+    else:
+        input_files = ["meso_ds.nii.gz", "research_ds.nii.gz"]
+    input_paths = [data_dir / file for file in input_files]
 
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.create_with_all_models(scratch_dir, with_sigma=False)
-    stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
-    runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
+    diffusion_models: List[DiffusionModelType] = ["smi", "dti", "dki", "wdki"]
+
+    runner = E2ERunner(
+        scratch_dir=scratch_dir,
+        input_dwi_paths=input_paths,
+        designer_cli_options=designer_config,
+        diffusion_models=diffusion_models,
+        with_sigma=False,
+    )
 
     return runner
 
 
 def prepare_meso_degibbs_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERunner:
-    cmd_config = ["-degibbs"]
-    
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.create_with_all_models(scratch_dir, with_sigma=False)
-    stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
-    runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
+    designer_config = ["-set_seed", "-degibbs"]
+
+    input_files = ["meso_slice.nii.gz", "research_slice.nii.gz"]
+    input_paths = [data_dir / file for file in input_files]
+
+    diffusion_models: List[DiffusionModelType] = ["smi", "dti", "dki", "wdki"]
+
+    runner = E2ERunner(
+        scratch_dir=scratch_dir,
+        input_dwi_paths=input_paths,
+        designer_cli_options=designer_config,
+        diffusion_models=diffusion_models,
+        with_sigma=False,
+    )
 
     return runner
 
@@ -74,17 +105,25 @@ def prepare_high_resolution_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2E
 
     phase_args = ",".join([str(path) for path in phase_image_paths])
     
-    cmd_config = [
+    designer_config = [
+        "-set_seed",
         "-denoise", 
         "-phase", phase_args,
         "-degibbs", 
         "-normalize"
     ]
-    
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.create_with_all_models(scratch_dir)
-    stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir)
-    runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
+
+    input_files = ["dif1_slice.nii.gz", "dif2_slice.nii.gz"]
+    input_paths = [data_dir / file for file in input_files]
+
+    diffusion_models: List[DiffusionModelType] = ["smi", "dti", "dki", "wdki"]
+
+    runner = E2ERunner(
+        scratch_dir=scratch_dir,
+        input_dwi_paths=input_paths,
+        designer_cli_options=designer_config,
+        diffusion_models=diffusion_models,
+    )
 
     return runner
 
@@ -98,12 +137,11 @@ def prepare_complex_data_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
     rpe_image_path = data_dir / "rpe_ds.nii.gz"
 
     echo_times = [60.0, 78.0]
-    valid_echo_times = [60.0]
 
     phase_args = ",".join([str(path) for path in phase_image_paths])
     te_args = ",".join([str(time / 1000) for time in echo_times])   # convert ms to s
     
-    cmd_config = [
+    designer_config = [
         "-set_seed", 
         "-denoise", 
         "-shrinkage", "frob", 
@@ -118,16 +156,24 @@ def prepare_complex_data_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
         "-normalize"
     ]
 
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.create_with_all_models(scratch_dir)
-    stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir, valid_echo_times=valid_echo_times)
-    runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
+    input_files = ["dwi1_ds.nii.gz", "dwi2_ds.nii.gz"]
+    input_paths = [data_dir / file for file in input_files]
+
+    diffusion_models: List[DiffusionModelType] = ["smi", "dti", "dki", "wdki"]
+
+    runner = E2ERunner(
+        scratch_dir=scratch_dir,
+        input_dwi_paths=input_paths,
+        designer_cli_options=designer_config,
+        diffusion_models=diffusion_models,
+    )
 
     return runner
 
 
 def prepare_heal_coronal_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERunner:
-    cmd_config = [
+    designer_config = [
+        "-set_seed",
         "-denoise", 
         "-shrinkage", "frob", 
         "-adaptive_patch", 
@@ -136,9 +182,18 @@ def prepare_heal_coronal_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
         "-normalize",
     ]
 
-    designer = DesignerRunner(scratch_dir, cmd_config)
-    tmi = TMIRunner.create_dti_only(scratch_dir, with_sigma=False, with_mask=True)
-    stats_computer = StatsComputer(designer, tmi, roi_dir=data_dir, with_skull_stripping=True)
-    runner = E2ERunner(designer, tmi, stats_computer, scratch_dir=scratch_dir)
+    input_files = ["dwi1_ds.nii.gz", "dwi2_ds.nii.gz"]
+    input_paths = [data_dir / file for file in input_files]
+
+    diffusion_models: List[DiffusionModelType] = ["dti"]
+
+    runner = E2ERunner(
+        scratch_dir=scratch_dir,
+        input_dwi_paths=input_paths,
+        designer_cli_options=designer_config,
+        diffusion_models=diffusion_models,
+        with_sigma=False,
+        with_mask=True
+    )
 
     return runner
