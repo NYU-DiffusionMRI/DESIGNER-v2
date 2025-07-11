@@ -1,5 +1,5 @@
 {
-  "white_matter_voxel_count": 5317,
+  "wm_ratio": 0.4696581574065895,
   "b0_stats": {
     "denoising": {
       "wm": [

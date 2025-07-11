@@ -1,25 +1,29 @@
 from pathlib import Path
-from typing import Union, Optional
+from typing import Union, Optional, Union
 
 import numpy as np
 import nibabel as nib
 from nibabel.nifti1 import Nifti1Image
 
-from tests.types import StatsDict
+from tests.types import StatsDict, DWIStage, DiffusionModelType
 
 
-def assert_stats(stats: StatsDict, expected_stats: StatsDict):
+def assert_stats(stats: StatsDict, expected_stats: StatsDict, context: Union[DWIStage, DiffusionModelType]):
     """Compare two StatsDict objects for approximate equality.
 
     Args:
         stats: The StatsDict containing the actual statistics to compare
         expected_stats: The StatsDict containing the expected statistics to compare against
+        context: The context (DWIStage or DiffusionModelType) for which the stats are being compared
 
     Raises:
         AssertionError: If any corresponding values between the two StatsDicts are not approximately equal
     """
+    print(f"context: {context}")
     for roi, stats_values in stats.items():
+        print(f"roi: {roi}")
         for val, expected_val in zip(stats_values, expected_stats[roi]):
+            print(f"val: {val}, expected_val: {expected_val}")
             assert np.isclose(val, expected_val)
 
 

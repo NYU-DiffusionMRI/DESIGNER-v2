@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.e2e_runner import E2ERunner, StatsComputer
@@ -37,19 +38,20 @@ def stats_computer(runner: E2ERunner):
     return stats_computer
 
 
-def test_white_matter_voxel_count(stats_computer: StatsComputer):
-    wm_voxel_cnt = stats_computer.count_white_matter_voxels()
-    expected_cnt = ground_truth["white_matter_voxel_count"]
-    assert wm_voxel_cnt == expected_cnt
+def test_wm_ratio(stats_computer: StatsComputer):
+    wm_ratio = stats_computer.compute_wm_ratio()
+    expected_ratio = ground_truth["wm_ratio"]
+    print(f"wm_ratio: {wm_ratio}, expected_ratio: {expected_ratio}")
+    assert np.isclose(wm_ratio, expected_ratio)
 
 
 @pytest.mark.parametrize("preproc_stage, expected_stats", ground_truth["b0_stats"].items())
 def test_b0_stats(stats_computer: StatsComputer, preproc_stage: DWIStage, expected_stats: StatsDict):
     b0_stats = stats_computer.compute_b0_roi_stats(preproc_stage)
-    assert_stats(b0_stats, expected_stats)
+    assert_stats(b0_stats, expected_stats, preproc_stage)
 
 
 @pytest.mark.parametrize("fa_model, expected_stats", ground_truth["fa_stats"].items())
 def test_fa_stats(stats_computer: StatsComputer, fa_model: DiffusionModelType, expected_stats: StatsDict):
     fa_stats = stats_computer.compute_fa_roi_stats(fa_model)
-    assert_stats(fa_stats, expected_stats)
+    assert_stats(fa_stats, expected_stats, fa_model)

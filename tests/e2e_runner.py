@@ -28,6 +28,8 @@ class DesignerRunner:
             bvec=self.scratch_dir / "dwi_designer.bvec"
         )
 
+        self.brain_mask_path: Path = self.processing_dir / "brain_mask.nii"
+
 
     def run(self) -> Tuple[DWIImagePath, Path, Path]:
         dwi_args=",".join([str(path) for path in self.input_dwi_paths])
@@ -48,9 +50,8 @@ class DesignerRunner:
         assert self.out_path.nifti.exists()
 
         sigma_path = self.processing_dir / "sigma.nii"
-        brain_mask_path = self.processing_dir / "brain_mask.nii"
 
-        return self.out_path, sigma_path, brain_mask_path
+        return self.out_path, sigma_path, self.brain_mask_path
 
 
     def get_dwi_path(self, stage: DWIStage) -> DWIImagePath:
@@ -143,6 +144,8 @@ class E2ERunner:
         self.processing_dir = self.designer.processing_dir
         self.params_dir = self.tmi.params_dir
 
+        self.brain_mask_path: Path = self.designer.brain_mask_path
+
 
     def run(self):
         _, sigma_path, brain_mask_path = self.designer.run()
@@ -186,13 +189,15 @@ class StatsComputer:
         self.single_voxel = Nifti1Image.from_filename(roi_dir / "voxel.nii.gz")
         
         self.echo_to_wm_roi: Optional[Dict[float, Nifti1Image]] = None
+        self.brain_mask_path: Path = self.e2e_runner.brain_mask_path
 
         if self.valid_echo_times is None and not self.with_skull_stripping:
             self.wm_roi = self._generate_single_wm_roi()
         elif self.valid_echo_times is not None and not self.with_skull_stripping:
             self.wm_roi, self.echo_to_wm_roi = self._generate_multi_echo_wm_roi()
         elif self.valid_echo_times is None and self.with_skull_stripping:
-            self.wm_roi = self._generate_skull_stripped_wm_roi()
+            # using the brain mask from skull stripping
+            self.wm_roi, self.brain_mask_path = self._generate_skull_stripped_wm_roi()
         else:
             raise ValueError("Invalid combination of echo times and skull stripping. Currently not supported.")
 
@@ -222,7 +227,7 @@ class StatsComputer:
         return merged_wm_image, echo_to_wm_roi
 
 
-    def _generate_skull_stripped_wm_roi(self) -> Nifti1Image:
+    def _generate_skull_stripped_wm_roi(self) -> Tuple[Nifti1Image, Path]:
         synth = SynthStrip()
 
         synth.inputs.in_file = str(self.processing_dir / "b0bc.nii")
@@ -237,11 +242,15 @@ class StatsComputer:
 
         fa_path = self.e2e_runner.get_fa_path("dti")
 
-        return create_binary_mask_from_fa(fa_path, brain_mask=mask_path)
+        return create_binary_mask_from_fa(fa_path, brain_mask=mask_path), mask_path
 
 
-    def count_white_matter_voxels(self) -> int:
-        return np.count_nonzero(self.wm_roi.get_fdata())
+    def compute_wm_ratio(self) -> float:
+        wm_voxel_cnt = np.count_nonzero(self.wm_roi.get_fdata())
+        brain_mask = Nifti1Image.from_filename(self.brain_mask_path)
+        total_voxel_cnt = np.count_nonzero(brain_mask.get_fdata())
+
+        return wm_voxel_cnt / total_voxel_cnt
 
 
     def compute_b0_roi_stats(self, stage: DWIStage) -> StatsDict:
@@ -298,7 +307,7 @@ class StatsComputer:
         b0_stats: Dict[DWIStage, StatsDict] = {}
         fa_stats: Dict[str, StatsDict] = {}
 
-        wm_voxel_cnt = self.count_white_matter_voxels()
+        wm_ratio = self.compute_wm_ratio()
 
         for stage in stages:
             stats = self.compute_b0_roi_stats(stage)
@@ -314,7 +323,7 @@ class StatsComputer:
                     fa_stats[f"{fa_model}_te{echo_time}"] = stats
 
         benchmark_data = {
-            "white_matter_voxel_count": wm_voxel_cnt,
+            "wm_ratio": wm_ratio,
             "b0_stats": b0_stats,
             "fa_stats": fa_stats
         }
