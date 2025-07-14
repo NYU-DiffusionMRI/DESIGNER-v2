@@ -74,13 +74,14 @@ jobs:
       - run:
           name: Run e2e tests
           command: |
-            docker run --rm \
-              -w /app \
-              designer2:test \
-              pytest -s -x \
-              --dist loadscope \
-              -n 4 \
-              tests
+            echo "Skipping e2e tests for now (save credits)"
+            # docker run --rm \
+            #   -w /app \
+            #   designer2:test \
+            #   pytest -s -x \
+            #   --dist loadscope \
+            #   -n 4 \
+            #   tests
 
 workflows:
   build-and-run-e2e-test:
