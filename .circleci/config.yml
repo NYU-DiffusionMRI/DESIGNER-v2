@@ -35,7 +35,7 @@ jobs:
         type: string
     docker:
       - image: cimg/base:2024.01
-    resource_class: medium
+    resource_class: small
     steps:
       - checkout
       - setup_remote_docker:
@@ -48,7 +48,7 @@ jobs:
         type: string
     docker:
       - image: cimg/base:2024.01
-    resource_class: medium
+    resource_class: small
     steps:
       - checkout
       - setup_remote_docker:
@@ -64,7 +64,7 @@ jobs:
   e2e-test:
     docker:
       - image: cimg/base:2024.01
-    resource_class: large
+    resource_class: medium
     steps:
       - checkout
       - setup_remote_docker:
@@ -85,8 +85,6 @@ jobs:
               -w /app \
               designer2:test \
               pytest -s \
-              --dist loadscope \
-              -n 4 \
               tests
 
 workflows:

@@ -1,0 +1,40 @@
+dataset_profiles:
+  D1: medium
+  D2: large
+  D3: small
+  D4: small
+  D5: d5_specific
+  D6: medium
+
+tolerances:
+# high resolution and degibbs only DESIGNER
+  small:
+    wm_ratio_atol: 1.e-3
+    b0_mean_rtol: 5.e-3
+    b0_std_rtol:  2.e-2
+    fa_mean_atol: 4.e-4
+    fa_std_atol:  5.e-4
+
+# default
+  medium:
+    wm_ratio_atol: 1.e-4
+    b0_mean_rtol: 1.e-3
+    b0_std_rtol:  2.e-3
+    fa_mean_atol: 1.e-4
+    fa_std_atol:  2.e-4
+
+# downsampled
+  large:
+    wm_ratio_atol: 2.e-2
+    b0_mean_rtol: 4.e-2
+    b0_std_rtol:  6.e-2
+    fa_mean_atol: 5.e-2
+    fa_std_atol:  3.e-2
+
+# TODO: revision needed
+  d5_specific:
+    wm_ratio_atol: 1.e-2
+    b0_mean_rtol: 3.e-1
+    b0_std_rtol:  4.e-2
+    fa_mean_atol: 2.e-1   # dki instability: up to ~0.2 idff for both mean and std
+    fa_std_atol:  2.e-1

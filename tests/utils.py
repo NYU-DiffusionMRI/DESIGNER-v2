@@ -8,23 +8,47 @@ from nibabel.nifti1 import Nifti1Image
 from tests.types import StatsDict, DWIStage, DiffusionModelType
 
 
-def assert_stats(stats: StatsDict, expected_stats: StatsDict, context: Union[DWIStage, DiffusionModelType]):
-    """Compare two StatsDict objects for approximate equality.
+# TODO!!: `context` param is only for logging, remove it.
+def assert_stats(
+    stats: StatsDict,
+    expected_stats: StatsDict,
+    *,
+    mean_tol: float,
+    std_tol: float,
+    is_relative: bool,
+    context: Union[DWIStage, DiffusionModelType]
+):
+    """
+    Assert that two StatsDict objects are approximately equal for each ROI.
+
+    Compares mean and (if present) standard deviation for each ROI in `stats` and `expected_stats`,
+    using either relative or absolute tolerance as specified.
 
     Args:
-        stats: The StatsDict containing the actual statistics to compare
-        expected_stats: The StatsDict containing the expected statistics to compare against
-        context: The context (DWIStage or DiffusionModelType) for which the stats are being compared
+        stats: Actual statistics dict mapping ROI names to (mean, [std]) tuples.
+        expected_stats: Expected statistics dict, same format as `stats`.
+        mean_tol: Tolerance for mean comparison (rtol if `is_relative`, else atol).
+        std_tol: Tolerance for std comparison (rtol if `is_relative`, else atol).
+        is_relative: If True, use relative tolerance; if False, use absolute tolerance.
+        context: Context (DWIStage or DiffusionModelType) for logging.
 
     Raises:
-        AssertionError: If any corresponding values between the two StatsDicts are not approximately equal
+        AssertionError: If any mean or std value is not approximately equal within tolerance.
     """
     print(f"context: {context}")
     for roi, stats_values in stats.items():
         print(f"roi: {roi}")
-        for val, expected_val in zip(stats_values, expected_stats[roi]):
-            print(f"val: {val}, expected_val: {expected_val}")
-            assert np.isclose(val, expected_val)
+        if is_relative:
+            np_close = lambda a, b, rtol: np.isclose(a, b, rtol=rtol)
+        else:
+            np_close = lambda a, b, atol: np.isclose(a, b, atol=atol)
+       
+        print(f"actual mean: {stats_values[0]}, expected mean: {expected_stats[roi][0]}")
+        assert np_close(stats_values[0], expected_stats[roi][0], mean_tol)
+
+        if len(stats_values) > 1 and len(expected_stats[roi]) > 1:   # standard deviation exists
+            print(f"actual std: {stats_values[1]}, expected std: {expected_stats[roi][1]}")
+            assert np_close(stats_values[1], expected_stats[roi][1], std_tol)
 
 
 def create_binary_mask_from_fa(
