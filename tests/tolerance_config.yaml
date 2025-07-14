@@ -35,7 +35,7 @@ tolerances:
 # TODO!!: revision needed
   d5_specific:
     wm_ratio_atol: 1.e-2
-    b0_mean_rtol: 3.e-1
+    b0_mean_rtol: 1.5e-1  # designer dwi wm: up to ~0.15 rel diff (~15%)
     b0_std_rtol:  5.e-2   # denoising and degibbs dwi wm: up to ~0.05 rel diff (~5%)
     fa_mean_atol: 2.e-1   # dki instability: up to ~0.2 abs diff (20%pt) for both mean and std
     fa_std_atol:  2.e-1
