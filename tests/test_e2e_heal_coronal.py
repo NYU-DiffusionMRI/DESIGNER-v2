@@ -5,7 +5,7 @@ import sys
 import numpy as np
 import pytest
 
-from tests.e2e_runner import E2ERunner, StatsComputer
+from tests.e2e_runners import E2ERunner, StatsComputer
 from tests.e2e_runner_factory import prepare_heal_coronal_e2e_runner
 from tests.types import DWIStage, DiffusionModelType, StatsDict
 from tests.utils import assert_stats

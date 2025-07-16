@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List
 
-from tests.e2e_runner import E2ERunner
+from tests.e2e_runners import E2ERunner
 from tests.types import DiffusionModelType
 
 

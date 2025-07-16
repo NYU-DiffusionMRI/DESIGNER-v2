@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
-from tests.e2e_runner import E2ERunner, StatsComputer
+from tests.e2e_runners import E2ERunner, StatsComputer
 from tests.e2e_runner_factory import (
     prepare_meso_nonsquare_e2e_runner,
     prepare_meso_eddy_e2e_runner,
