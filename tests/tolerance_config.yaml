@@ -25,14 +25,14 @@ tolerances:
   d2_specific:
     wm_ratio_atol: 3.e-2
     b0_mean_rtol: 4.e-2
-    b0_std_rtol:  1.e-1   # designer dwi roi1: up to ~0.1 rel diff (~10%)
-    fa_mean_atol: 2.e-1   # dti instability: up to ~0.2 abs diff (20%pt) for both mean and std
-    fa_std_atol:  2.e-1
+    b0_std_rtol:  8.e-2   # (wo bids) designer roi1: up to ~0.08 rel diff (~8%) (mac vs linux)
+    fa_mean_atol: 1.3e-1   # dti wm: up to ~0.13 abs diff (13%pt) (linux vs mac)
+    fa_std_atol:  1.e-1   # dti wm: up to ~0.1 abs diff (10%pt) (linux vs mac)
 
 # TODO!!: revision needed
   d5_specific:
     wm_ratio_atol: 1.e-2
-    b0_mean_rtol: 1.5e-1  # designer dwi wm: up to ~0.15 rel diff (~15%)
-    b0_std_rtol:  5.e-2   # denoising and degibbs dwi wm: up to ~0.05 rel diff (~5%)
-    fa_mean_atol: 2.e-1   # dki instability: up to ~0.2 abs diff (20%pt) for both mean and std
-    fa_std_atol:  2.e-1
+    b0_mean_rtol: 1.4e-1  # designer wm: up to ~0.14 rel diff (~14%) (mac vs linux)
+    b0_std_rtol:  5.e-2   # degibbs wm: up to ~0.05 rel diff (~5%) (mac vs linux)
+    fa_mean_atol: 2.5e-1   # dki wm: up to ~0.25 abs diff (25%pt) (windows vs linux)
+    fa_std_atol:  1.5e-1   # dki wm: up to ~0.15 abs diff (15%pt) (windows vs mac, and windows vs linux)
