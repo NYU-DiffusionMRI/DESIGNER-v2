@@ -54,7 +54,8 @@ jobs:
         type: string
     docker:
       - image: cimg/base:2024.01
-    resource_class: large
+    # TODO!!: change to large for parallel testing
+    resource_class: medium
     steps:
       - checkout
       - setup_remote_docker:
@@ -74,14 +75,14 @@ jobs:
       - run:
           name: Run e2e tests
           command: |
-            echo "Skipping e2e tests for now (save credits)"
-            # docker run --rm \
-            #   -w /app \
-            #   designer2:test \
-            #   pytest -s -x \
-            #   --dist loadscope \
-            #   -n 4 \
-            #   tests
+            docker run --rm \
+              -w /app \
+              designer2:test \
+              pytest -s \
+              tests/test_e2e_meso_eddy_ds_three_eight.py \
+              tests/test_e2e_meso_eddy_wo_bids_ds_three_eight.py \
+              tests/test_e2e_complex_data_ds_three_eight.py
+            # echo "Skipping e2e tests for now (save credits)"
 
 workflows:
   build-and-run-e2e-test:
