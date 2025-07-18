@@ -79,9 +79,9 @@ jobs:
               -w /app \
               designer2:test \
               pytest -s \
-              tests/test_e2e_meso_eddy_ds_three_eight.py \
-              tests/test_e2e_meso_eddy_wo_bids_ds_three_eight.py \
-              tests/test_e2e_complex_data_ds_three_eight.py
+              tests/test_e2e_meso_eddy_ds_half.py \
+              tests/test_e2e_meso_eddy_wo_bids_ds_half.py \
+              tests/test_e2e_complex_data_ds_half.py
             # echo "Skipping e2e tests for now (save credits)"
 
 workflows:
