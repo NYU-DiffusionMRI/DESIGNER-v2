@@ -8,18 +8,18 @@ dataset_profiles:
 
 tolerances:
   small:
-    wm_ratio_atol: 3.e-4  # up to 0.0003%pt diff
+    wm_ratio_atol: 3.e-4  # up to 0.03%pt diff
     b0_mean_rtol: 1.e-3   # up to 0.1% diff
     b0_std_rtol:  1.e-2   # up to 1% diff
-    fa_mean_atol: 1.e-3   # up to 0.001%pt diff
-    fa_std_atol:  1.e-3   # up to 0.001%pt diff
+    fa_mean_atol: 1.e-3   # up to 0.1%pt diff
+    fa_std_atol:  1.e-3   # up to 0.1%pt diff
 
   medium:
-    wm_ratio_atol: 3.e-3  # up to 0.003%pt diff
+    wm_ratio_atol: 3.e-3  # up to 0.3%pt diff
     b0_mean_rtol: 5.e-3   # up to 0.5% diff
     b0_std_rtol:  3.e-2   # up to 3% diff
-    fa_mean_atol: 5.e-3   # up to 0.005%pt diff
-    fa_std_atol:  5.e-3   # up to 0.005%pt diff
+    fa_mean_atol: 5.e-3   # up to 0.5%pt diff
+    fa_std_atol:  5.e-3   # up to 0.5%pt diff
 
 # TODO!!: revisioin needed
   d2_specific:
