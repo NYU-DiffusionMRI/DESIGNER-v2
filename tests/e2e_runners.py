@@ -44,10 +44,10 @@ class DesignerRunner:
             "-scratch", str(self.processing_dir), 
             "-nocleanup", 
             dwi_args, 
-            str(self.out_path.nifti)
+            str(self.out_path["nifti"])
         ])
         assert ret.returncode == 0
-        assert self.out_path.nifti.exists()
+        assert self.out_path["nifti"].exists()
 
         sigma_path = self.processing_dir / "sigma.nii"
 
@@ -138,7 +138,7 @@ class E2ERunner:
 
         self.designer = DesignerRunner(scratch_dir, input_dwi_paths, designer_cli_options)
 
-        tmi_input_path = self.designer.get_dwi_path("designer").nifti
+        tmi_input_path = self.designer.get_dwi_path("designer")["nifti"]
         self.tmi = TMIRunner(scratch_dir, tmi_input_path, diffusion_models, with_sigma=with_sigma, with_mask=with_mask)
 
         self.processing_dir = self.designer.processing_dir
@@ -255,20 +255,20 @@ class StatsComputer:
 
     def compute_b0_roi_stats(self, stage: DWIStage) -> StatsDict:
         image_path: DWIImagePath = self.e2e_runner.get_dwi_path(stage)
-        b0_image: Nifti1Image = extract_mean_b0(image_path.nifti, image_path.bval)
+        b0_image: Nifti1Image = extract_mean_b0(image_path["nifti"], image_path["bval"])
 
         wm_mean, wm_std = compute_roi_mean_and_std(b0_image, self.wm_roi)
         roi1_mean, roi1_std = compute_roi_mean_and_std(b0_image, self.roi1)
         roi2_mean, roi2_std = compute_roi_mean_and_std(b0_image, self.roi2)
         voxel_mean, _ = compute_roi_mean_and_std(b0_image, self.single_voxel)
 
-        return {
-            "wm": [wm_mean, wm_std],
-            "roi1": [roi1_mean, roi1_std],
-            "roi2": [roi2_mean, roi2_std],
-            "voxel": [voxel_mean]
-        }        
-    
+        return StatsDict(
+            wm=[wm_mean, wm_std],
+            roi1=[roi1_mean, roi1_std],
+            roi2=[roi2_mean, roi2_std],
+            voxel=[voxel_mean]
+        )
+
 
     def compute_fa_roi_stats(self, fa_model: DiffusionModelType, echo_time: Optional[float] = None) -> StatsDict:
         image_path = self.e2e_runner.get_fa_path(fa_model, echo_time)
@@ -289,12 +289,12 @@ class StatsComputer:
         roi2_mean, roi2_std = compute_roi_mean_and_std(fa_image_no_nan, self.roi2)
         voxel_mean, _ = compute_roi_mean_and_std(fa_image_no_nan, self.single_voxel)
 
-        return {
-            "wm": [wm_mean, wm_std],
-            "roi1": [roi1_mean, roi1_std],
-            "roi2": [roi2_mean, roi2_std],
-            "voxel": [voxel_mean]
-        } 
+        return StatsDict(
+            wm=[wm_mean, wm_std],
+            roi1=[roi1_mean, roi1_std],
+            roi2=[roi2_mean, roi2_std],
+            voxel=[voxel_mean]
+        )
 
     
     def save_benchmark(

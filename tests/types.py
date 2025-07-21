@@ -1,6 +1,5 @@
-from typing import Literal, Dict, List, TypedDict, get_args, NotRequired
+from typing import Literal, List, TypedDict, get_args, NotRequired
 from pathlib import Path
-from dataclasses import dataclass
 
 
 DWIStage = Literal["denoising", "degibbs","topup", "eddy", "b1correct", "rician", "designer"]
@@ -15,14 +14,17 @@ def is_valid_diffusion_model_type(diffusion_model_type: str) -> bool:
     return diffusion_model_type in get_args(DiffusionModelType)
 
 
-@dataclass
-class DWIImagePath:
+class DWIImagePath(TypedDict):
     nifti: Path
     bval: Path
     bvec: Path
 
 
-StatsDict = Dict[str, List[float]]
+class StatsDict(TypedDict):
+    wm: List[float]
+    roi1: List[float]
+    roi2: List[float]
+    voxel: List[float]
 
 
 class ToleranceProfile(TypedDict):
