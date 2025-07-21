@@ -1,4 +1,4 @@
-from typing import Literal, Dict, List, TypedDict, get_args
+from typing import Literal, Dict, List, TypedDict, get_args, NotRequired
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -23,3 +23,15 @@ class DWIImagePath:
 
 
 StatsDict = Dict[str, List[float]]
+
+
+class ToleranceProfile(TypedDict):
+    wm_ratio_atol: float
+    b0_mean_rtol: float
+    b0_std_rtol: float
+    b0_wm_mean_rtol: NotRequired[float]
+    b0_wm_std_rtol: NotRequired[float]
+    fa_mean_atol: float
+    fa_std_atol: float
+    fa_wm_mean_rtol: NotRequired[float]
+    fa_wm_std_rtol: NotRequired[float]

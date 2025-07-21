@@ -1,29 +1,28 @@
 from pathlib import Path
-from typing import Union, Optional, Union, Dict
+from typing import Union, Optional, Union
 
 import numpy as np
 import nibabel as nib
 from nibabel.nifti1 import Nifti1Image
 
-from tests.types import StatsDict, DWIStage, DiffusionModelType, is_valid_dwi_stage, is_valid_diffusion_model_type
+from tests.types import StatsDict, DWIStage, DiffusionModelType, is_valid_dwi_stage, is_valid_diffusion_model_type, ToleranceProfile
 
 
 def assert_stats(
     stats: StatsDict,
     expected_stats: StatsDict,
     *,
-    tolerances: Dict,
+    tol_profile: ToleranceProfile,
     context: Union[DWIStage, DiffusionModelType]
 ):
     """
-    Assert that two StatsDict objects are approximately equal for each ROI,
-    using tolerances for mean and std from the provided dictionary.
+    Assert that two StatsDicts are approximately equal for each ROI using tolerances.
 
-    Args:
-        stats: Actual statistics dict mapping ROI names to [mean, (std)].
-        expected_stats: Expected statistics dict, same format as stats.
-        tolerances: Dict of tolerance values for mean and std.
-        context: DWIStage or DiffusionModelType, used for tolerance selection and logging.
+    Parameters:
+        stats: Actual ROI statistics {roi: [mean, (std)]}
+        expected_stats: Expected ROI statistics {roi: [mean, (std)]}
+        tol_profile: ToleranceProfile dict for mean/std comparisons
+        context: DWIStage or DiffusionModelType (for tolerance selection/logging)
     """
     print(f"context: {context}")
 
@@ -32,23 +31,23 @@ def assert_stats(
         def _assert_mean(roi, actual, expected):
             default_key = f"b0_mean_rtol"
             key = f"b0_{roi}_mean_rtol"
-            rtol = tolerances.get(key, tolerances[default_key])
+            rtol = tol_profile.get(key, tol_profile[default_key])
             assert np.isclose(actual, expected, rtol=rtol)
         def _assert_std(roi, actual, expected):
             default_key = f"b0_std_rtol"
             key = f"b0_{roi}_std_rtol"
-            rtol = tolerances.get(key, tolerances[default_key])
+            rtol = tol_profile.get(key, tol_profile[default_key])
             assert np.isclose(actual, expected, rtol=rtol)
     elif is_valid_diffusion_model_type(context):
         def _assert_mean(roi, actual, expected):
             default_key = f"fa_mean_atol"
             key = f"fa_{roi}_mean_atol"
-            atol = tolerances.get(key, tolerances[default_key])
+            atol = tol_profile.get(key, tol_profile[default_key])
             assert np.isclose(actual, expected, atol=atol)
         def _assert_std(roi, actual, expected):
             default_key = f"fa_std_atol"
             key = f"fa_{roi}_std_atol"
-            atol = tolerances.get(key, tolerances[default_key])
+            atol = tol_profile.get(key, tol_profile[default_key])
             assert np.isclose(actual, expected, atol=atol)
     else:
         raise ValueError(f"Invalid context: {context}")
