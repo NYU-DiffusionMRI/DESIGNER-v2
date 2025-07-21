@@ -135,8 +135,8 @@
     "TotalReadoutTime": 0.049,
     "TxRefAmp": 413.915,
     "command_history": [
-        "mrconvert /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso.nii -force -fslgrad /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso.bvec /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso.bval -json_import /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso_2.json /Users/jc8329/Desktop/test/M0033/meso.mif  (version=3.0.5)",
-        "mrgrid -force /Users/jc8329/Desktop/test/M0033/meso.mif regrid -scale '0.25,0.25,0.25' /Users/jc8329/Desktop/test/test_designer/datasets/meso-downsampled/meso_ds.mif  (version=3.0.5)"
+        "mrconvert /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso.nii -force -fslgrad /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso.bvec /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso.bval -json_import /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso_2.json /Users/jc8329/Desktop/test/M0033/designer_test/meso.mif  (version=3.0.5)",
+        "mrgrid -force /Users/jc8329/Desktop/test/M0033/designer_test/meso.mif regrid -scale '0.38,0.38,0.38' /Users/jc8329/Desktop/test/test_designer/datasets/D2/meso_ds_0.38.mif  (version=3.0.5)"
     ],
     "comments": "TE=95;Time=185308.328;phase=1;mb=54",
     "mrtrix_version": "3.0.5"

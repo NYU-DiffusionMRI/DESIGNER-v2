@@ -142,8 +142,8 @@
     "TotalReadoutTime": 0.049,
     "TxRefAmp": 413.915,
     "command_history": [
-        "mrconvert /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso_PA.nii -force -json_import /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso_PA.json /Users/jc8329/Desktop/test/M0033/pa.mif  (version=3.0.5)",
-        "mrgrid -force /Users/jc8329/Desktop/test/M0033/pa.mif regrid -scale '0.25,0.25,0.25' /Users/jc8329/Desktop/test/test_designer/datasets/meso-downsampled/pa_ds.mif  (version=3.0.5)"
+        "mrconvert /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso_PA.nii -force -json_import /Users/jc8329/Desktop/test/M0033/M0033_043YF_DIFF_meso_PA.json /Users/jc8329/Desktop/test/M0033/designer_test/pa.mif  (version=3.0.5)",
+        "mrgrid -force /Users/jc8329/Desktop/test/M0033/designer_test/pa.mif regrid -scale '0.38,0.38,0.38' /Users/jc8329/Desktop/test/test_designer/datasets/D2/pa_ds_0.38.mif  (version=3.0.5)"
     ],
     "comments": "TE=95;Time=190013.690;phase=0;mb=54",
     "mrtrix_version": "3.0.5"

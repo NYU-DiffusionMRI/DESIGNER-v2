@@ -1,56 +1,67 @@
 from pathlib import Path
-from typing import Union, Optional, Union
+from typing import Union, Optional, Union, Dict
 
 import numpy as np
 import nibabel as nib
 from nibabel.nifti1 import Nifti1Image
 
-from tests.types import StatsDict, DWIStage, DiffusionModelType
+from tests.types import StatsDict, DWIStage, DiffusionModelType, is_valid_dwi_stage, is_valid_diffusion_model_type
 
 
-# TODO!!: `context` param is only for logging, remove it.
 def assert_stats(
     stats: StatsDict,
     expected_stats: StatsDict,
     *,
-    mean_tol: float,
-    std_tol: float,
-    is_relative: bool,
+    tolerances: Dict,
     context: Union[DWIStage, DiffusionModelType]
 ):
     """
-    Assert that two StatsDict objects are approximately equal for each ROI.
-
-    Compares mean and (if present) standard deviation for each ROI in `stats` and `expected_stats`,
-    using either relative or absolute tolerance as specified.
+    Assert that two StatsDict objects are approximately equal for each ROI,
+    using tolerances for mean and std from the provided dictionary.
 
     Args:
-        stats: Actual statistics dict mapping ROI names to (mean, [std]) tuples.
-        expected_stats: Expected statistics dict, same format as `stats`.
-        mean_tol: Tolerance for mean comparison (rtol if `is_relative`, else atol).
-        std_tol: Tolerance for std comparison (rtol if `is_relative`, else atol).
-        is_relative: If True, use relative tolerance; if False, use absolute tolerance.
-        context: Context (DWIStage or DiffusionModelType) for logging.
-
-    Raises:
-        AssertionError: If any mean or std value is not approximately equal within tolerance.
+        stats: Actual statistics dict mapping ROI names to [mean, (std)].
+        expected_stats: Expected statistics dict, same format as stats.
+        tolerances: Dict of tolerance values for mean and std.
+        context: DWIStage or DiffusionModelType, used for tolerance selection and logging.
     """
     print(f"context: {context}")
+
+    # Determine context type and set up mean/std comparison functions
+    if is_valid_dwi_stage(context):
+        def _assert_mean(roi, actual, expected):
+            default_key = f"b0_mean_rtol"
+            key = f"b0_{roi}_mean_rtol"
+            rtol = tolerances.get(key, tolerances[default_key])
+            assert np.isclose(actual, expected, rtol=rtol)
+        def _assert_std(roi, actual, expected):
+            default_key = f"b0_std_rtol"
+            key = f"b0_{roi}_std_rtol"
+            rtol = tolerances.get(key, tolerances[default_key])
+            assert np.isclose(actual, expected, rtol=rtol)
+    elif is_valid_diffusion_model_type(context):
+        def _assert_mean(roi, actual, expected):
+            default_key = f"fa_mean_atol"
+            key = f"fa_{roi}_mean_atol"
+            atol = tolerances.get(key, tolerances[default_key])
+            assert np.isclose(actual, expected, atol=atol)
+        def _assert_std(roi, actual, expected):
+            default_key = f"fa_std_atol"
+            key = f"fa_{roi}_std_atol"
+            atol = tolerances.get(key, tolerances[default_key])
+            assert np.isclose(actual, expected, atol=atol)
+    else:
+        raise ValueError(f"Invalid context: {context}")
+
     for roi, stats_values in stats.items():
         print(f"roi: {roi}")
-        if is_relative:
-            np_close = lambda a, b, rtol: np.isclose(a, b, rtol=rtol)
-        else:
-            np_close = lambda a, b, atol: np.isclose(a, b, atol=atol)
-       
         print(f"actual mean: {stats_values[0]}, expected mean: {expected_stats[roi][0]}")
-        assert True
-        # assert np_close(stats_values[0], expected_stats[roi][0], mean_tol)
+        _assert_mean(roi, stats_values[0], expected_stats[roi][0])
 
         if len(stats_values) > 1 and len(expected_stats[roi]) > 1:   # standard deviation exists
             print(f"actual std: {stats_values[1]}, expected std: {expected_stats[roi][1]}")
-            assert True
-            # assert np_close(stats_values[1], expected_stats[roi][1], std_tol)
+            _assert_std(roi, stats_values[1], expected_stats[roi][1])
+
 
 
 def create_binary_mask_from_fa(

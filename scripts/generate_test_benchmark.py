@@ -229,7 +229,7 @@ def parse_args() -> argparse.Namespace:
         for benchmark_id, (_, _, description) in sorted(available_benchmarks.items())
     ]
     benchmark_help = (
-        'List of benchmarks to run or "all" for all benchmarks. Available benchmarks:\n' +
+        'List of benchmarks to run or "all" for all benchmarks (default: "all"). Available benchmarks:\n' +
         '\n'.join(benchmark_descriptions)
     )
     
