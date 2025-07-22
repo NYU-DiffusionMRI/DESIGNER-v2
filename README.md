@@ -47,6 +47,12 @@ tmi \
 designer2_test.mif designer2_params_test
 ```
 
+## Run end-to-end tests on local machine
+
+Run below command in the project root. It automatically finds all test files (prefixed with `test_`) in the `tests/` directory and runs them in parallel. `--no-cleanup` option skips the cleanup of the scratch directories, which is useful for debugging.
+```bash
+pytest -s -v --dist loadscope -n auto [--no-cleanup] tests/
+```
 
 # References
 1. Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., … & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. *Neuroimage*, 183, 532-543.
