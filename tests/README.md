@@ -78,11 +78,18 @@ Test dependencies are automatically installed in the Docker dev container. If no
 pip install -r tests/requirements_test.txt
 ```
 
-### Running All Tests Parallelly
+### Running Tests Locally
 
 From the project root:
 ```bash
+# Run all tests
+pytest -s -v [--no-cleanup] tests/
+
+# Faster execution: run in parallel (recommended)
 pytest -s -v --dist loadscope -n $NUM_CORES [--no-cleanup] tests/
+
+# Run a specific test module (e.g., D1 MESO non-square)
+pytest -s -v tests/test_e2e_D1_meso_nonsquare.py
 ```
 - `--no-cleanup` option preserves temporary files (DESIGNER's `processing/` directory and TMI's `params/` directory) for debugging.
 - `$NUM_CORES` is the number of cores to use for parallel execution. Can be set to `auto` to use all available cores.
@@ -123,7 +130,7 @@ When DESIGNER or TMI app logic changes, benchmarks may need to be updated:
    python scripts/generate_test_benchmark.py --help
    ```
 
-## Adding a New Test Suite
+## Adding a New E2E Test Configuration
 
 1. Create test data in `tests/data/` (DWI files, ROI masks, etc. in **.nii.gz** format).
 2. Create factory function in `e2e_runner_factory.py` for the new test configuration.

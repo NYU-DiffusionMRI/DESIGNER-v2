@@ -47,11 +47,16 @@ tmi \
 designer2_test.mif designer2_params_test
 ```
 
-## Run end-to-end tests on local machine
+## Run End-to-End Tests Locally
 
 Run below command in the project root. It automatically finds all test files (prefixed with `test_`) in the `tests/` directory and runs them in parallel. `--no-cleanup` option skips the cleanup of the scratch directories, which is useful for debugging.
 ```bash
 pytest -s -v --dist loadscope -n auto [--no-cleanup] tests/
+```
+
+To run a specific test module (e.g., D1: MESO non-square), run the following command:
+```bash
+pytest -s -v [--no-cleanup] tests/test_e2e_D1_meso_nonsquare.py
 ```
 
 # References
