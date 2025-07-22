@@ -20,7 +20,7 @@ designer-v2 is made available as a [python package](https://pypi.org/project/des
 
 ## Example usage for "meso" data
 
-An example script can be found in the examples folder. It is copied here as well. Preprocessing and fitting are now split into two separate functions: designer for preprocessing and tmi for fitting. 
+An example script can be found in the examples folder. It is copied here as well. Preprocessing and fitting are now split into two separate functions: designer for preprocessing and tmi for fitting.
 
 ```
 #!/bin/bash
@@ -47,6 +47,70 @@ tmi \
 designer2_test.mif designer2_params_test
 ```
 
+## Development Setup
+
+### Using Dev Container
+
+DESIGNER-v2 provides a dev container setup with the following benefits:
+- **Consistent development environment**: Ensures all developers use the same setup, avoiding “it works on my machine” issues.
+- **Fast and accurate testing**: The dev container mirrors the production Docker environment, enabling DESIGNER commands to be tested without rebuilding the production image each time.
+
+This setup is ideal for contributors who want a reliable and reproducible development workflow.
+
+#### Prerequisites
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+2. Install [Visual Studio Code](https://code.visualstudio.com/) (or any other IDEs that support dev containers)
+3. Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) in VS Code
+
+#### Getting Started
+
+1. Open the project in VS Code. When it detects the Dev Container configuration, it will show a notification. Click "Reopen in Container" or:
+   - Press `Cmd/Ctrl + Shift + P` (or click "View" -> "Command Palette" in a top menu bar)
+   - Type "Dev Containers: Reopen in Container" and select it
+
+2. Wait for the container to build (this may take 10-15 minutes only for the first time). The container includes:
+   - Python 3.12 environment
+   - FSL, MRtrix3, and ANTs pre-installed
+   - All necessary DESIGNER dependencies
+
+3. Once inside the container, DESIGNER will be automatically installed in editable mode (`pip install -e .` defined in devcontainer.json). You can:
+   - Make code changes and test them immediately
+   - Use all DESIGNER commands from the VS Code integrated terminal (Press ``Ctrl + ` `` or click "View" -> "Terminal"). All changes will be reflected immediately.
+     ```bash
+     # Try DESIGNER commands
+     designer -help
+     ```
+
+#### Troubleshooting
+
+- If the container fails to build, try:
+  ```bash
+  docker system prune -a
+  ```
+  Then rebuild the container using VS Code.
+
+- If you need to rebuild the container (e.g., when dependencies are updated or devcontainer.json is modified):
+  - Press `Cmd/Ctrl + Shift + P` (or click "View" -> "Command Palette")
+  - Type "Dev Containers: Rebuild Container" and select it
+
+- If using SSH-configured repositories, `git push` from the dev container's terminal will fail (container cannot access local SSH config). Workarounds:
+  - Use VS Code's Source Control panel, or
+  - Use your local machine's terminal, or
+  - Follow instructions in [VS Code Dev Container Git Credentials](https://code.visualstudio.com/remote/advancedcontainers/sharing-git-credentials)
+
+#### Notes
+
+- **VS Code Extensions**:
+  - Default extensions are automatically installed based on devcontainer.json
+  - You can install additional extensions for your personal use (Manually installed extensions will be reset when rebuilding the container)
+
+#### Further References
+
+For more details about the development environment:
+- Container build configuration: [.devcontainer/Dockerfile](.devcontainer/Dockerfile)
+- Dev container settings: [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json)
+- Official VS Code Dev Containers documentation: [Developing inside a Container](https://code.visualstudio.com/docs/devcontainers/containers)
 
 # References
 1. Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., … & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. *Neuroimage*, 183, 532-543.
