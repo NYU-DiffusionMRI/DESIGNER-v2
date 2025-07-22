@@ -2,7 +2,7 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/python
 {
 	"build": {
-		// Path is relative to the devcontainer.json file.
+		// Path in "build" is relative to the devcontainer.json file.
 		"dockerfile": "Dockerfile",
 		"context": "..",
 		"args": {
@@ -19,7 +19,8 @@
 				"streetsidesoftware.code-spell-checker",
 				"ms-toolsai.jupyter",
 				"CircleCI.circleci",
-				"GitHub.copilot"
+				"GitHub.copilot",
+				"ms-azuretools.vscode-docker"
 			],
 			"settings": {
 				"terminal.integrated.defaultProfile.linux": "zsh",
@@ -31,7 +32,6 @@
 			}
 		}
 	},
-	// while this leave the code editable for instant feedback, it's important to note that the terminal session reflects these changes when running our 'designer' command
-	// otherwise, 'designer' command will be linked to the 'fsl designer' package
+	// Make sure to open a terminal after the command below has been run. Otherwise, PyPi packages will not be installed, and the "designer" command will be linked to the FSL's "designer" command.
 	"postCreateCommand": "pip install -e . && pip install -r tests/requirements_test.txt"
 }
