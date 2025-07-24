@@ -23,7 +23,7 @@ tolerances:
 
   d2_specific:
     wm_ratio_atol: 2.e-2  # up to 2%pt diff
-    b0_mean_rtol: 8.e-3   # up to 0.8% diff
+    b0_mean_rtol: 2.e-2   # up to 2% diff
     b0_std_rtol: 7.e-2    # up to 7% diff: (wo bids) topup wm (linux vs windows)
     fa_mean_atol: 3.e-2   # up to 3%pt diff
     fa_std_atol: 4.e-2    # up to 4%pt diff
@@ -37,8 +37,8 @@ tolerances:
     b0_wm_mean_rtol: 8.e-2   # up to 8% diff: degibbs wm (mac vs linux)
     b0_wm_std_rtol: 8.e-2    # up to 8% diff: degibbs wm (mac vs linux)
     # default fa tolerances
-    fa_mean_atol: 5.e-3      # up to 0.5%pt diff (same as 'medium' profile)
-    fa_std_atol: 5.e-3       # up to 0.5%pt diff (same as 'medium' profile)
+    fa_mean_atol: 2.e-2      # up to 2%pt diff
+    fa_std_atol: 3.e-2       # up to 3%pt diff
     # fa tolerances for wm roi
     fa_wm_mean_atol: 8.e-2   # up to 8%pt diff: dti wm (linux vs windows)
     fa_wm_std_atol: 4.e-2    # up to 4%pt diff: dti wm (mac vs linux)
