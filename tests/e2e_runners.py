@@ -180,6 +180,7 @@ class StatsComputer:
         self.valid_echo_times = valid_echo_times
         self.with_skull_stripping = with_skull_stripping
 
+        self.roi_dir = roi_dir
         self.processing_dir = self.e2e_runner.processing_dir
         self.params_dir = self.e2e_runner.params_dir
         self.scratch_dir = self.e2e_runner.scratch_dir
@@ -187,7 +188,7 @@ class StatsComputer:
         self.roi1 = Nifti1Image.from_filename(roi_dir / "roi1.nii.gz")
         self.roi2 = Nifti1Image.from_filename(roi_dir / "roi2.nii.gz")
         self.single_voxel = Nifti1Image.from_filename(roi_dir / "voxel.nii.gz")
-        
+
         self.echo_to_wm_roi: Optional[Dict[float, Nifti1Image]] = None
         self.brain_mask_path: Path = self.e2e_runner.brain_mask_path
 
@@ -203,16 +204,26 @@ class StatsComputer:
 
 
     def _generate_single_wm_roi(self) -> Nifti1Image:
+        wm_roi_path: Path = self.roi_dir / "wm_roi.nii.gz"
+
+        if wm_roi_path.exists():
+            return Nifti1Image.from_filename(wm_roi_path)
+
         return create_binary_mask_from_fa(self.e2e_runner.get_fa_path("dki"))
 
 
     def _generate_multi_echo_wm_roi(self) -> Tuple[Nifti1Image, Dict[float, Nifti1Image]]:
         assert self.valid_echo_times is not None
 
-        echo_to_wm_roi = {
-                te: create_binary_mask_from_fa(self.e2e_runner.get_fa_path("dki", te))
-                for te in self.valid_echo_times
-            }
+        echo_to_wm_roi: Dict[float, Nifti1Image] = {}
+
+        for te in self.valid_echo_times:
+            te_wm_roi_path: Path = self.roi_dir / f"wm_roi_te{te}.nii.gz"
+            if te_wm_roi_path.exists():
+                echo_to_wm_roi[te] = Nifti1Image.from_filename(te_wm_roi_path)
+            else:
+                echo_to_wm_roi[te] = create_binary_mask_from_fa(self.e2e_runner.get_fa_path("dki", te))
+
         merged_wm_roi = reduce(
             np.bitwise_or,
             [roi.get_fdata().astype(bool) for roi in echo_to_wm_roi.values()]
