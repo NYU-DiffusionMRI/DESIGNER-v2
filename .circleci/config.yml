@@ -1,7 +1,7 @@
 version: 2.1
 
 commands:
-  build_docker_image:
+  build_prod_docker_image:
     parameters:
       tag:
         type: string
@@ -9,61 +9,85 @@ commands:
       - run:
           name: Build and tag docker container
           command: |
-            docker build -t $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> .
+            docker build --platform=linux/amd64 --target production -t $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> .
       - run:
           name: Test designer command
           command: |
-            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> designer -version
+            docker run --rm $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> designer -version
       - run:
           name: Test fsl command
           command: |
-            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> flirt -version
+            docker run --rm $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> flirt -version
       - run:
           name: Test mrtrix command
           command: |
-            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
+            docker run --rm $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> mrinfo -version
       - run:
       # Although this command verifies that the N4BiasFieldCorrection binary is installed, it doesn’t necessarily guarantee that dwibiascorrect ants -bias ... will function correctly.
           name: Test ANTs N4BiasFieldCorrection command
           command: |
-            docker run -it $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> N4BiasFieldCorrection --help
+            docker run --rm $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> N4BiasFieldCorrection --help
 
 jobs:
-  build:
-    parameters:
-      tag:
-        type: string
-    docker:
-      - image: cimg/base:2024.01
-    steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true
-      - build_docker_image:
-          tag: <<parameters.tag>>
   build-and-push:
     parameters:
       tag:
         type: string
     docker:
       - image: cimg/base:2024.01
+    resource_class: medium
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-      - build_docker_image:
+      - build_prod_docker_image:
           tag: <<parameters.tag>>
       - run:
           name: push docker image
           command: |
             echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin
             docker push $DOCKERHUB_USERNAME/designer2:<<parameters.tag>>
+  
+  e2e-test:
+    parameters:
+      tag:
+        type: string
+    docker:
+      - image: cimg/base:2024.01
+    resource_class: large
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - build_prod_docker_image:
+          tag: <<parameters.tag>>
+      - run:
+          name: Build e2e test docker image
+          # cached materials from the previous step are used for e2e image build due to multi-stage build
+          command: |
+            docker build \
+              --platform=linux/amd64 \
+              --build-context test-context=./tests \
+              --target test \
+              -t designer2:test \
+              .
+      - run:
+          name: Run e2e tests
+          command: |
+            docker run --rm \
+              -w /app \
+              designer2:test \
+              pytest -s \
+              --dist loadscope \
+              -n 4 \
+              tests
+            # echo "Skipping e2e tests for now (save credits)"
 
 workflows:
-  build-on-commit:
+  build-and-run-e2e-test:
     jobs:
-      - build:
-          name: Build Commit
+      - e2e-test:
+          name: Build and run e2e test
           tag: commit-${CIRCLE_SHA1}
           filters:
             branches:
@@ -96,3 +120,4 @@ workflows:
               ignore: /.*/
           context:
             - DockerHub
+  

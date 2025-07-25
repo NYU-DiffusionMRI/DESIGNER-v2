@@ -78,10 +78,10 @@ docker build --platform=linux/amd64 -f docker_deps/Dockerfile_mrtrix -t nyudiffu
 
 ```sh
 # Build the test image with the updated dependency
-docker build --platform=linux/amd64 -t designer2:test .
+docker build --platform=linux/amd64 --target production -t designer2:local .
 
 # Run the container and verify functionality
-docker run --rm -it --platform=linux/amd64 designer2:test /bin/bash
+docker run --rm -it --platform=linux/amd64 designer2:local /bin/bash
 
 # Inside the container, run these commands to verify the installation:
 designer -version

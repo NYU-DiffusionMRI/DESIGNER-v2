@@ -112,6 +112,20 @@ For more details about the development environment:
 - Dev container settings: [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json)
 - Official VS Code Dev Containers documentation: [Developing inside a Container](https://code.visualstudio.com/docs/devcontainers/containers)
 
+
+## Run End-to-End Tests Locally
+
+Run below command in the project root. It automatically finds all test files (prefixed with `test_`) in the `tests/` directory and runs them in parallel. `--no-cleanup` option skips the cleanup of the scratch directories, which is useful for debugging.
+```bash
+pytest -s -v --dist loadscope -n auto [--no-cleanup] tests/
+```
+
+To run a specific test module (e.g., D1: MESO non-square), run the following command:
+```bash
+pytest -s -v [--no-cleanup] tests/test_e2e_D1_meso_nonsquare.py
+```
+
+
 # References
 1. Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., … & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. *Neuroimage*, 183, 532-543.
 

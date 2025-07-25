@@ -1,0 +1,22 @@
+# Exclude test suite
+tests/
+
+# Exclude scripts
+scripts/
+
+# Documentation
+docs/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.env
+venv/

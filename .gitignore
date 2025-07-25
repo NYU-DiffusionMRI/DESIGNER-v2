@@ -12,6 +12,8 @@ meta.yaml
 lib/rpg*
 build-wheels.sh
 
+tests/tmp_*/
+
 # Ignore FFTW build artifacts but keep source (in case when not using dev container)
 rpg_cpp/fftw-3.3.10/build/
 rpg_cpp/fftw-3.3.10/*.o
@@ -55,3 +57,7 @@ rpg_cpp/fftw-3.3.10/FFTW3ConfigVersion.cmake
 rpg_cpp/fftw-3.3.10/fftw3.pc
 rpg_cpp/fftw-3.3.10/fftw.pc
 rpg_cpp/fftw-3.3.10/fftw.pc.in
+
+# TMI tmp directories (for e2e tests)
+tmi-tmp-*/
+

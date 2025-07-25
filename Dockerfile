@@ -43,8 +43,8 @@ RUN wget http://www.fftw.org/fftw-3.3.10.tar.gz \
     && cd / \
     && rm -rf /tmp
 
-# Final stage
-FROM base
+# Production stage
+FROM base AS production
 COPY --from=fftw-builder /usr/local/lib/libfftw* /usr/local/lib/
 COPY --from=fftw-builder /usr/local/include/fftw3* /usr/local/include/
 
@@ -58,8 +58,8 @@ RUN pip install -r requirements.txt --no-cache-dir
 
 COPY . .
 
-# Run setup.py
-RUN python -m pip install .
+# Run setup.py (dependencies in requirements.txt are already installed)
+RUN python -m pip install . --no-deps
 
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
@@ -67,3 +67,11 @@ ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ant
 ENV LD_LIBRARY_PATH="/usr/local/mrtrix3_build/src:/usr/local/mrtrix3_build/core:/usr/local/ants/lib:/usr/local/lib"
 ENV PYTHONPATH="/usr/local/mrtrix3_build/lib"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
+
+# Test stage
+FROM production AS test
+
+# Copy only the tests directory from the test-context
+COPY --from=test-context . /app/tests
+
+RUN pip install -r tests/requirements_test.txt --no-cache-dir
