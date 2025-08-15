@@ -14,8 +14,6 @@ EXCLUDED_KEYS = {
     "thread", "threadName", "processName", "process", "args"
 }
 
-print("EDIT MODE ON - second edit")
-
 # Set up logging in JSON format
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -140,6 +138,8 @@ def execute(): #pylint: disable=unused-variable
     import numpy as np
     from ants import image_read
     import pandas as pd
+    # Added by Santiago
+    from nibabel import load as nibabel_load
 
     outdir = path.from_user(app.ARGS.output, True)
     if outdir[0]=="'" and outdir[-1]=="'":
@@ -183,11 +183,20 @@ def execute(): #pylint: disable=unused-variable
     bval = np.loadtxt('dwi.bval')
     logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
 
-    # Santiago edit DEBUG
     # Rotating bvecs from scanner frame (that is where they are saved) to DWI frame
-    # R = eye(3)
-    # bvec = R' * bvec
-    print("edit made")
+
+    # Load DWI header (nibabel provides a straightforward header)
+    img = nibabel_load('dwi.nii')
+    affine = img.affine  # 4x4 affine matrix
+
+    # Extract rotation part and normalize columns
+    R = affine[:3, :3]
+    R = R / np.linalg.norm(R, axis=0)  # normalize columns
+
+    # Rotate bvecs into voxel frame if doing voxel-wise fitting
+    bvecs_vox = R.T @ bvec  # shape: (3, N)
+    bvec = bvecs_vox
+    print("... bvectors rotated from scanner basis to brain basis")
 
 
     order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
