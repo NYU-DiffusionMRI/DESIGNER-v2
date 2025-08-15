@@ -14,7 +14,7 @@ EXCLUDED_KEYS = {
     "thread", "threadName", "processName", "process", "args"
 }
 
-print("EDIT MODE ON")
+print("EDIT MODE ON - second edit")
 
 # Set up logging in JSON format
 class JsonFormatter(logging.Formatter):
