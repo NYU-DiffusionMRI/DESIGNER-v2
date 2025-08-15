@@ -14,6 +14,8 @@ EXCLUDED_KEYS = {
     "thread", "threadName", "processName", "process", "args"
 }
 
+print("EDIT MODE ON")
+
 # Set up logging in JSON format
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -180,6 +182,13 @@ def execute(): #pylint: disable=unused-variable
     bvec = np.loadtxt('dwi.bvec')
     bval = np.loadtxt('dwi.bval')
     logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
+
+    # Santiago edit DEBUG
+    # Rotating bvecs from scanner frame (that is where they are saved) to DWI frame
+    # R = eye(3)
+    # bvec = R' * bvec
+    print("edit made")
+
 
     order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
     if order >= 2:
