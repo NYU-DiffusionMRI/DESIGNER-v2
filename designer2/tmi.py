@@ -175,11 +175,19 @@ def execute(): #pylint: disable=unused-variable
     dwi = nii.numpy()
     logger.info("DWI data converted to NIfTI format.")
 
-    # nii = image_read('dwi.nii')
-    # dwi = nii.numpy()
     bvec = np.loadtxt('dwi.bvec')
     bval = np.loadtxt('dwi.bval')
     logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
+
+    # Rotating bvecs from scanner frame (that is where they are saved) to DWI frame
+    R2 = np.array(nii.direction).reshape(4,4)[:3,:3] # rotation matrix is already normalized in ants
+    R2[:2,:] = -R2[:2,:] # ANTs (ITK): works in an LPS+ world (Left–Posterior–Superior)
+    bvecs_vox = R2.T @ bvec # shape: (3, n_volumes)
+    norms = np.linalg.norm(bvecs_vox, axis=0, keepdims=True)
+    norms[norms == 0] = 1
+    bvec = bvecs_vox / norms
+    print(R2.T)
+    print("... bvectors rotated from scanner basis to brain basis")
 
     order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
     if order >= 2:
@@ -249,6 +257,10 @@ def execute(): #pylint: disable=unused-variable
 
             dt_ = {}
             dt_dti_ = vectorize(dt_dti, mask)
+
+            # # forcing output to be in MRtrix3 format (for debugging)
+            # dt_dti_ = dt_dti_[:,:,:,(0,3,5,1,2,4)]/1000
+
             dt_['dt'] = dt_dti_
             save_params(dt_, nii, model='dti', outdir=outdir)
             logger.info("DT saved.")
