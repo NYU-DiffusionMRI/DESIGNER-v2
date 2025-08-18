@@ -258,8 +258,8 @@ def execute(): #pylint: disable=unused-variable
             dt_ = {}
             dt_dti_ = vectorize(dt_dti, mask)
 
-            # TEST
-            dt_dti_ = dt_dti_[:,:,:,(0,3,5,1,2,4)]/1000
+            # # forcing output to be in MRtrix3 format (for debugging)
+            # dt_dti_ = dt_dti_[:,:,:,(0,3,5,1,2,4)]/1000
 
             dt_['dt'] = dt_dti_
             save_params(dt_, nii, model='dti', outdir=outdir)
