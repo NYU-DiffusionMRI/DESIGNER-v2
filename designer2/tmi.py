@@ -328,6 +328,12 @@ def execute(): #pylint: disable=unused-variable
             x,y,z = np.where(akc_mask == 1)
             DT = vectorize(dt_dki, mask)
             DT[x,y,z,:] = dt_new.T
+
+            dt_ = {}
+            dt_['dt'] = DT
+            save_params(dt_, nii, model='dki_akc', outdir=outdir)
+            logger.info("DKT with AKC saved.")
+
             dt_dki = vectorize(DT, mask)
             akc_mask = dki.outlierdetection(dt_dki, mask, dir)
             akc_mask = vectorize(akc_mask, mask).astype(bool)
@@ -340,10 +346,24 @@ def execute(): #pylint: disable=unused-variable
             if app.ARGS.DTI:
                 dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
+
+                DT = vectorize(dt_dti, mask)
+                dt_ = {}
+                dt_['dt'] = DT
+                save_params(dt_, nii, model='dti_fitsmooth', outdir=outdir)
+                logger.info("DT with fit smooth saved.")
+
                 logger.info("DTI fit after smoothing completed.", extra={"dt_dti_shape": dt_dti.shape})
             if (app.ARGS.DKI or app.ARGS.WDKI):
                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+
+                DT = vectorize(dt_dki, mask)
+                dt_ = {}
+                dt_['dt'] = DT
+                save_params(dt_, nii, model='dki_fitsmooth', outdir=outdir)
+                logger.info("DKT with fit smooth saved.")
+
                 logger.info("DKI fit after smoothing completed.", extra={"dt_dki_shape": dt_dki.shape})
 
         if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
