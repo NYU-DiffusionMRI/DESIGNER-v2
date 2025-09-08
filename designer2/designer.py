@@ -151,7 +151,6 @@ def execute(): #pylint: disable=unused-variable
 
     # convert input data to .mif format and concatenate
     convert_input_data(dwi_metadata)
-    get_rpe_info(rpe_metadata)
 
     # get a table of b-shells, echo times, and b-shapes
     shell_table = create_shell_table(dwi_metadata)

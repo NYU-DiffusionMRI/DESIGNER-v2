@@ -275,7 +275,6 @@ def convert_to_float(frac_str):
             return whole - frac if whole < 0 else whole + frac
 
 
-def get_rpe_info(rpe_metadata): 
     """
     Gets stride, phase encoding direction, partial Fourier, and TE from header.
     Updates rpe_metadata dict in place.
