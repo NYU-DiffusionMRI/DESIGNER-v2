@@ -126,12 +126,32 @@ def execute(): #pylint: disable=unused-variable
     # create dict containing metadata from either user input args or bids .json sidecars
     dwi_metadata = get_input_info(
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
+
+    # if rpe_pair is selected then get metadata for the rpe_data
+    if getattr(app.ARGS, "rpe_pair", None):
+        rpe_path = app.ARGS.rpe_pair
+        # Strip off .gz if present, then .nii
+        if rpe_path.endswith(".nii.gz"):
+            base = rpe_path[:-7]   # remove .nii.gz
+        elif rpe_path.endswith(".nii"):
+            base = rpe_path[:-4]   # remove .nii
+        else:
+            base, _ = os.path.splitext(rpe_path)
+
+        rpe_bval = base + ".bval"
+        rpe_bvec = base + ".bvec"
+        rpe_json = base + ".json"
+
+        rpe_metadata = get_input_info(
+             rpe_path, rpe_bval, rpe_bvec, rpe_json
+        )
     
     # ensure inputs are reasonable for subsequent dwi processing
     # assert_inputs(dwi_metadata, app.ARGS.pe_dir, app.ARGS.pf)
 
     # convert input data to .mif format and concatenate
     convert_input_data(dwi_metadata)
+    get_rpe_info(rpe_metadata)
 
     # get a table of b-shells, echo times, and b-shapes
     shell_table = create_shell_table(dwi_metadata)
@@ -167,8 +187,12 @@ def execute(): #pylint: disable=unused-variable
         run_patch2self()
 
     # rpg gibbs artifact correction
-    if app.ARGS.degibbs:
-        run_degibbs(dwi_metadata['pf'], dwi_metadata['pe_dir'],dwi_metadata['stride'])
+    # if app.ARGS.degibbs:
+    #     run_degibbs(dwi_metadata['pf'], dwi_metadata['pe_dir'],dwi_metadata['stride'])
+    
+    # Always run degibbs on main input if --degibbs is set
+    if getattr(app.ARGS, "degibbs", False):
+        run_degibbs_flexible("working.mif", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="working")
 
     # rigid alignment of b0s from separate input series
     if app.ARGS.pre_align:
