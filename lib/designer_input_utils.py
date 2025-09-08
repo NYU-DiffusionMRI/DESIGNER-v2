@@ -274,46 +274,6 @@ def convert_to_float(frac_str):
             frac = float(num) / float(denom)
             return whole - frac if whole < 0 else whole + frac
 
-
-    """
-    Gets stride, phase encoding direction, partial Fourier, and TE from header.
-    Updates rpe_metadata dict in place.
-    Converts rpe image into mif file
-
-    """
-
-    from mrtrix3 import run, image, app
-    import numpy as np
-    import json
-
-    dwi_n_list = rpe_metadata['dwi_list']
-    dwi_ext = rpe_metadata['dwi_ext']
-
-    rpe_file = f"{dwi_n_list[0]}{dwi_ext[0]}"
-    # Get strides
-    stride_info = run.command(f'mrinfo -strides {rpe_file}')
-    orig_stride = ','.join(stride_info.stdout.strip().split(' '))
-    temp = orig_stride.split(',')
-    orig_stride_3dim = ','.join(temp[:-1])
-    rpe_metadata['stride'] = orig_stride
-    rpe_metadata['stride_3dim'] = orig_stride_3dim
-
-    # Get header info
-    with open(f'{dwi_n_list[0]}.json', 'r') as f:
-        meta = json.load(f)
-    rpe_metadata['pe_dir'] = meta.get('PhaseEncodingDirection')
-    rpe_metadata['pf'] = meta.get('PartialFourier')
-    rpe_metadata['TE'] = meta.get('EchoTime')
-
-    # convert rpe image to mif file
-    cmd = ('mrconvert -strides "%s" -fslgrad "%s" "%s" -json_import "%s" "%s" "%s/rpe.mif"' % 
-                        (orig_stride, rpe_metadata['bvecs'][0], rpe_metadata['bvals'][0], rpe_metadata['bidslist'][0], rpe_file, app.SCRATCH_DIR))
-    
-    run.command(cmd)
-
-    return rpe_metadata
-
-
 def convert_input_data(dwi_metadata):
     """
     convert input data to .mif mrtrix format
