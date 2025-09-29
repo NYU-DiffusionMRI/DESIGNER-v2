@@ -6,6 +6,7 @@ from logging import StreamHandler, FileHandler
 
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
 from lib.designer_fit_wrappers import refit_or_smooth, save_params
+from lib.io import load_mrtrix
 
 # List of keys to exclude from logs
 EXCLUDED_KEYS = {
@@ -136,7 +137,6 @@ def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, path, run, MRtrixError #pylint: disable=no-name-in-module, import-outside-toplevel
     import lib.tensor as tensor
     import numpy as np
-    from ants import image_read
     import pandas as pd
 
     outdir = path.from_user(app.ARGS.output, True)
@@ -170,15 +170,12 @@ def execute(): #pylint: disable=unused-variable
 
     app.goto_scratch_dir()
 
-    run.command('mrconvert dwi.mif -export_grad_fsl dwi.bvec dwi.bval dwi.nii', show=False)
-    nii = image_read('dwi.nii')
-    dwi = nii.numpy()
-    logger.info("DWI data converted to NIfTI format.")
-
-    # nii = image_read('dwi.nii')
-    # dwi = nii.numpy()
-    bvec = np.loadtxt('dwi.bvec')
-    bval = np.loadtxt('dwi.bval')
+    mif = load_mrtrix('dwi.mif')
+    dwi = mif.data
+    grad_mif = mif.grad
+    bval = grad_mif[:,3]
+    bvec = grad_mif[:,:3].T
+    
     logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
 
     order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
@@ -190,8 +187,12 @@ def execute(): #pylint: disable=unused-variable
     logger.info("Gradient table created.", extra={"grad_shape": grad.shape})
 
     if app.ARGS.mask:
-        mask = image_read(path.from_user(app.ARGS.mask)).numpy()
-        logger.info("Loaded mask from file.", extra={"mask_shape": mask.shape})
+        try:
+            mask = load_mrtrix(path.from_user(app.ARGS.mask)).data
+            logger.info("Loaded mask from file.", extra={"mask_shape": mask.shape})
+        except Exception as e:
+            logger.error("Failed to load mask from file (mask must be in .mif format).", extra={"error": str(e)})
+            raise MRtrixError("Failed to load mask from file (mask must be in .mif format).")
     else:
         mask = np.ones(dwi.shape[:-1])
         logger.info("No mask provided. Using default mask with all ones.", extra={"mask_shape": mask.shape})
@@ -249,8 +250,12 @@ def execute(): #pylint: disable=unused-variable
 
             dt_ = {}
             dt_dti_ = vectorize(dt_dti, mask)
+
+            # convert to mrtrix convention
+            dt_dti_ = dt_dti_[:,:,:,[0,3,5,1,2,4]] / 1000
+
             dt_['dt'] = dt_dti_
-            save_params(dt_, nii, model='dti', outdir=outdir)
+            save_params(dt_, mif, model='dti', outdir=outdir)
             logger.info("DT saved.")
 
         if app.ARGS.DKI or app.ARGS.WDKI:
@@ -292,8 +297,12 @@ def execute(): #pylint: disable=unused-variable
 
                 dt_ = {}
                 dt_dki_ = vectorize(dt_dki, mask)
+
+                # dt tensors in mrtrix convention
+                dt_dki_ = dt_dki_[:,:,:,[0,3,5,1,2,4]] / 1000
+
                 dt_['dt'] = dt_dki_
-                save_params(dt_, nii, model='dki', outdir=outdir)
+                save_params(dt_, mif, model='dki', outdir=outdir)
                 logger.info("DKT saved.")
 
         if app.ARGS.polyreg:
@@ -361,37 +370,37 @@ def execute(): #pylint: disable=unused-variable
                 trace[:,ib] = np.exp(np.ma.mean(np.ma.log(masked_data), axis=0))
             trace = tensor.vectorize(trace.T, mask)
             params_trace = {'trace': trace}
-            save_params(params_trace, nii, model='allshells', outdir=outdir)
+            save_params(params_trace, mif, model='allshells', outdir=outdir)
             logger.info("Trace parameters saved for all shells.", extra={"trace_shape": trace.shape})
 
         if app.ARGS.DTI:
             logger.info("Extracting and saving DTI maps...")
             params_dti = dti.extract_parameters(dt_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
-            save_params(params_dti, nii, model='dti', outdir=outdir)
+            save_params(params_dti, mif, model='dti', outdir=outdir)
             logger.info("DTI maps saved.")
 
         if app.ARGS.DKI:
             logger.info("Extracting and saving DKI maps...")
             params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-            save_params(params_dki, nii, model='dki', outdir=outdir)
+            save_params(params_dki, mif, model='dki', outdir=outdir)
             logger.info("DKI maps saved.")
 
         if app.ARGS.polyreg:
             if app.ARGS.WDKI:
                 logger.info("Extracting and saving polyreg WDKI maps...")
                 params_dki_poly = dki.extract_parameters(dt_poly_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
-                save_params(params_dki_poly, nii, model='wdki_poly', outdir=outdir)
+                save_params(params_dki_poly, mif, model='wdki_poly', outdir=outdir)
                 logger.info("Polyreg WDKI maps saved.")
             if app.ARGS.DTI:
                 logger.info("Extracting and saving polyreg DTI maps...")
                 params_dti_poly = dti.extract_parameters(dt_poly_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
-                save_params(params_dti_poly, nii, model='dti_poly', outdir=outdir)
+                save_params(params_dti_poly, mif, model='dti_poly', outdir=outdir)
                 logger.info("Polyreg DTI maps saved.")
 
         if app.ARGS.WDKI:
             logger.info("Extracting and saving WDKI maps...")
             params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
-            save_params(params_dwi, nii, model='wdki', outdir=outdir)
+            save_params(params_dwi, mif, model='wdki', outdir=outdir)
             logger.info("WDKI maps saved.")
     else:
 
@@ -524,37 +533,37 @@ def execute(): #pylint: disable=unused-variable
                     trace[:,ib] = np.exp(np.ma.mean(np.ma.log(masked_data), axis=0))
                 trace = tensor.vectorize(trace.T, mask)
                 params_trace = {'trace': trace}
-                save_params(params_trace, nii, model='te'+str(te)+'_shells', outdir=outdir)
+                save_params(params_trace, mif, model='te'+str(te)+'_shells', outdir=outdir)
                 logger.info(f"Trace parameters saved for TE={te}.")
 
             if app.ARGS.DTI:
                 logger.info(f"Extracting and saving DTI maps for TE={te}...")
                 params_dti = dti.extract_parameters(dt_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
-                save_params(params_dti, nii, model='dti_te'+str(te), outdir=outdir)
+                save_params(params_dti, mif, model='dti_te'+str(te), outdir=outdir)
                 logger.info(f"DTI maps saved for TE={te}.")
 
             if app.ARGS.DKI:
                 logger.info(f"Extracting and saving DKI maps for TE={te}...")
                 params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-                save_params(params_dki, nii, model='dki_te'+str(te), outdir=outdir)
+                save_params(params_dki, mif, model='dki_te'+str(te), outdir=outdir)
                 logger.info(f"DKI maps saved for TE={te}.")
 
             if app.ARGS.polyreg:
                 if app.ARGS.WDKI:
                     logger.info(f"Extracting and saving polyreg WDKI maps for TE={te}...")
                     params_dki_poly = dki.extract_parameters(dt_poly_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
-                    save_params(params_dki_poly, nii, model='wdki_poly_te'+str(te), outdir=outdir)
+                    save_params(params_dki_poly, mif, model='wdki_poly_te'+str(te), outdir=outdir)
                     logger.info(f"Polyreg WDKI maps saved for TE={te}.")
                 if app.ARGS.DTI:
                     logger.info(f"Extracting and saving polyreg DTI maps for TE={te}...")
                     params_dti_poly = dti.extract_parameters(dt_poly_dti, b_dti, mask, extract_dti=True, extract_dki=False, fit_w=False)
-                    save_params(params_dti_poly, nii, model='dti_poly_te'+str(te), outdir=outdir)
+                    save_params(params_dti_poly, mif, model='dti_poly_te'+str(te), outdir=outdir)
                     logger.info(f"Polyreg DTI maps saved for TE={te}.")
 
             if app.ARGS.WDKI:
                 logger.info(f"Extracting and saving WDKI maps for TE={te}...")
                 params_dwi = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
-                save_params(params_dwi, nii, model='wdki_te'+str(te), outdir=outdir)
+                save_params(params_dwi, mif, model='wdki_te'+str(te), outdir=outdir)
                 logger.info(f"WDKI maps saved for TE={te}.")
 
     # if app.ARGS.WMTI:
@@ -599,8 +608,12 @@ def execute(): #pylint: disable=unused-variable
                 logger.warning("No sigma map provided. SMI may be poorly conditioned.")
                 sigma = None
             else:
-                sigma = image_read(path.from_user(app.ARGS.sigma)).numpy()
-                logger.info("Sigma map loaded.", extra={"sigma_shape": sigma.shape})
+                try:
+                    sigma = load_mrtrix(path.from_user(app.ARGS.sigma)).numpy()
+                    logger.info("Sigma map loaded.", extra={"sigma_shape": sigma.shape})
+                except Exception as e:
+                    logger.error("Failed to load sigma map.", extra={"error": str(e)})
+                    raise MRtrixError("Failed to load sigma map (sigma must be in .mif format).")
 
             if app.ARGS.compartments:
                 compartments = app.ARGS.compartments
@@ -649,7 +662,7 @@ def execute(): #pylint: disable=unused-variable
                 params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for multi-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})
                 
-                save_params(params_smi, nii, model='smi', outdir=outdir)
+                save_params(params_smi, mif, model='smi', outdir=outdir)
                 logger.info("SMI parameters saved for multi-TE/beta data.", extra={"outdir": outdir})
             else:
                 if app.ARGS.load_prior:
@@ -671,7 +684,7 @@ def execute(): #pylint: disable=unused-variable
                 params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for single-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})
 
-                save_params(params_smi, nii, model='smi', outdir=outdir)
+                save_params(params_smi, mif, model='smi', outdir=outdir)
                 logger.info("SMI parameters saved for single-TE/beta data.", extra={"outdir": outdir})
     
     logger.info("Execution completed successfully.")

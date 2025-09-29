@@ -77,21 +77,25 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores
     return dwi_new
 
 def save_params(paramDict, niiex, model, outdir):
-    from ants import from_numpy, image_write
+    import lib.io as mio
     import os
 
     params = paramDict.keys()
     for key in params:
         if 'L' in key:
-            outpath = os.path.join(r"{}".format(outdir), ("%s.nii" % (key)))
+            outpath = os.path.join(r"{}".format(outdir), ("%s.mif" % (key)))
         else:
-            outpath = os.path.join(r"{}".format(outdir), ("%s_%s.nii" % (key, model)))
+            outpath = os.path.join(r"{}".format(outdir), ("%s_%s.mif" % (key, model)))
 
         if not os.path.exists(outpath):
             vol = paramDict[key]
             ndims = vol.ndim
 
-            out = from_numpy(
-            paramDict[key], origin=niiex.origin[:ndims], spacing=niiex.spacing[:ndims], direction=niiex.direction[:ndims,:])
-            image_write(out, outpath)
+            mif = mio.Image(
+                data = paramDict[key],
+                vox = niiex.vox,
+                transform = niiex.transform,
+                grad = niiex.grad
+            )
+            mif.save(outpath)
 
