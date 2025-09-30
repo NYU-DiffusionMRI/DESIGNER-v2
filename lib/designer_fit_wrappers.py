@@ -1,9 +1,10 @@
-
+import lib.io as mio
+import nibabel as nib
+import numpy as np
+import os
 
 def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoothlevel):
-    import numpy as np
-    
-    
+        
     k = kernel // 2
     x = inds[0]
     y = inds[1]
@@ -53,7 +54,6 @@ def parallel_outlier_smooth(inds, kernel, outlier_locations, dwi_norm, dwi, smoo
 
 def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores=-3):
     from joblib import Parallel, delayed
-    import numpy as np
 
     if mask is None:
         outinds = np.array(np.where(outlier_locations == 1))
@@ -76,10 +76,8 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores
 
     return dwi_new
 
-def save_params(paramDict, niiex, model, outdir):
-    import lib.io as mio
-    import os
-
+def save_params(paramDict, niiex, model, outdir, format='nifti'):
+    
     params = paramDict.keys()
     for key in params:
         if 'L' in key:
@@ -97,5 +95,17 @@ def save_params(paramDict, niiex, model, outdir):
                 transform = niiex.transform,
                 grad = niiex.grad
             )
-            mif.save(outpath)
 
+            if format == 'mif':
+                mif.save(outpath)
+
+            elif format == 'nifti':
+
+                v = np.array(mif.vox)
+                if ndims == 4:
+                    v[-1] = 1
+                elif ndims == 3:
+                    v = np.append(v, 1)
+                
+                nii = nib.Nifti1Image(mif.data, mif.transform @ np.diag(v))
+                nib.save(nii, outpath.replace('.mif', '.nii'))
