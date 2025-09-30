@@ -187,12 +187,12 @@ def execute(): #pylint: disable=unused-variable
     logger.info("Gradient table created.", extra={"grad_shape": grad.shape})
 
     if app.ARGS.mask:
-        try:
+        if not path.from_user(app.ARGS.mask).endswith('.mif'):
+            run.command('mrconvert %s mask.mif -force' % path.from_user(app.ARGS.mask), show=False) 
+            mask = load_mrtrix('mask.mif').data
+        else:
             mask = load_mrtrix(path.from_user(app.ARGS.mask)).data
-            logger.info("Loaded mask from file.", extra={"mask_shape": mask.shape})
-        except Exception as e:
-            logger.error("Failed to load mask from file (mask must be in .mif format).", extra={"error": str(e)})
-            raise MRtrixError("Failed to load mask from file (mask must be in .mif format).")
+
     else:
         mask = np.ones(dwi.shape[:-1])
         logger.info("No mask provided. Using default mask with all ones.", extra={"mask_shape": mask.shape})
@@ -608,12 +608,11 @@ def execute(): #pylint: disable=unused-variable
                 logger.warning("No sigma map provided. SMI may be poorly conditioned.")
                 sigma = None
             else:
-                try:
-                    sigma = load_mrtrix(path.from_user(app.ARGS.sigma)).numpy()
-                    logger.info("Sigma map loaded.", extra={"sigma_shape": sigma.shape})
-                except Exception as e:
-                    logger.error("Failed to load sigma map.", extra={"error": str(e)})
-                    raise MRtrixError("Failed to load sigma map (sigma must be in .mif format).")
+                if not path.from_user(app.ARGS.sigma).endswith('.mif'):
+                    run.command('mrconvert %s sigma.mif -force' % path.from_user(app.ARGS.sigma), show=False) 
+                    sigma = load_mrtrix('sigma.mif').data
+                else:
+                    sigma = load_mrtrix(path.from_user(app.ARGS.sigma)).data
 
             if app.ARGS.compartments:
                 compartments = app.ARGS.compartments
