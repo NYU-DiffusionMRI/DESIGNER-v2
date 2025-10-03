@@ -299,9 +299,13 @@ def execute(): #pylint: disable=unused-variable
                 dt_dki_ = vectorize(dt_dki, mask)
 
                 # dt tensors in mrtrix convention
-                dt_dki_ = dt_dki_[:,:,:,[0,3,5,1,2,4]] / 1000
+                reorder_dti = [0,3,5,1,2,4]
+                reorder_dki = [0,10,14,1,2,6,9,11,13,3,5,12,4,7,8]
+                reorder_inds = np.hstack((reorder_dti, [i+6 for i in reorder_dki]))
+                dt_dki_1 = dt_dki_[:,:,:,[0,3,5,1,2,4]] / 1000
+                dt_dki_2 = dt_dki_[:,:,:,reorder_inds] / 1000
 
-                dt_['dt'] = dt_dki_
+                dt_['dt'] = dt_dki_2
                 save_params(dt_, mif, model='dki', outdir=outdir)
                 logger.info("DKT saved.")
 
