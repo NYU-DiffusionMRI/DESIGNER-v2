@@ -115,21 +115,28 @@ class SMI(object):
             self.sigma = snd.gaussian_filter(std_dev, sigma=1)
             warnings.warn('sigma was not an input (not recommended)')
         
+    
     def set_bvals_bvecs(self, bval, bvec):
         """
         Function to add gradient table to the class. Gradient magnitude and direction
         are required inputs.
         """
-        if not bval.any() or not bvec.any():
-            raise Exception('b and dirs are compulsory arguments for SMI to run')
-        else:
-            self.b = bval
-            self.dirs = bvec
 
-            if np.max(self.b) < 500:
-                self.flag_microstructure_units = 1
-            else:
-                self.flag_microstructure_units = 0
+        # if completely missing / empty arrays
+        if bval is None or bvec is None or bval.size == 0 or bvec.size == 0:
+            raise Exception('b and dirs are compulsory arguments for SMI to run')
+
+        # If bvals are all zeros (only b0s)
+        if not np.any(bval):
+            warnings.warn("Only b0s detected in bvals — continuing without diffusion weighting")
+
+        self.b = bval
+        self.dirs = bvec
+
+        if np.max(self.b) < 500:
+            self.flag_microstructure_units = 1
+        else:
+            self.flag_microstructure_units = 0
                 
 
     def set_bshape(self, beta):
