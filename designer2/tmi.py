@@ -608,6 +608,7 @@ def execute(): #pylint: disable=unused-variable
         from lib.smi import SMI
         import warnings
         import scipy.io as sio
+        from mrtrix3 import path
         warnings.simplefilter('always', UserWarning) 
 
         logger.info("Starting SMI fitting process...")
@@ -665,7 +666,7 @@ def execute(): #pylint: disable=unused-variable
             if multi_te_beta:
                 if app.ARGS.load_prior:
                     logger.info("SMI loading user input training prior.")
-                    mat = sio.loadmat(app.ARGS.load_prior)
+                    mat = sio.loadmat(path.from_user(app.ARGS.load_prior))
                     array_name=list(mat.keys())
                     prior = mat[array_name[-1]]
                     smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
@@ -686,7 +687,7 @@ def execute(): #pylint: disable=unused-variable
             else:
                 if app.ARGS.load_prior:
                     logger.info("SMI loading user input training prior.")
-                    mat = sio.loadmat(app.ARGS.load_prior)
+                    mat = sio.loadmat(path.from_user(app.ARGS.load_prior))
                     array_name=list(mat.keys())
                     prior = mat[array_name[-1]]
                     smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
