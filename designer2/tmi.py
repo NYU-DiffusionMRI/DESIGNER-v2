@@ -429,8 +429,8 @@ def execute(): #pylint: disable=unused-variable
 
             te_idx = (dwi_metadata['echo_time_per_volume'] == te) & (dwi_metadata['bshape_per_volume'] == 1)
             dwi = dwi_orig[:,:,:,te_idx]
-            bval = bval_orig[te_idx]
-            bvec = bvec_orig[:,te_idx]
+            bval_te = bval_orig[te_idx]
+            bvec_te = bvec_orig[:,te_idx]
 
             if app.ARGS.DTI:
 
@@ -439,10 +439,10 @@ def execute(): #pylint: disable=unused-variable
                     continue
                 
                 logger.info(f"Starting DTI fit for TE={te}...")
-                dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= 1.5))
+                dtishell = (bval_te <= 0.15) | ((bval_te > .5) & (bval_te <= 1.5))
                 dwi_dti = dwi[:,:,:,dtishell]
-                bval_dti = bval[dtishell]
-                bvec_dti = bvec[:,dtishell]
+                bval_dti = bval_te[dtishell]
+                bvec_dti = bvec_te[:,dtishell]
                 grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
                 dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
                 dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
@@ -462,9 +462,9 @@ def execute(): #pylint: disable=unused-variable
                 else:
                     maxb = 3.01
 
-                dwi_dki = dwi[:,:,:,bval < maxb]
-                bvec_dki = bvec[:,bval < maxb]
-                bval_dki = bval[bval < maxb]
+                dwi_dki = dwi[:,:,:,bval_te < maxb]
+                bvec_dki = bvec_te[:,bval_te < maxb]
+                bval_dki = bval_te[bval_te < maxb]
 
                 bvec_dki_temp=bvec_dki[:,bval_dki > 0.1]
                 ndir=np.shape(np.unique(bvec_dki_temp,axis=1))[1]
@@ -608,6 +608,7 @@ def execute(): #pylint: disable=unused-variable
         from lib.smi import SMI
         import warnings
         import scipy.io as sio
+        from mrtrix3 import path
         warnings.simplefilter('always', UserWarning) 
 
         logger.info("Starting SMI fitting process...")
@@ -665,7 +666,7 @@ def execute(): #pylint: disable=unused-variable
             if multi_te_beta:
                 if app.ARGS.load_prior:
                     logger.info("SMI loading user input training prior.")
-                    mat = sio.loadmat(app.ARGS.load_prior)
+                    mat = sio.loadmat(path.from_user(app.ARGS.load_prior))
                     array_name=list(mat.keys())
                     prior = mat[array_name[-1]]
                     smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
@@ -686,7 +687,7 @@ def execute(): #pylint: disable=unused-variable
             else:
                 if app.ARGS.load_prior:
                     logger.info("SMI loading user input training prior.")
-                    mat = sio.loadmat(app.ARGS.load_prior)
+                    mat = sio.loadmat(path.from_user(app.ARGS.load_prior))
                     array_name=list(mat.keys())
                     prior = mat[array_name[-1]]
                     smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
