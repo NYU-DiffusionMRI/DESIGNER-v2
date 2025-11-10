@@ -178,6 +178,10 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.ants_motion_correction:
         run_ants_moco(dwi_metadata)
 
+    # normalize separate input series (voxelwise) such that b0 images are properly scaled
+    if app.ARGS.normalize:
+        run_normalization(dwi_metadata)
+
     # eddy current, succeptibility, motion correction
     if app.ARGS.eddy:
         run_eddy(shell_table, dwi_metadata)
@@ -199,9 +203,6 @@ def execute(): #pylint: disable=unused-variable
     elif app.ARGS.rician and not app.ARGS.phase:
         run_rice_bias_correct(dwi_metadata)
 
-    # normalize separate input series (voxelwise) such that b0 images are properly scaled
-    if app.ARGS.normalize:
-        run_normalization(dwi_metadata)
 
     run.command('mrinfo -export_grad_fsl dwi_designer.bvec dwi_designer.bval working.mif', show=False)
 
