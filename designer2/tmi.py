@@ -340,7 +340,7 @@ def execute(): #pylint: disable=unused-variable
 
             dt_ = {}
             dt_['dt'] = DT
-            save_params(dt_, nii, model='dki_akc', outdir=outdir)
+            save_params(dt_, mif, model='dki_akc', outdir=outdir)
             logger.info("DKT with AKC saved.")
 
             dt_dki = vectorize(DT, mask)
@@ -359,7 +359,7 @@ def execute(): #pylint: disable=unused-variable
                 DT = vectorize(dt_dti, mask)
                 dt_ = {}
                 dt_['dt'] = DT
-                save_params(dt_, nii, model='dti_fitsmooth', outdir=outdir)
+                save_params(dt_, mif, model='dti_fitsmooth', outdir=outdir)
                 logger.info("DT with fit smooth saved.")
 
                 logger.info("DTI fit after smoothing completed.", extra={"dt_dti_shape": dt_dti.shape})
@@ -370,7 +370,7 @@ def execute(): #pylint: disable=unused-variable
                 DT = vectorize(dt_dki, mask)
                 dt_ = {}
                 dt_['dt'] = DT
-                save_params(dt_, nii, model='dki_fitsmooth', outdir=outdir)
+                save_params(dt_, mif, model='dki_fitsmooth', outdir=outdir)
                 logger.info("DKT with fit smooth saved.")
 
                 logger.info("DKI fit after smoothing completed.", extra={"dt_dki_shape": dt_dki.shape})
