@@ -406,7 +406,7 @@ def generate_parser():
         type=str,
         nargs='?',
         default='cordero-grande',
-        help='MP cutoff algorithm. veraart or coredero-grande or jespersen. (default=jespersen)'
+        help='MP cutoff algorithm. veraart or coredero-grande or jespersen. (default=%(default)s)'
     )
 
     return parser
