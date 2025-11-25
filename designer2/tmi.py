@@ -127,6 +127,8 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
     smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for SMI polynomial regression. must be 0,2,4, or 6.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
+    smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
+
 
     #wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
     #wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
@@ -664,19 +666,36 @@ def execute(): #pylint: disable=unused-variable
                 echo_times *= 1000
 
             if multi_te_beta:
+                #if user is providing their own prior
                 if app.ARGS.load_prior:
                     logger.info("SMI loading user input training prior.")
-                    mat = sio.loadmat(path.from_user(app.ARGS.load_prior))
-                    array_name=list(mat.keys())
-                    prior = mat[array_name[-1]]
-                    smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
+                    prior_file = path.from_user(app.ARGS.load_prior)
+
+                #if user specifies a prior
+                elif app.ARGS.select_prior:
+                    logger.info("SMI loading user specified training prior.", extra={"prior": app.ARGS.select_prior})
+                    dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    prior_file = os.path.join(dwd,'constant',app.ARGS.select_prior)
+                    
+                #Use default priors if not specified
+                else:
+                    if 'FW' in compartments:
+                        logger.info("SMI loading training prior.", extra={"prior": 'SMI_Gaussian_wFWPrior.mat'})
+                        dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        prior_file = os.path.join(dwd,'constant','SMI_Gaussian_wFWPrior.mat')
+                    else:
+                        logger.info("SMI loading training prior.", extra={"prior": 'SMI_Gaussian_noFWPrior.mat'})
+                        dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        prior_file = os.path.join(dwd,'constant','SMI_Gaussian_noFWPrior.mat')
+                
+                mat = sio.loadmat(prior_file)
+                array_name=list(mat.keys())
+                prior = mat[array_name[-1]]
+                smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
-                else:
-                    smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
-                            compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'])
                 
+
                 logger.info("SMI model initialized for multi-TE/beta data.")
                 
                 params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
@@ -685,19 +704,41 @@ def execute(): #pylint: disable=unused-variable
                 save_params(params_smi, mif, model='smi', outdir=outdir)
                 logger.info("SMI parameters saved for multi-TE/beta data.", extra={"outdir": outdir})
             else:
+
+                #if user is providing their own prior
                 if app.ARGS.load_prior:
                     logger.info("SMI loading user input training prior.")
-                    mat = sio.loadmat(path.from_user(app.ARGS.load_prior))
-                    array_name=list(mat.keys())
-                    prior = mat[array_name[-1]]
-                    smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
+                    prior_file = path.from_user(app.ARGS.load_prior)
+
+                #if user specifies a prior
+                elif app.ARGS.select_prior:
+                    logger.info("SMI loading user specified training prior.", extra={"prior": app.ARGS.select_prior})
+                    dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    prior_file = os.path.join(dwd,'constant',app.ARGS.select_prior)
+                    
+                #Use default priors if not specified
+                else:
+                    if 'FW' in compartments:
+                        logger.info("SMI loading training prior.", extra={"prior": 'SMI_Gaussian_wFWPrior.mat'})
+                        dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        prior_file = os.path.join(dwd,'constant','SMI_Gaussian_wFWPrior.mat')
+                    else:
+                        logger.info("SMI loading training prior.", extra={"prior": 'SMI_Gaussian_noFWPrior.mat'})
+                        dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                        prior_file = os.path.join(dwd,'constant','SMI_Gaussian_noFWPrior.mat')
+                
+                mat = sio.loadmat(prior_file)
+                array_name=list(mat.keys())
+                prior = mat[array_name[-1]]
+                
+                smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
 
-                else:
-                    smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
-                            compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'])
+                # else:
+                #     smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
+                #             compartments=compartments, echo_time=echo_times,
+                #             beta=dwi_metadata['bshape_per_volume'])
                 
                 logger.info("SMI model initialized for single-TE/beta data.")
 
