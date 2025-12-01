@@ -80,6 +80,13 @@ By default, if none of the below options are used, TMI will not estimate paramet
 - SMI compartments (IAS, EAS, and FW) expressed as a comma separated string.
 - default: `IAS,EAS`
 
+### `-select_prior tag.mat` (choose from 4 predetermined training data files)
+- SMI training data options: `SMI_Gaussian_noFWPrior.mat`, `SMI_Gaussian_wFWPrior.mat`, `SMI_Uniform_noFWPrior.mat`, or `SMI_Uniform_wFWPrior.mat`.
+- default: `Gaussian` (that matches the choice in `-compartments`)
+
+### `-load_prior filename.mat` (load a user defined training data file)
+- SMI training data should be [ Ntraining x 9], with each column being a model parameter: [f, Da, Depar, Deperp, fw, T2a, T2e, p2, p4]
+
 ### `-sigma <noisemap>`
 - Path to noise map for SMI parameter estimation. Not required but recommended.
 - We recommend computing sigma prior to running `tmi` using `designer`.
