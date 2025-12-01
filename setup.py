@@ -44,7 +44,7 @@ ext_modules = [
 
 setup(
         name ='designer2',
-        version ='2.0.14',
+        version ='2.0.15',
         author ='Benjamin Ades-Aron',
         author_email ='benjamin.ades-aron@nyulangone.org',
         url ='https://github.com/NYU-DiffusionMRI/DESIGNER-v2',
