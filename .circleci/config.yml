@@ -115,7 +115,7 @@ workflows:
           tag: ${CIRCLE_TAG}
           filters:
             tags:
-              only: /.*/
+              only: /^v.*/
             branches:
               ignore: /.*/
           context:
