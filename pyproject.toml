@@ -1,3 +1,53 @@
 [build-system]
 requires = ["setuptools>=42", "wheel", "pybind11>=2.12.0"]
 build-backend = "setuptools.build_meta"
+
+[project]
+dynamic = ["version"]
+name = "designer2"
+description = "designerV2"
+authors = [
+    {name = "Benjamin Ades-Aron", email = "benjamin.ades-aron@nyulangone.org"}
+]
+readme = "README.md"
+license = {text = "NYU"}
+requires-python = ">=3.9"
+keywords = ["python", "diffusion", "mri", "mppca", "gibbs", "preprocessing", "dki", "smi", "DESIGNER", "TMI"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "numpy>=1.21,<2.0.0",
+    "scipy>=1.9",
+    "dipy>=1.5",
+    "antspyx>=0.3",
+    "cvxpy>=1.2",
+    "numpy-groupies>=0.9.0",
+    "joblib>=1.2",
+    "pandas>=1.5",
+    "tqdm>=4.62.3",
+    "pybind11>=2.12",
+    "colorama>=0.4.6",
+    "numba>=0.60.0",
+    "nibabel>=5.2.1",
+]
+
+[project.optional-dependencies]
+dev = ["pip-tools"]
+
+[project.scripts]
+designer = "designer2.designer:main"
+tmi = "designer2.tmi:main"
+
+[project.urls]
+Homepage = "https://github.com/NYU-DiffusionMRI/DESIGNER-v2"
+
+[tool.setuptools]
+packages = ["designer2", "lib", "lib.io", "constant"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+constant = ["*"]

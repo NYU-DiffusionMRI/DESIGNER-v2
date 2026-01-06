@@ -32,6 +32,10 @@
 			}
 		}
 	},
-	// Make sure to open a terminal after the command below has been run. Otherwise, PyPi packages will not be installed, and the "designer" command will be linked to the FSL's "designer" command.
-	"postCreateCommand": "pip install -e . && pip install -r tests/requirements_test.txt"
+	// Make sure to open a terminal after the command below has run. Otherwise, python packages will not be installed, and the "designer" command will be linked to the FSL's "designer" command.
+	// Development setup using lockfile for production parity:
+	// 1. Install exact versions from requirements.txt (same as production)
+	// 2. Install package in editable mode with --no-deps (dependencies already installed)
+	// 3. Install test dependencies with constraints from requirements.txt
+	"postCreateCommand": "pip install -r requirements.txt && pip install -e '.[dev]' && pip install -r tests/requirements_test.txt -c requirements.txt"
 }
