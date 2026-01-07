@@ -1,0 +1,28 @@
+# Dependabot configuration for pip-compile workflow
+# Strategy: Update pyproject.toml (source of truth) only
+# requirements.txt (lockfile) is regenerated manually or via CI (with pip-compile)
+
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    
+    # Group updates to reduce PR spam
+    groups:
+      production-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    
+    # Add labels to PRs for easy filtering
+    labels:
+      - "dependencies"
+      - "python"
