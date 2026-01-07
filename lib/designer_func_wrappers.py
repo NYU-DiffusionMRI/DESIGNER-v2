@@ -244,6 +244,101 @@ def run_degibbs(pf, pe_dir,orig_stride):
     print(f"RPG gibbs correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
 
+def run_degibbs_flexible(input_file, pf, pe_dir, orig_stride, output_prefix="working"):
+    """
+    wrapper for rpg degibbs flexible for running other files besides main dMRI image
+    """
+
+    import lib.rpg as rpg
+    from mrtrix3 import run, app
+    from ants import image_read, image_write, from_numpy
+    import os, time, shutil
+    import numpy as np
+
+    # make optional if file name is the b0_pair_topup.nii -- dont need this
+    if input_file == "b0_pair_topup.nii":
+        # if the topup image is the b0 pair then don't make the bvec/bvals
+        run.command(
+            f'mrconvert -force {input_file} {output_prefix}.nii',
+            show=False
+        )
+    else:
+        # if the file is a mif file then export the gradient information and convert to nifti
+        run.command(
+            f'mrconvert -force -export_grad_fsl {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {input_file} {output_prefix}.nii',
+            show=False
+        )
+    nii = image_read(f'{output_prefix}.nii')
+    dwi = nii.numpy()
+
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print(f'...RPG degibbsing {output_prefix}...')
+    start_time = time.time()
+    
+    n_cores = app.ARGS.n_cores
+
+    strides_orig = [x for x in orig_stride.split(',')]
+    orient_orig = [abs(int(i)) for i in strides_orig]
+
+    if 'i' in pe_dir:
+        pe_dir = 0
+    elif 'j' in pe_dir:
+        pe_dir = 1
+    elif 'k' in pe_dir:
+        pe_dir = 2
+
+    pe_dir_orig = (np.array(orient_orig)-1)[pe_dir]
+    if pe_dir_orig == 2:
+        raise ValueError("PE dir=k should not be possible. Phase encoding direction must be along the first or second axis of the image.")
+
+    transpose_order = np.argsort(orient_orig)
+
+    # TESTING for 3D image transposing 
+    if dwi.ndim == 3:
+        dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(2,1,0))
+    elif dwi.ndim == 4:
+        dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(3,2,1,0))
+
+
+    dwi_dg_t = rpg.unring(
+        dwi_t, minW=1, maxW=3, nsh=20, 
+        pfv=float(pf), pfdimf=pe_dir_orig, phase_flag=False
+    )
+
+    if dwi.ndim == 3:
+        dwi_dg = dwi_dg_t[0].copy().transpose(2,1,0).transpose(np.argsort(transpose_order))
+    elif dwi.ndim == 4:
+        dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0).transpose(np.argsort(transpose_order))
+    
+    out = from_numpy(
+        dwi_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction
+    )
+    image_write(out, f'{output_prefix}_rpg.nii')
+
+    if input_file != "b0_pair_topup.nii":
+        # if the file is not the paired topup image then convert back to nifti 
+        run.command(
+            f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}.mif',
+            show=False
+        )
+
+        # also saving out mif file with _rpg prefix name 
+        run.command(
+            f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}_rpg.mif',
+            show=False
+        )
+
+    # Timer
+    elapsed_time = time.time() - start_time
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"RPG gibbs correction on {output_prefix} completed in {int(hours):02}h {int(minutes):02}m {int(seconds):02}s.")
+    print(separator + "\n")
+
 def group_alignment(group_list):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
     import numpy as np
@@ -549,7 +644,7 @@ def run_eddy(shell_table, dwi_metadata):
                         (stride, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                 else: 
                     run.command('mrconvert -strides "%s" -json_import "%s" "%s" "%s"' % 
-                        (stride,rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                        (stride, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
                     
                 #need to import pe_original_meanb0 bids with phase encoding info so we can run mrinfo -export_pe_eddy
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
@@ -749,14 +844,16 @@ def run_eddy(shell_table, dwi_metadata):
             rpe_bvec_path = rpe_fpath + '.bvec'
             
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
+                
+                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif') #***
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+
                 if len(rpe_size) == 4:
                     run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
+                            (app.ARGS.rpe_pair, stride, rpe_bids_path)) #***
                 else: 
                     run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
+                        (app.ARGS.rpe_pair, stride, rpe_bids_path)) #***
                 
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -771,6 +868,7 @@ def run_eddy(shell_table, dwi_metadata):
             else:
                 run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                
                 if len(rpe_size) == 4:
                     run.command('mrconvert "%s" -strides "%s" -coord 3 0 b0rpe.nii' % (app.ARGS.rpe_pair, stride))
                 else: 
@@ -792,6 +890,15 @@ def run_eddy(shell_table, dwi_metadata):
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
 
+            # intermediate changes for degibbs and 
+
+            if getattr(app.ARGS, "degibbs", False):
+                # assuming the input data can be the same for forward and reversed phase encoding? *** 
+                # the degibbsed image will be called b0_pair_topup_rpg.nii
+                run_degibbs_flexible("b0_pair_topup.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="b0_pair_topup")
+
+
+
             # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
             odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
             if np.any(np.array(odd_dims)):
@@ -799,15 +906,20 @@ def run_eddy(shell_table, dwi_metadata):
             else:
                 flag_no_subsampling = False
 
+            if getattr(app.ARGS, "degibbs", False):
+                topupinputfile = 'b0_pair_topup_rpg.nii'
+            else:
+                topupinputfile = 'b0_pair_topup.nii'
+
             if flag_no_subsampling:
                 run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
+                    (topupinputfile,
                     'topup_acqp.txt',
                     'topup_results',
                     'topup_results' + fsl_suffix))
             else:
                 run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
+                    (topupinputfile,
                     'topup_acqp.txt',
                     'topup_results',
                     'topup_results' + fsl_suffix))
@@ -907,6 +1019,17 @@ def run_eddy(shell_table, dwi_metadata):
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
 
+            if getattr(app.ARGS, "degibbs", False):
+                # assuming the input data can be the same for forward and reversed phase encoding? *** 
+                # the degibbsed image will be called b0_pair_topup_rpg.nii
+                run_degibbs_flexible("b0_pair_topup.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="b0_pair_topup")
+
+
+            if getattr(app.ARGS, "degibbs", False):
+                topupinputfile = 'b0_pair_topup_rpg.nii'
+            else:
+                topupinputfile = 'b0_pair_topup.nii'
+
             # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
             odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
             if np.any(np.array(odd_dims)):
@@ -916,13 +1039,13 @@ def run_eddy(shell_table, dwi_metadata):
 
             if flag_no_subsampling:
                 run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
+                    (topupinputfile,
                     'topup_acqp.txt',
                     'topup_results',
                     'topup_results' + fsl_suffix))
             else:
                 run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
+                    (topupinputfile,
                     'topup_acqp.txt',
                     'topup_results',
                     'topup_results' + fsl_suffix))
