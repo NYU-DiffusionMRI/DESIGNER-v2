@@ -122,9 +122,25 @@ pytest -s -v --dist loadscope -n auto [--no-cleanup] tests/
 
 To run a specific test module (e.g., D1: MESO non-square), run the following command:
 ```bash
-pytest -s -v [--no-cleanup] tests/test_e2e_D1_meso_nonsquare.py
+pytest -s -v [--no-cleanup] tests/test_e2e_meso_nonsquare.py
 ```
 
+## Dependency Management Workflow
+
+### Manual Update
+
+When existing/new dependencies need to be updated/added:
+
+1. Edit `dependencies` section in `pyproject.toml`
+2. Run `pip-compile pyproject.toml --output-file=requirements.txt --strip-extras` to regenerate `requirements.txt` (lockfile)
+3. Commit and push the changes
+
+**Notes**: 1) Only direct dependencies should be defined in `pyproject.toml`, and 2) `pip-compile` will automatically pin all direct and transitive dependencies in `requirements.txt` for full reproducibility.
+
+
+### Dependabot Update
+
+Dependabot will automatically create a PR to update the dependencies in `pyproject.toml`, then the `regenerate-lockfile` GitHub Action will atuo-regenerate `requirements.txt` if needed. 
 
 # References
 1. Ades-Aron, B., Veraart, J., Kochunov, P., McGuire, S., Sherman, P., Kellner, E., … & Fieremans, E. (2018). Evaluation of the accuracy and precision of the diffusion parameter EStImation with Gibbs and NoisE removal pipeline. *Neuroimage*, 183, 532-543.

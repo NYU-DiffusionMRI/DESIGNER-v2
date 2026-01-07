@@ -47,7 +47,7 @@ kiwisolver==1.4.5
     # via matplotlib
 lazy-loader==0.4
     # via scikit-image
-llvmlite==0.46.0
+llvmlite==0.43.0
     # via numba
 markupsafe==3.0.3
     # via jinja2
@@ -57,13 +57,13 @@ narwhals==2.14.0
     # via plotly
 networkx==3.6.1
     # via scikit-image
-nibabel==5.3.3
+nibabel==5.2.1
     # via
     #   antspyx
     #   designer2 (pyproject.toml)
     #   dipy
     #   trx-python
-numba==0.63.1
+numba==0.60.0
     # via designer2 (pyproject.toml)
 numpy==1.26.4
     # via
@@ -90,7 +90,7 @@ numpy==1.26.4
     #   statsmodels
     #   tifffile
     #   trx-python
-numpy-groupies==0.11.3
+numpy-groupies==0.11.1
     # via designer2 (pyproject.toml)
 ordered-set==4.1.0
     # via deepdiff
@@ -106,7 +106,7 @@ packaging==25.0
     #   scikit-image
     #   setuptools-scm
     #   statsmodels
-pandas==2.3.3
+pandas==2.2.2
     # via
     #   antspyx
     #   designer2 (pyproject.toml)
@@ -121,7 +121,7 @@ pillow==12.1.0
     #   scikit-image
 plotly==6.5.0
     # via chart-studio
-pybind11==3.0.1
+pybind11==2.12.0
     # via designer2 (pyproject.toml)
 pyparsing==3.3.1
     # via matplotlib
@@ -141,7 +141,7 @@ scikit-image==0.26.0
     # via antspyx
 scikit-learn==1.8.0
     # via antspyx
-scipy==1.16.3
+scipy==1.13.1
     # via
     #   antspyx
     #   clarabel
@@ -168,14 +168,12 @@ threadpoolctl==3.6.0
     # via scikit-learn
 tifffile==2025.12.20
     # via scikit-image
-tqdm==4.67.1
+tqdm==4.66.4
     # via
     #   designer2 (pyproject.toml)
     #   dipy
 trx-python==0.3
     # via dipy
-typing-extensions==4.15.0
-    # via nibabel
 tzdata==2025.3
     # via pandas
 urllib3==2.6.2
