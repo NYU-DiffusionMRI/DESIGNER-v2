@@ -1,6 +1,6 @@
 # Dependabot configuration for pip-compile workflow
 # Strategy: Update pyproject.toml (source of truth) only
-# requirements.txt (lockfile) is regenerated manually or via CI (with pip-compile)
+# requirements.lock (lockfile) is regenerated manually or via CI (with pip-compile)
 
 version: 2
 updates:

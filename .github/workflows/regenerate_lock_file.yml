@@ -1,7 +1,7 @@
 name: Regenerate Requirements Lockfile
 
-# This workflow automatically regenerates requirements.txt when Dependabot updates pyproject.toml
-# This ensures requirements.txt (lockfile) stays in sync with pyproject.toml (source of truth)
+# This workflow automatically regenerates requirements.lock when Dependabot updates pyproject.toml
+# This ensures requirements.lock (lockfile) stays in sync with pyproject.toml (source of truth)
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   regenerate-lockfile:
-    name: Regenerate requirements.txt from pyproject.toml
+    name: Regenerate requirements.lock from pyproject.toml
     runs-on: ubuntu-latest
     
     steps:
@@ -34,20 +34,20 @@ jobs:
         run: |
           pip install pip-tools
       
-      - name: Regenerate requirements.txt
+      - name: Regenerate requirements.lock
         run: |
-          pip-compile pyproject.toml --output-file=requirements.txt --strip-extras
-          echo "Successfully regenerated requirements.txt from pyproject.toml"
+          pip-compile pyproject.toml --output-file=requirements.lock --strip-extras
+          echo "Successfully regenerated requirements.lock from pyproject.toml"
       
-      - name: Check if requirements.txt changed
+      - name: Check if requirements.lock changed
         id: check_changes
         run: |
-          if git diff --quiet requirements.txt; then
+          if git diff --quiet requirements.lock; then
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "No changes to requirements.txt"
+            echo "No changes to requirements.lock"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "requirements.txt has been updated"
+            echo "requirements.lock has been updated"
           fi
       
       - name: Commit and push if changed
@@ -55,8 +55,8 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add requirements.txt
-          git commit -m "chore: regenerate requirements.txt from pyproject.toml"
+          git add requirements.lock
+          git commit -m "chore: regenerate requirements.lock from pyproject.toml"
           git push
       
       - name: Comment on PR
@@ -68,7 +68,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '✅ **Lockfile updated automatically**\n\n`requirements.txt` has been regenerated from `pyproject.toml` using `pip-compile`.\n\nPlease review the changes to ensure all transitive dependencies are acceptable.'
+              body: '✅ **Lockfile updated automatically**\n\n`requirements.lock` has been regenerated from `pyproject.toml` using `pip-compile`.\n\nPlease review the changes to ensure all transitive dependencies are acceptable.'
             })
       
       - name: Comment if no changes
@@ -80,5 +80,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: 'ℹ️ **No lockfile changes needed**\n\n`requirements.txt` is already up-to-date with `pyproject.toml`.'
+              body: 'ℹ️ **No lockfile changes needed**\n\n`requirements.lock` is already up-to-date with `pyproject.toml`.'
             })
