@@ -53,12 +53,12 @@ RUN ldconfig
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt --no-cache-dir
+COPY requirements.lock .
+RUN pip install -r requirements.lock --no-cache-dir
 
 COPY . .
 
-# Run setup.py (dependencies in requirements.txt are already installed)
+# Run setup.py (dependencies in requirements.lock are already installed)
 RUN python -m pip install . --no-deps
 
 ENV FSLDIR=/usr/local/fsl
@@ -73,5 +73,6 @@ FROM production AS test
 
 # Copy only the tests directory from the test-context
 COPY --from=test-context . /app/tests
+COPY requirements.lock .
 
-RUN pip install -r tests/requirements_test.txt --no-cache-dir
+RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.lock
