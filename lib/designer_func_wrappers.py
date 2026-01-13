@@ -792,55 +792,65 @@ def run_eddy(shell_table, dwi_metadata):
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
 
-            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
-            if np.any(np.array(odd_dims)):
-                flag_no_subsampling = True
-            else:
-                flag_no_subsampling = False
+            # # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
+            # odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
+            # if np.any(np.array(odd_dims)):
+            #     flag_no_subsampling = True
+            # else:
+            #     flag_no_subsampling = False
 
-            if flag_no_subsampling:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-            else:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
+            # if flag_no_subsampling:
+            #     run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
+            #         ('b0_pair_topup.nii',
+            #         'topup_acqp.txt',
+            #         'topup_results',
+            #         'topup_results' + fsl_suffix))
+            # else:
+            #     run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
+            #         ('b0_pair_topup.nii',
+            #         'topup_acqp.txt',
+            #         'topup_results',
+            #         'topup_results' + fsl_suffix))
                 
-            # mask the topup corrected image
-            run.command('mrmath %s mean %s -axis 3' %
-                        ('topup_results' + fsl_suffix,
-                            'topup_corrected_mean.nii'
-                        ))
+            # # mask the topup corrected image
+            # run.command('mrmath %s mean %s -axis 3' %
+            #             ('topup_results' + fsl_suffix,
+            #                 'topup_corrected_mean.nii'
+            #             ))
                  
-            run.command('bet %s %s -f 0.2 -m' %
-                ('topup_corrected_mean.nii', 
-                'topup_corrected_brain'))
+            # run.command('bet %s %s -f 0.2 -m' %
+            #     ('topup_corrected_mean.nii', 
+            #     'topup_corrected_brain'))
             
+            se_epi_4d = "b0_pair_topup.nii"
+
             if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing', 
-                        eddyopts, 
-                        'topup_corrected_brain_mask' + fsl_suffix,
-                        'topup_results',
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
+                cmd = (
+                        f'dwifslpreproc '
+                        f'-nocleanup '
+                        f'-scratch "eddy_processing" '
+                        f'-eddy_options "{eddyopts}" '
+                        f'-rpe_pair '
+                        f'-se_epi "{se_epi_4d}" '
+                        f'-pe_dir "{pe_dir}" '
+                        f'"working.mif" '
+                        f'"dwiec.mif"'
+                    )
+                run.command(cmd)
             else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing',
-                        'fakeb_grad.txt', 
-                        eddyopts, 
-                        'topup_corrected_brain_mask' + fsl_suffix,
-                        'topup_results',
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
+                cmd = (
+                    f'dwifslpreproc '
+                    f'-nocleanup '
+                    f'-scratch "eddy_processing" '
+                    f'-grad "fakeb_grad.txt" '
+                    f'-eddy_options "{eddyopts}" '
+                    f'-rpe_pair '
+                    f'-se_epi "{se_epi_4d}" '
+                    f'-pe_dir "{pe_dir}" '
+                    f'"working.mif" '
+                    f'"dwiec.mif"'
+                )
+                run.command(cmd)
 
         elif app.ARGS.rpe_none:
 
