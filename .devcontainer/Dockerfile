@@ -2,7 +2,7 @@ FROM --platform=linux/amd64 python:3.12.1-bookworm AS base
 
 # Copy dependencies from other images
 COPY --from=nyudiffusionmri/fsl:2025-06-16 /usr/local/fsl /usr/local/fsl
-COPY --from=nyudiffusionmri/mrtrix3:2025-06-16 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+COPY --from=nyudiffusionmri/mrtrix3:2026-01-13 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
 COPY --from=nyudiffusionmri/ants:2025-06-20 /usr/local/ants /usr/local/ants
 
 # Install common dependencies
@@ -48,7 +48,7 @@ RUN ldconfig
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
 ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin"
-ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/mrtrix3_build/src:/usr/local/mrtrix3_build/core:/usr/local/ants/lib:/usr/local/lib"
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/ants/lib:/usr/local/lib"
 ENV PYTHONPATH="/usr/local/mrtrix3_build/lib"
 
 RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
