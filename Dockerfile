@@ -73,5 +73,6 @@ FROM production AS test
 
 # Copy only the tests directory from the test-context
 COPY --from=test-context . /app/tests
+COPY requirements.txt .
 
-RUN pip install -r tests/requirements_test.txt --no-cache-dir
+RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.txt
