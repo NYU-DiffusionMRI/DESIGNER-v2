@@ -20,6 +20,7 @@ run_normalization:
 import time
 import shutil
 from pathlib import Path
+from lib.utils import write_manual_pe_scheme
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -830,12 +831,21 @@ def run_eddy(shell_table, dwi_metadata):
             eddy_proc_dir = Path('eddy_processing')
             eddy_proc_dir.mkdir(parents=True, exist_ok=True)
             
+            if app.ARGS.pe_dir:
+                manual_pe_scheme_path = eddy_proc_dir / 'dwi_manual_pe_scheme.txt'
+                n_volumes = int(image.Header('working.mif').size()[3])
+                write_manual_pe_scheme(manual_pe_scheme_path, app.ARGS.pe_dir, n_volumes)
+
             run.command(f'mrconvert topup_corrected_brain_mask.nii.gz {eddy_proc_dir}/eddy_mask.nii -datatype float32 -stride -1,+2,+3')
 
             cmd = f'mrconvert working.mif {eddy_proc_dir}/eddy_in.nii -strides -1,+2,+3,+4 -export_grad_fsl {eddy_proc_dir}/bvecs {eddy_proc_dir}/bvals -export_pe_eddy {eddy_proc_dir}/eddy_config.txt {eddy_proc_dir}/eddy_indices.txt'
             if app.ARGS.eddy_fakeb is not None:
                 cmd += ' -grad fakeb_grad.txt'
+            if app.ARGS.pe_dir:
+                assert manual_pe_scheme_path.exists()
+                cmd += f' -import_pe_table {manual_pe_scheme_path}'
             run.command(cmd)
+
             run.command(
                     f"eddy --imain={eddy_proc_dir}/eddy_in.nii --mask={eddy_proc_dir}/eddy_mask.nii --acqp={eddy_proc_dir}/eddy_config.txt "
                     f"--index={eddy_proc_dir}/eddy_indices.txt --bvecs={eddy_proc_dir}/bvecs --bvals={eddy_proc_dir}/bvals "
