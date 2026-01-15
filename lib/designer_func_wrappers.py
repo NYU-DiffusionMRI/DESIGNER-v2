@@ -19,6 +19,7 @@ run_normalization:
 
 import time
 import shutil
+from pathlib import Path
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -792,65 +793,53 @@ def run_eddy(shell_table, dwi_metadata):
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
 
-            # # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            # odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
-            # if np.any(np.array(odd_dims)):
-            #     flag_no_subsampling = True
-            # else:
-            #     flag_no_subsampling = False
-
-            # if flag_no_subsampling:
-            #     run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-            #         ('b0_pair_topup.nii',
-            #         'topup_acqp.txt',
-            #         'topup_results',
-            #         'topup_results' + fsl_suffix))
-            # else:
-            #     run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-            #         ('b0_pair_topup.nii',
-            #         'topup_acqp.txt',
-            #         'topup_results',
-            #         'topup_results' + fsl_suffix))
-                
-            # # mask the topup corrected image
-            # run.command('mrmath %s mean %s -axis 3' %
-            #             ('topup_results' + fsl_suffix,
-            #                 'topup_corrected_mean.nii'
-            #             ))
-                 
-            # run.command('bet %s %s -f 0.2 -m' %
-            #     ('topup_corrected_mean.nii', 
-            #     'topup_corrected_brain'))
-            
-            se_epi_4d = "b0_pair_topup.nii"
-
-            if app.ARGS.eddy_fakeb is None:
-                cmd = (
-                        f'dwifslpreproc '
-                        f'-nocleanup '
-                        f'-scratch "eddy_processing" '
-                        f'-eddy_options "{eddyopts}" '
-                        f'-rpe_pair '
-                        f'-se_epi "{se_epi_4d}" '
-                        f'-pe_dir "{pe_dir}" '
-                        f'"working.mif" '
-                        f'"dwiec.mif"'
-                    )
-                run.command(cmd)
+            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
+            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
+            if np.any(np.array(odd_dims)):
+                flag_no_subsampling = True
             else:
-                cmd = (
-                    f'dwifslpreproc '
-                    f'-nocleanup '
-                    f'-scratch "eddy_processing" '
-                    f'-grad "fakeb_grad.txt" '
-                    f'-eddy_options "{eddyopts}" '
-                    f'-rpe_pair '
-                    f'-se_epi "{se_epi_4d}" '
-                    f'-pe_dir "{pe_dir}" '
-                    f'"working.mif" '
-                    f'"dwiec.mif"'
-                )
-                run.command(cmd)
+                flag_no_subsampling = False
+
+            if flag_no_subsampling:
+                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
+                    ('b0_pair_topup.nii',
+                    'topup_acqp.txt',
+                    'topup_results',
+                    'topup_results' + fsl_suffix))
+            else:
+                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
+                    ('b0_pair_topup.nii',
+                    'topup_acqp.txt',
+                    'topup_results',
+                    'topup_results' + fsl_suffix))
+                
+            # mask the topup corrected image
+            run.command('mrmath %s mean %s -axis 3' %
+                        ('topup_results' + fsl_suffix,
+                            'topup_corrected_mean.nii'
+                        ))
+                 
+            run.command('bet %s %s -f 0.2 -m' %
+                ('topup_corrected_mean.nii', 
+                'topup_corrected_brain'))
+
+            # call eddy manually
+            eddy_proc_dir = Path('eddy_processing')
+            eddy_proc_dir.mkdir(parents=True, exist_ok=True)
+            
+            run.command(f'mrconvert topup_corrected_brain_mask.nii.gz {eddy_proc_dir}/eddy_mask.nii -datatype float32 -stride -1,+2,+3')
+
+            cmd = f'mrconvert working.mif {eddy_proc_dir}/eddy_in.nii -strides -1,+2,+3,+4 -export_grad_fsl {eddy_proc_dir}/bvecs {eddy_proc_dir}/bvals -export_pe_eddy {eddy_proc_dir}/eddy_config.txt {eddy_proc_dir}/eddy_indices.txt'
+            if app.ARGS.eddy_fakeb is not None:
+                cmd += ' -grad fakeb_grad.txt'
+            run.command(cmd)
+            run.command(
+                    f"eddy --imain={eddy_proc_dir}/eddy_in.nii --mask={eddy_proc_dir}/eddy_mask.nii --acqp={eddy_proc_dir}/eddy_config.txt "
+                    f"--index={eddy_proc_dir}/eddy_indices.txt --bvecs={eddy_proc_dir}/bvecs --bvals={eddy_proc_dir}/bvals "
+                    f"--topup=topup_results --out={eddy_proc_dir}/dwi_post_eddy --verbose {eddyopts}"
+            )
+
+            run.command(f'mrconvert {eddy_proc_dir}/dwi_post_eddy.nii.gz dwiec.mif -strides -1,2,3,4 -fslgrad {eddy_proc_dir}/dwi_post_eddy.eddy_rotated_bvecs {eddy_proc_dir}/bvals')
 
         elif app.ARGS.rpe_none:
 
