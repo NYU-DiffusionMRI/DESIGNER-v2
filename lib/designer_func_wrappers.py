@@ -683,9 +683,20 @@ def run_eddy(shell_table, dwi_metadata):
 
                 eddy_proc_dir = Path(f'eddy_processing_{i}')
                 eddy_proc_dir.mkdir(parents=True, exist_ok=True)
+
+                if app.ARGS.pe_dir:
+                    manual_pe_scheme_path = eddy_proc_dir / 'dwi_manual_pe_scheme.txt'
+                    n_volumes = int(image.Header(f'dwi_pre_eddy_{i}.mif').size()[3])
+                    write_manual_pe_scheme(manual_pe_scheme_path, app.ARGS.pe_dir, n_volumes)
             
                 run.command(f'mrconvert topup_corrected_{i}_brain_mask.nii.gz {eddy_proc_dir}/eddy_mask.nii -datatype float32 -stride -1,+2,+3')
-                run.command(f'mrconvert dwi_pre_eddy_{i}.mif {eddy_proc_dir}/eddy_in.nii -strides -1,+2,+3,+4 -export_grad_fsl {eddy_proc_dir}/bvecs {eddy_proc_dir}/bvals -export_pe_eddy {eddy_proc_dir}/eddy_config.txt {eddy_proc_dir}/eddy_indices.txt')
+
+                cmd = f'mrconvert dwi_pre_eddy_{i}.mif {eddy_proc_dir}/eddy_in.nii -strides -1,+2,+3,+4 -export_grad_fsl {eddy_proc_dir}/bvecs {eddy_proc_dir}/bvals -export_pe_eddy {eddy_proc_dir}/eddy_config.txt {eddy_proc_dir}/eddy_indices.txt'
+                if app.ARGS.pe_dir:
+                    assert manual_pe_scheme_path.exists()
+                    cmd += f' -import_pe_table {manual_pe_scheme_path}'
+                run.command(cmd)
+                
                 run.command(
                         f"eddy --imain={eddy_proc_dir}/eddy_in.nii --mask={eddy_proc_dir}/eddy_mask.nii --acqp={eddy_proc_dir}/eddy_config.txt "
                         f"--index={eddy_proc_dir}/eddy_indices.txt --bvecs={eddy_proc_dir}/bvecs --bvals={eddy_proc_dir}/bvals "
