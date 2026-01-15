@@ -679,15 +679,18 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('bet "%s" "%s" -f 0.2 -m' %
                     ('topup_corrected_' + str(i) + '_mean.nii', 
                     'topup_corrected_' + str(i) + '_brain'))
-                
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
-                    ('eddy_processing_' + str(i), 
-                    eddyopts, 
-                    'topup_corrected_' + str(i) + '_brain_mask' + fsl_suffix,
-                    'topup_results_' + str(i),
-                    pe_dir,
-                    'dwi_pre_eddy_' + str(i) + '.mif',
-                    'dwi_post_eddy_' + str(i) + '.mif'))
+
+                eddy_proc_dir = Path(f'eddy_processing_{i}')
+                eddy_proc_dir.mkdir(parents=True, exist_ok=True)
+            
+                run.command(f'mrconvert topup_corrected_{i}_brain_mask.nii.gz {eddy_proc_dir}/eddy_mask.nii -datatype float32 -stride -1,+2,+3')
+                run.command(f'mrconvert dwi_pre_eddy_{i}.mif {eddy_proc_dir}/eddy_in.nii -strides -1,+2,+3,+4 -export_grad_fsl {eddy_proc_dir}/bvecs {eddy_proc_dir}/bvals -export_pe_eddy {eddy_proc_dir}/eddy_config.txt {eddy_proc_dir}/eddy_indices.txt')
+                run.command(
+                        f"eddy --imain={eddy_proc_dir}/eddy_in.nii --mask={eddy_proc_dir}/eddy_mask.nii --acqp={eddy_proc_dir}/eddy_config.txt "
+                        f"--index={eddy_proc_dir}/eddy_indices.txt --bvecs={eddy_proc_dir}/bvecs --bvals={eddy_proc_dir}/bvals "
+                        f"--topup=topup_results_{i} --out={eddy_proc_dir}/dwi_post_eddy --verbose {eddyopts}"
+                )
+                run.command(f'mrconvert {eddy_proc_dir}/dwi_post_eddy.nii.gz dwi_post_eddy_{i}.mif -strides -1,2,3,4 -fslgrad {eddy_proc_dir}/dwi_post_eddy.eddy_rotated_bvecs {eddy_proc_dir}/bvals')
                 
             elif app.ARGS.rpe_none:
 
