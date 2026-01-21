@@ -121,10 +121,10 @@ When DESIGNER or TMI app logic changes, benchmarks may need to be updated:
 2. Generate new benchmarks using:
    ```bash
    # Generate all benchmarks
-   python scripts/generate_test_benchmark.py --cores $NUM_CORES
+   python scripts/generate_test_benchmark.py --cores $NUM_CORES --output-dir tests/benchmark
    
    # Generate benchmark for specific benchmarks (e.g., D1_wo_bids and D2)
-   python scripts/generate_test_benchmark.py --benchmarks D1_wo_bids D2 --cores $NUM_CORES
+   python scripts/generate_test_benchmark.py --benchmarks D1_wo_bids D2 --cores $NUM_CORES --output-dir tests/benchmark
 
    # For more details
    python scripts/generate_test_benchmark.py --help
