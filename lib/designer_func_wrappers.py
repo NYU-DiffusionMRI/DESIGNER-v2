@@ -20,7 +20,7 @@ run_normalization:
 import time
 import shutil
 from pathlib import Path
-from lib.utils import write_manual_pe_scheme
+from lib.utils import call_eddy
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -502,8 +502,9 @@ def run_eddy(shell_table, dwi_metadata):
                 all_concatenated_bvecs = np.vstack((all_concatenated_bvecs, bvecs))
 
             fakeb_grad = np.hstack((all_concatenated_bvecs, fake_bvals[:, np.newaxis]))
-            np.savetxt('fakeb_grad.txt', fakeb_grad, fmt='%0.8f')
-            print("Scaled b-values and concatenated b-vectors have been saved to fakeb_grad.txt")
+            fakeb_grad_file = 'fakeb_grad.txt'
+            np.savetxt(fakeb_grad_file, fakeb_grad, fmt='%0.8f')
+            print(f"Scaled b-values and concatenated b-vectors have been saved to {fakeb_grad_file}")
         
          # get TE of the PA
         if app.ARGS.rpe_pair:
@@ -683,26 +684,8 @@ def run_eddy(shell_table, dwi_metadata):
 
                 eddy_proc_dir = Path(f'eddy_processing_{i}')
                 eddy_proc_dir.mkdir(parents=True, exist_ok=True)
-
-                if app.ARGS.pe_dir:
-                    manual_pe_scheme_path = eddy_proc_dir / 'dwi_manual_pe_scheme.txt'
-                    n_volumes = int(image.Header(f'dwi_pre_eddy_{i}.mif').size()[3])
-                    write_manual_pe_scheme(manual_pe_scheme_path, app.ARGS.pe_dir, n_volumes)
-            
-                run.command(f'mrconvert topup_corrected_{i}_brain_mask.nii.gz {eddy_proc_dir}/eddy_mask.nii -datatype float32 -stride -1,+2,+3')
-
-                cmd = f'mrconvert dwi_pre_eddy_{i}.mif {eddy_proc_dir}/eddy_in.nii -strides -1,+2,+3,+4 -export_grad_fsl {eddy_proc_dir}/bvecs {eddy_proc_dir}/bvals -export_pe_eddy {eddy_proc_dir}/eddy_config.txt {eddy_proc_dir}/eddy_indices.txt'
-                if app.ARGS.pe_dir:
-                    assert manual_pe_scheme_path.exists()
-                    cmd += f' -import_pe_table {manual_pe_scheme_path}'
-                run.command(cmd)
-                
-                run.command(
-                        f"eddy --imain={eddy_proc_dir}/eddy_in.nii --mask={eddy_proc_dir}/eddy_mask.nii --acqp={eddy_proc_dir}/eddy_config.txt "
-                        f"--index={eddy_proc_dir}/eddy_indices.txt --bvecs={eddy_proc_dir}/bvecs --bvals={eddy_proc_dir}/bvals "
-                        f"--topup=topup_results_{i} --out={eddy_proc_dir}/dwi_post_eddy --verbose {eddyopts}"
-                )
-                run.command(f'mrconvert {eddy_proc_dir}/dwi_post_eddy.nii.gz dwi_post_eddy_{i}.mif -strides -1,2,3,4 -fslgrad {eddy_proc_dir}/dwi_post_eddy.eddy_rotated_bvecs {eddy_proc_dir}/bvals')
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                call_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', eddy_proc_dir, f'topup_corrected_{i}_brain_mask.nii.gz', eddy_opts=eddyopts, pe_dir=pe_dir_arg)
                 
             elif app.ARGS.rpe_none:
 
@@ -841,30 +824,10 @@ def run_eddy(shell_table, dwi_metadata):
             # call eddy manually
             eddy_proc_dir = Path('eddy_processing')
             eddy_proc_dir.mkdir(parents=True, exist_ok=True)
+            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            call_eddy(f'working.mif', 'dwiec.mif', eddy_proc_dir, 'topup_corrected_brain_mask.nii.gz', eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg)
             
-            if app.ARGS.pe_dir:
-                manual_pe_scheme_path = eddy_proc_dir / 'dwi_manual_pe_scheme.txt'
-                n_volumes = int(image.Header('working.mif').size()[3])
-                write_manual_pe_scheme(manual_pe_scheme_path, app.ARGS.pe_dir, n_volumes)
-
-            run.command(f'mrconvert topup_corrected_brain_mask.nii.gz {eddy_proc_dir}/eddy_mask.nii -datatype float32 -stride -1,+2,+3')
-
-            cmd = f'mrconvert working.mif {eddy_proc_dir}/eddy_in.nii -strides -1,+2,+3,+4 -export_grad_fsl {eddy_proc_dir}/bvecs {eddy_proc_dir}/bvals -export_pe_eddy {eddy_proc_dir}/eddy_config.txt {eddy_proc_dir}/eddy_indices.txt'
-            if app.ARGS.eddy_fakeb is not None:
-                cmd += ' -grad fakeb_grad.txt'
-            if app.ARGS.pe_dir:
-                assert manual_pe_scheme_path.exists()
-                cmd += f' -import_pe_table {manual_pe_scheme_path}'
-            run.command(cmd)
-
-            run.command(
-                    f"eddy --imain={eddy_proc_dir}/eddy_in.nii --mask={eddy_proc_dir}/eddy_mask.nii --acqp={eddy_proc_dir}/eddy_config.txt "
-                    f"--index={eddy_proc_dir}/eddy_indices.txt --bvecs={eddy_proc_dir}/bvecs --bvals={eddy_proc_dir}/bvals "
-                    f"--topup=topup_results --out={eddy_proc_dir}/dwi_post_eddy --verbose {eddyopts}"
-            )
-
-            run.command(f'mrconvert {eddy_proc_dir}/dwi_post_eddy.nii.gz dwiec.mif -strides -1,2,3,4 -fslgrad {eddy_proc_dir}/dwi_post_eddy.eddy_rotated_bvecs {eddy_proc_dir}/bvals')
-
         elif app.ARGS.rpe_none:
 
             run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
