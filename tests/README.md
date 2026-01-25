@@ -121,21 +121,21 @@ When DESIGNER or TMI app logic changes, benchmarks may need to be updated:
 2. Generate new benchmarks using:
    ```bash
    # Generate all benchmarks
-   python scripts/generate_test_benchmark.py --cores $NUM_CORES --output-dir tests/benchmark
+   python tests/scripts/generate_test_benchmark.py --cores $NUM_CORES --output-dir tests/benchmark
    
    # Generate benchmark for specific benchmarks (e.g., D1_wo_bids and D2)
-   python scripts/generate_test_benchmark.py --benchmarks D1_wo_bids D2 --cores $NUM_CORES --output-dir tests/benchmark
+   python tests/scripts/generate_test_benchmark.py --benchmarks D1_wo_bids D2 --cores $NUM_CORES --output-dir tests/benchmark
 
    # For more details
-   python scripts/generate_test_benchmark.py --help
+   python tests/scripts/generate_test_benchmark.py --help
    ```
 
 ## Adding a New E2E Test Configuration
 
 1. Create test data in `tests/data/` (DWI files, ROI masks, etc. in **.nii.gz** format).
 2. Create factory function in `e2e_runner_factory.py` for the new test configuration.
-3. Add benchmark saving logic in `scripts/generate_test_benchmark.py`.
-4. Generate benchmark data in `tests/benchmark/` using `scripts/generate_test_benchmark.py` script.
+3. Add benchmark saving logic in `tests/scripts/generate_test_benchmark.py`.
+4. Generate benchmark data in `tests/benchmark/` following the [Updating Benchmarks](#updating-benchmarks) section.
 5. Add test module following existing patterns (prefix with `test_e2e_`).
 6. Update tolerance configuration as needed experimenting on different platforms.
 

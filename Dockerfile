@@ -65,7 +65,7 @@ ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
 ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin"
 ENV LD_LIBRARY_PATH="/usr/local/mrtrix3_build/src:/usr/local/mrtrix3_build/core:/usr/local/ants/lib:/usr/local/lib"
-ENV PYTHONPATH="/usr/local/mrtrix3_build/lib"
+ENV PYTHONPATH="/app:/usr/local/mrtrix3_build/lib"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
 
 # Test stage
