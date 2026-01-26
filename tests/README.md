@@ -115,20 +115,63 @@ The `tolerance_config.yaml` file manages test tolerances counting benchmark vari
 
 ### Updating Benchmarks
 
-When DESIGNER or TMI app logic changes, benchmarks may need to be updated:
+When DESIGNER or TMI app logic changes, **benchmarks for CI** may need to be updated. Since CircleCI uses Linux x86_64 platform, we need to generate benchmarks on the same platform. To do this, we will use Singularity on a HPC cluster.
 
 1. Verify the code changes are correct and intended.
-2. Generate new benchmarks using:
+2. Build docker image including e2e test environment (`--target test`) and push to a personal Docker Hub:
    ```bash
-   # Generate all benchmarks
-   python tests/scripts/generate_test_benchmark.py --cores $NUM_CORES --output-dir tests/benchmark
-   
-   # Generate benchmark for specific benchmarks (e.g., D1_wo_bids and D2)
-   python tests/scripts/generate_test_benchmark.py --benchmarks D1_wo_bids D2 --cores $NUM_CORES --output-dir tests/benchmark
+   docker build \
+      --platform=linux/amd64 \
+      --build-context test-context=./tests \
+      --target test \
+      -t $PERSONAL_DOCKER_HUB_USERNAME/designer2:e2e-test \
+      .
 
-   # For more details
-   python tests/scripts/generate_test_benchmark.py --help
+   docker push $PERSONAL_DOCKER_HUB_USERNAME/designer2:e2e-test
    ```
+3. Run a Singularity container on the HPC (e.g. BigPurple):
+   ```bash
+   module load singularity/3.9.8
+
+   # request a CPU node
+   srun --partition=cpu_dev --cpus-per-task=4 --mem=64GB --time=4:00:00 --pty /bin/bash
+
+   singularity pull designer2-e2e-test.sif docker://$PERSONAL_DOCKER_HUB_USERNAME/designer2:e2e-test
+
+   mkdir benchmark_new
+
+   # create 15GB overlay (writable layer)
+   singularity overlay create --size 15360 e2e_overlay.img
+
+   # run the container, mounting the benchmark_new directory. new bnechmark json files will be saved here.
+   singularity shell --cleanenv --overlay e2e_overlay.img --bind ./benchmark_new:/app/tests/benchmark_new:rw designer2-e2e-test.sif
+   ```
+
+4. Now we are inside the container. Run the `generate_test_benchmark.py` script to generate new benchmark json files:
+   ```bash
+   cd /app
+
+   # (optional) needed if 'tests.e2e_runners' module not found error occurs
+   export PYTHONPATH=/app:$PYTHONPATH
+
+   # e.g. $NUM_CORES = 8
+   python /app/tests/scripts/generate_test_benchmark.py --output-dir /app/tests/benchmark_new --cores $NUM_CORES
+   ```
+
+5. Copy-paste (`scp` or `rsync`) the new benchmarks to the `tests/benchmark/` directory in the local machine's development environment.
+
+Notes: `generate_test_benchmark.py` script usage:
+
+```bash
+# Generate all benchmarks
+python tests/scripts/generate_test_benchmark.py --cores $NUM_CORES --output-dir tests/benchmark
+
+# Generate benchmark for specific benchmarks (e.g., D1_wo_bids and D2)
+python tests/scripts/generate_test_benchmark.py --benchmarks D1_wo_bids D2 --cores $NUM_CORES --output-dir tests/benchmark
+
+# For more details
+python tests/scripts/generate_test_benchmark.py --help
+```
 
 ## Adding a New E2E Test Configuration
 
