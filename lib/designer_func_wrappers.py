@@ -20,7 +20,7 @@ run_normalization:
 import time
 import shutil
 from pathlib import Path
-from lib.utils import call_eddy
+from lib.utils import run_fsl_eddy, run_topup_and_prepare_for_eddy
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -606,116 +606,114 @@ def run_eddy(shell_table, dwi_metadata):
                 (volume_idx,
                 'dwi_pre_eddy_' + str(i) + '.mif'),
                 show=False)
+
+            eddy_proc_dir = Path(f'eddy_processing_{i}')
+            eddy_proc_dir.mkdir(parents=True, exist_ok=True)
             
             if app.ARGS.rpe_pair:
-                run.command('dwiextract -bzero "%s" - | mrmath - mean "%s" -axis 3' %
-                    ('dwi_pre_eddy_' + str(i) + '.mif', 
-                    'b0_pre_eddy_' + str(i) + '.nii'))
-                run.command('bet "%s" "%s" -f 0.2 -m' %
-                    ('b0_pre_eddy_' + str(i) + '.nii', 
-                    'b0_pre_eddy_' + str(i) + '_brain'))
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_pre_eddy.nii" -axis 3')
+                run.command(f'bet "{eddy_proc_dir}/b0_pre_eddy.nii" "{eddy_proc_dir}/b0_pre_eddy_brain" -f 0.2 -m')
 
-                run.command('flirt -in "%s" -ref "%s" -out "%s" -dof 6' %
-                    ('rpe_b0_brain',
-                    'b0_pre_eddy_' + str(i) + '_brain',
-                    'rpe_to_ref_' + str(i)))
+                run.command(f'flirt -in "rpe_b0_brain" -ref "{eddy_proc_dir}/b0_pre_eddy_brain" -out "{eddy_proc_dir}/rpe_to_ref" -dof 6')
 
-                run.command('flirt -in "%s" -ref "%s" -out "%s" -dof 6' %
-                    ('pe_original_brain' + fsl_suffix, 
-                    'b0_pre_eddy_' + str(i) + '_brain', 
-                    'pe_to_ref_' + str(i)))
+                run.command(f'flirt -in "pe_original_brain{fsl_suffix}" -ref "{eddy_proc_dir}/b0_pre_eddy_brain" -out "{eddy_proc_dir}/pe_to_ref" -dof 6')
 
-                run.command('mrcat -force -axis 3 "%s" "%s" "%s"' %
-                    ('pe_to_ref_' + str(i) + fsl_suffix,
-                    'rpe_to_ref_' + str(i) + fsl_suffix,
-                    'b0_pair_topup_' + str(i) + '.nii'))
+                run.command(f'mrcat -force -axis 3 "{eddy_proc_dir}/pe_to_ref{fsl_suffix}" "{eddy_proc_dir}/rpe_to_ref{fsl_suffix}" "{eddy_proc_dir}/b0_pair_topup.nii"')
 
+                # Prepare topup acquisition parameters from BIDS if available
+                topup_acqp_file = None
                 if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                    run.command('mrinfo -force pe_original_meanb0.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
-                    run.command('mrinfo -force rpe_b0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
-                    filenames = ['topup_config_1.txt', 'topup_config_2.txt']
-                    with open('topup_acqp.txt', 'w') as outfile:
+                    run.command(f'mrinfo -force pe_original_meanb0.mif -export_pe_eddy "{eddy_proc_dir}/topup_config_1.txt" "{eddy_proc_dir}/topup_indicies_1.txt"')
+                    run.command(f'mrinfo -force rpe_b0.mif -export_pe_eddy "{eddy_proc_dir}/topup_config_2.txt" "{eddy_proc_dir}/topup_indicies_2.txt"')
+                    filenames = [f'{eddy_proc_dir}/topup_config_1.txt', f'{eddy_proc_dir}/topup_config_2.txt']
+                    topup_acqp_file = f'{eddy_proc_dir}/topup_acqp.txt'
+                    with open(topup_acqp_file, 'w') as outfile:
                         for fname in filenames:
                             with open(fname) as infile:
                                 outfile.write(infile.read())
-                else:
-                    acqp = np.zeros((2,3))
-                    if 'i' in pe_dir: acqp[:,0] = 1
-                    if 'j' in pe_dir: acqp[:,1] = 1
-                    if 'k' in pe_dir: acqp[:,2] = 1
-                    if '-' in pe_dir:
-                        acqp[0,:] = -acqp[0,:]
-                    else:
-                        acqp[1,:] = -acqp[1,:]
-                    
-                    acqp[acqp==-0] = 0
-                    acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-                    np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-                # if any of the image dims are odd dont subsample during topup
-                odd_dims = [ int(s) for s in image.Header('pe_to_ref_' + str(i) + fsl_suffix).size()[:3] if s % 2 ]
-                if np.any(np.array(odd_dims)):
-                    flag_no_subsampling = True
-                else:
-                    flag_no_subsampling = False
+                # Run topup and prepare mask for eddy
+                brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                    f'{eddy_proc_dir}/b0_pair_topup.nii',
+                    pe_dir,
+                    f'topup_results_{i}',
+                    fsl_suffix,
+                    eddy_proc_dir,
+                    acqp_file=topup_acqp_file
+                )
 
-                if flag_no_subsampling:
-                    run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                        ('b0_pair_topup_' + str(i) + '.nii',
-                        'topup_acqp.txt',
-                        'topup_results_' + str(i),
-                        'topup_results_' + str(i) + fsl_suffix))
-                else:
-                    run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                        ('b0_pair_topup_' + str(i) + '.nii',
-                        'topup_acqp.txt',
-                        'topup_results_' + str(i),
-                        'topup_results_' + str(i) + fsl_suffix))
-                
-                # mask the topup corrected image
-                run.command('mrmath "%s" mean "%s" -axis 3' %
-                            ('topup_results_' + str(i) + fsl_suffix,
-                             'topup_corrected_' + str(i) + '_mean.nii'
-                            ))
-                 
-                run.command('bet "%s" "%s" -f 0.2 -m' %
-                    ('topup_corrected_' + str(i) + '_mean.nii', 
-                    'topup_corrected_' + str(i) + '_brain'))
-
-                eddy_proc_dir = Path(f'eddy_processing_{i}')
-                eddy_proc_dir.mkdir(parents=True, exist_ok=True)
                 pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
-                call_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', eddy_proc_dir, f'topup_corrected_{i}_brain_mask.nii.gz', eddy_opts=eddyopts, pe_dir=pe_dir_arg)
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
                 
             elif app.ARGS.rpe_none:
-
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -pe_dir "%s" "%s" "%s"' % 
-                    ('eddy_processing_' + str(i), 
-                    eddyopts, 
-                    pe_dir,
-                    'dwi_pre_eddy_' + str(i) + '.mif',
-                    'dwi_post_eddy_' + str(i) + '.mif'))
+                # Create brain mask from mean b0 for eddy
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
+                run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
+                
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', f'{eddy_proc_dir}/b0_brain_mask.nii.gz', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg)
                 
             elif app.ARGS.rpe_all:
                 ### this needs to be changed for realistic compatiblity to eddy_groups
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
-                run.command('mrconvert -strides ' + stride + ' -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
+                run.command(f'mrconvert -strides {stride} -grad grad.txt {app.ARGS.rpe_all} dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
-                    ('eddy_processing',
-                     eddyopts, 
-                     pe_dir, 
-                     'dwi_pre_eddy_' + str(i) + '.mif',
-                     'dwi_post_eddy_' + str(i) + '.mif'))
+                
+                # Extract b0s from both forward and reverse PE data for topup
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_forward.nii" -axis 3')
+                run.command(f'dwiextract -bzero dwirpe.mif - | mrmath - mean "{eddy_proc_dir}/b0_reverse.nii" -axis 3')
+                
+                # Create brain masks for registration
+                run.command(f'bet "{eddy_proc_dir}/b0_forward.nii" "{eddy_proc_dir}/b0_forward_brain" -f 0.2 -m')
+                run.command(f'bet "{eddy_proc_dir}/b0_reverse.nii" "{eddy_proc_dir}/b0_reverse_brain" -f 0.2 -m')
+                
+                # Register reverse to forward
+                run.command(f'flirt -in "{eddy_proc_dir}/b0_reverse_brain.nii.gz" -ref "{eddy_proc_dir}/b0_forward_brain.nii.gz" -out "{eddy_proc_dir}/b0_reverse_to_forward" -dof 6')
+                
+                # Concatenate for topup
+                run.command(f'mrcat -axis 3 "{eddy_proc_dir}/b0_forward.nii" "{eddy_proc_dir}/b0_reverse_to_forward{fsl_suffix}" "{eddy_proc_dir}/b0_pair_topup.nii"')
+                
+                # Run topup and prepare mask for eddy
+                brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                    f'{eddy_proc_dir}/b0_pair_topup.nii',
+                    pe_dir,
+                    f'topup_results_{i}',
+                    fsl_suffix,
+                    eddy_proc_dir
+                )
+                
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
+                
                 run.function(os.remove,'tmp.mif')
 
             elif app.ARGS.rpe_header:
-
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header "%s" "%s"' % 
-                ('eddy_processing',
-                 eddyopts,
-                'dwi_pre_eddy_' + str(i) + '.mif',
-                'dwi_post_eddy_' + str(i) + '.mif'))
+                # Extract PE information from header and identify opposing PE volumes
+                run.command(f'mrinfo -export_pe_table "dwi_pre_eddy_{i}.mif" "{eddy_proc_dir}/pe_scheme.txt"')
+                
+                # Extract b0 volumes for topup (first volume of each unique PE direction)
+                # This assumes the image has opposing PE directions in the header
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrconvert -coord 3 0,1 - "{eddy_proc_dir}/b0_pair_topup.nii"')
+                
+                # Create brain mask from mean b0
+                run.command(f'mrmath "{eddy_proc_dir}/b0_pair_topup.nii" mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
+                run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
+                
+                # Extract PE info for topup from the b0 volumes
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrinfo -export_pe_eddy "{eddy_proc_dir}/topup_config.txt" "{eddy_proc_dir}/topup_indices.txt" -')
+                
+                # Run topup and prepare mask for eddy
+                brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                    f'{eddy_proc_dir}/b0_pair_topup.nii',
+                    pe_dir,
+                    f'topup_results_{i}',
+                    fsl_suffix,
+                    eddy_proc_dir,
+                    acqp_file=f'{eddy_proc_dir}/topup_config.txt'
+                )
+                
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
 
             run.command('dwiextract -bzero "%s" - | mrmath - mean "%s" -axis 3' %
                     ('dwi_post_eddy_' + str(i) + '.mif', 
@@ -739,6 +737,9 @@ def run_eddy(shell_table, dwi_metadata):
 
     # if not variable TE (not using eddy_groups - only run eddy once)
     else:
+        # Set up eddy processing directory (used by all rpe_* cases)
+        eddy_proc_dir = Path('eddy_processing')
+        eddy_proc_dir.mkdir(parents=True, exist_ok=True)
 
         if app.ARGS.rpe_pair:
             bidslist = dwi_metadata['bidslist']
@@ -791,67 +792,33 @@ def run_eddy(shell_table, dwi_metadata):
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
 
-            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
-            if np.any(np.array(odd_dims)):
-                flag_no_subsampling = True
-            else:
-                flag_no_subsampling = False
+            # Move intermediate files into scratch directory
+            run.command('mv b0_pair_topup.nii topup_acqp.txt eddy_processing/')
+            
+            # Run topup and prepare mask for eddy
+            brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                f'{eddy_proc_dir}/b0_pair_topup.nii',
+                pe_dir,
+                'topup_results',
+                fsl_suffix,
+                eddy_proc_dir,
+                acqp_file=f'{eddy_proc_dir}/topup_acqp.txt'
+            )
 
-            if flag_no_subsampling:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-            else:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-                
-            # mask the topup corrected image
-            run.command('mrmath %s mean %s -axis 3' %
-                        ('topup_results' + fsl_suffix,
-                            'topup_corrected_mean.nii'
-                        ))
-                 
-            run.command('bet %s %s -f 0.2 -m' %
-                ('topup_corrected_mean.nii', 
-                'topup_corrected_brain'))
-
-            # call eddy manually
-            eddy_proc_dir = Path('eddy_processing')
-            eddy_proc_dir.mkdir(parents=True, exist_ok=True)
+            # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            call_eddy(f'working.mif', 'dwiec.mif', eddy_proc_dir, 'topup_corrected_brain_mask.nii.gz', eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg)
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
             
         elif app.ARGS.rpe_none:
-
-            run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
-            run.command('bet %s %s -f 0.2 -m' %
-                ('b0pe.nii', 
-                'b0_pe_brain'))
+            # Create brain mask from mean b0 for eddy
+            run.command(f'dwiextract -bzero working.mif - | mrconvert -coord 3 0 - "{eddy_proc_dir}/b0_mean.nii"')
+            run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
             
-            if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing', 
-                        eddyopts, 
-                        'b0_pe_brain_mask' + fsl_suffix,
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
-            else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing', 
-                        'fakeb_grad.txt', 
-                        eddyopts, 
-                        'b0_pe_brain_mask' + fsl_suffix,
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
+            # Call eddy
+            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg)
             
         elif app.ARGS.rpe_all:
             # run an initial topup to create a brain mask
@@ -892,64 +859,57 @@ def run_eddy(shell_table, dwi_metadata):
             run.command('mrconvert b0pe.mif b0pe.nii')
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
-
-            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
-            if np.any(np.array(odd_dims)):
-                flag_no_subsampling = True
-            else:
-                flag_no_subsampling = False
-
-            if flag_no_subsampling:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-            else:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-                
-            # mask the topup corrected image
-            run.command('mrmath "%s" mean "%s" -axis 3' %
-                        ('topup_results' + fsl_suffix,
-                            'topup_corrected_mean.nii'
-                        ))
-                 
-            run.command('bet "%s" "%s" -f 0.2 -m' %
-                ('topup_corrected_mean.nii', 
-                'topup_corrected_brain'))
-
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
+
+            # Move intermediate files into scratch directory
+            run.command('mv b0_pair_topup.nii topup_acqp.txt eddy_processing/')
             
-            if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
-                            ('eddy_processing',
-                            eddyopts, 
-                            pe_dir,
-                            'topup_corrected_brain_mask' + fsl_suffix
-                            ))
-            else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
-                            ('eddy_processing',
-                            'fakeb_grad.txt',
-                            eddyopts, 
-                            pe_dir,
-                            'topup_corrected_brain_mask' + fsl_suffix
-                            ))
+            # Run topup and prepare mask for eddy
+            brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                f'{eddy_proc_dir}/b0_pair_topup.nii',
+                pe_dir,
+                'topup_results',
+                fsl_suffix,
+                eddy_proc_dir,
+                acqp_file=f'{eddy_proc_dir}/topup_acqp.txt'
+            )
+
+            # Call eddy
+            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
+            
             run.function(os.remove,'tmp.mif')
 
         elif app.ARGS.rpe_header:
-            if app.ARGS.eddy_fakeb is None: 
-                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
-                    ('eddy_processing',eddyopts))
-            else:
-                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
-                    ('eddy_processing','fakeb_grad.txt', eddyopts))
-            run.command(cmd)
+            # Extract PE information from header and identify opposing PE volumes
+            run.command(f'mrinfo -export_pe_table working.mif "{eddy_proc_dir}/pe_scheme.txt"')
+            
+            # Extract b0 volumes for topup (first volume of each unique PE direction)
+            # This assumes the image has opposing PE directions in the header
+            run.command(f'dwiextract -bzero working.mif - | mrconvert -coord 3 0,1 - "{eddy_proc_dir}/b0_pair_topup.nii"')
+            
+            # Create brain mask from mean b0
+            run.command(f'mrmath "{eddy_proc_dir}/b0_pair_topup.nii" mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
+            run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
+            
+            # Extract PE info for topup from the b0 volumes
+            run.command(f'dwiextract -bzero working.mif - | mrinfo -export_pe_eddy "{eddy_proc_dir}/topup_config.txt" "{eddy_proc_dir}/topup_indices.txt" -')
+            
+            # Run topup and prepare mask for eddy
+            brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                f'{eddy_proc_dir}/b0_pair_topup.nii',
+                pe_dir,
+                'topup_results',
+                fsl_suffix,
+                eddy_proc_dir,
+                acqp_file=f'{eddy_proc_dir}/topup_config.txt'
+            )
+            
+            # Call eddy
+            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
