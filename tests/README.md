@@ -151,11 +151,11 @@ When DESIGNER or TMI app logic changes, **benchmarks for CI** may need to be upd
    ```bash
    cd /app
 
-   # (optional) needed if 'tests.e2e_runners' module not found error occurs
+   # (optional) below is needed if `ModuleNotFoundError: No module named 'tests'` error occurs
    export PYTHONPATH=/app:$PYTHONPATH
 
    # e.g. $NUM_CORES = 8
-   python /app/tests/scripts/generate_test_benchmark.py --output-dir /app/tests/benchmark_new --cores $NUM_CORES
+   python tests/scripts/generate_test_benchmark.py --output-dir /app/tests/benchmark_new --cores $NUM_CORES
    ```
 
 5. Copy-paste (`scp` or `rsync`) the new benchmarks to the `tests/benchmark/` directory in the local machine's development environment.

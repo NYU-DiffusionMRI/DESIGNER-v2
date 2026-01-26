@@ -76,3 +76,6 @@ COPY --from=test-context . /app/tests
 COPY requirements.txt .
 
 RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.txt
+
+# Add /app to PYTHONPATH for any test scripts (e.g. generate_test_benchmark.py) to import from tests package
+ENV PYTHONPATH="/app:${PYTHONPATH}"
