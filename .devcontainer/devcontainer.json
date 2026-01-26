@@ -33,5 +33,5 @@
 		}
 	},
 	// Make sure to open a terminal after the command below has been run. Otherwise, PyPi packages will not be installed, and the "designer" command will be linked to the FSL's "designer" command.
-	"postCreateCommand": "pip install -e . && pip install -r tests/requirements_test.txt"
+	"postCreateCommand": "pip install -e . && pip install -r tests/requirements_test.txt -c requirements.txt"
 }

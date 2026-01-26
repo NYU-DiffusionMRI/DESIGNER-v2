@@ -1,9 +1,11 @@
 dataset_profiles:
   D1: small
-  D2: d2_specific
+  # D2: d2_specific
+  D2: medium
   D3: small
   D4: medium
-  D5: d5_specific
+  # D5: d5_specific
+  D5: medium
   D6: small
 
 tolerances:

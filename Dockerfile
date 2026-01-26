@@ -3,7 +3,7 @@ FROM python:3.12.4-bookworm AS base
 
 # Copy dependencies from other images
 COPY --from=nyudiffusionmri/fsl:2025-06-16 /usr/local/fsl /usr/local/fsl
-COPY --from=nyudiffusionmri/mrtrix3:2025-06-16 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+COPY --from=nyudiffusionmri/mrtrix3:2026-01-13 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
 COPY --from=nyudiffusionmri/ants:2025-06-20 /usr/local/ants /usr/local/ants
 
 # Install common dependencies
@@ -73,5 +73,6 @@ FROM production AS test
 
 # Copy only the tests directory from the test-context
 COPY --from=test-context . /app/tests
+COPY requirements.txt .
 
-RUN pip install -r tests/requirements_test.txt --no-cache-dir
+RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.txt
