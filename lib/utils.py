@@ -27,7 +27,7 @@ def run_fsl_eddy(
     mif_input: str | Path,
     mif_output: str | Path,
     brain_mask: str | Path,
-    scratch_dir: str | Path,
+    scratch_dir: Path,
     *,
     eddy_opts: str = '',
     topup_prefix: Optional[str] = None,

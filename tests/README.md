@@ -124,10 +124,10 @@ When DESIGNER or TMI app logic changes, **benchmarks for CI** may need to be upd
       --platform=linux/amd64 \
       --build-context test-context=./tests \
       --target test \
-      -t $PERSONAL_DOCKER_HUB_USERNAME/designer2:e2e-test \
+      -t $PERSONAL_DOCKER_HUB_USERNAME/designer2:gen-benchmark \
       .
 
-   docker push $PERSONAL_DOCKER_HUB_USERNAME/designer2:e2e-test
+   docker push $PERSONAL_DOCKER_HUB_USERNAME/designer2:gen-benchmark
    ```
 3. Run a Singularity container on the HPC (e.g. BigPurple):
    ```bash
@@ -136,7 +136,7 @@ When DESIGNER or TMI app logic changes, **benchmarks for CI** may need to be upd
    # request a CPU node
    srun --partition=cpu_dev --cpus-per-task=4 --mem=64GB --time=4:00:00 --pty /bin/bash
 
-   singularity pull designer2-e2e-test.sif docker://$PERSONAL_DOCKER_HUB_USERNAME/designer2:e2e-test
+   singularity pull designer2-e2e-test.sif docker://$PERSONAL_DOCKER_HUB_USERNAME/designer2:gen-benchmark
 
    mkdir benchmark_new
 
