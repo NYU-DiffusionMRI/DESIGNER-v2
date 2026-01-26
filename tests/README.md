@@ -155,7 +155,7 @@ When DESIGNER or TMI app logic changes, **benchmarks for CI** may need to be upd
    export PYTHONPATH=/app:$PYTHONPATH
 
    # e.g. $NUM_CORES = 8
-   python tests/scripts/generate_test_benchmark.py --output-dir /app/tests/benchmark_new --cores $NUM_CORES
+   python tests/scripts/generate_test_benchmark.py --output-dir tests/benchmark_new --cores $NUM_CORES
    ```
 
 5. Copy-paste (`scp` or `rsync`) the new benchmarks to the `tests/benchmark/` directory in the local machine's development environment.
