@@ -7,6 +7,7 @@ from logging import StreamHandler, FileHandler
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
 from lib.designer_fit_wrappers import refit_or_smooth, save_params
 from lib.io import load_mrtrix
+from mrtrix3 import run, path
 
 # List of keys to exclude from logs
 EXCLUDED_KEYS = {
@@ -130,6 +131,22 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
 
 
+    # enabling the use of bmat - this only supports LTE
+    options.add_argument(
+        '-bmat', metavar=('<bmat>'),
+        help='Path to .bmat text file (6xN): rows/entries are [Bxx,Bxy,Bxz,Byy,Byz,Bzz] per DWI column. '
+            'If provided, overrides bval/bvec in the input header.'
+    )
+
+    # GNC correction - this only supports LTE
+    options.add_argument(
+        '-gnc', metavar=('<Lfile>'),
+        help='Path to gradient nonlinearity tensor field L (per-voxel 3x3). '
+            'Will apply voxelwise correction: Bcorr = L B L^T (equivalently qcorr=L q). '
+            'Expected as nifti/mif with last dim = 9 (flattened 3x3) or (...,3,3).'
+    )
+
+
     #wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
     #wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
 
@@ -174,19 +191,116 @@ def execute(): #pylint: disable=unused-variable
 
     mif = load_mrtrix('dwi.mif')
     dwi = mif.data
-    grad_mif = mif.grad
-    bval = grad_mif[:,3]
-    bvec = grad_mif[:,:3].T
-    
-    logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
+    # grad_mif = mif.grad
+    # bval = grad_mif[:,3]
+    # bvec = grad_mif[:,:3].T
+
+    # GNC: load L tensor field 
+    L_field = None
+    if app.ARGS.gnc:
+
+        L_in = path.from_user(app.ARGS.gnc)
+        run.command(f"mrconvert {L_in} L_gnc.mif -force", show=False)
+        Lmif = load_mrtrix("L_gnc.mif")
+        Ldat = Lmif.data
+
+        # Accept either (...,9) or (...,3,3)
+        if Ldat.ndim == 4 and Ldat.shape[-1] == 9:
+            L_field = Ldat.reshape(Ldat.shape[0], Ldat.shape[1], Ldat.shape[2], 3, 3)
+        elif Ldat.ndim == 5 and Ldat.shape[-2:] == (3, 3):
+            L_field = Ldat
+        else:
+            raise MRtrixError(f"-gnc L must be (...,9) or (...,3,3); got {Ldat.shape}")
+
+        # DEBUG: prove it isn't identity
+        app.console(f"GNC: L_field shape = {L_field.shape}")
+        app.console(f"GNC: sample L[0,0,0]=\n{L_field[0,0,0,:,:]}")
+
+
+
+
+    if app.ARGS.bmat:
+        grad = None   # will be filled from bmat
+        app.console(f"Using B-matrix from {app.ARGS.bmat} (ignoring header bval/bvec) - bmat should be in image voxel coordinate frame just like .mif header")
+    else:
+        grad_mif = mif.grad
+        bval = grad_mif[:,3]
+        bvec = grad_mif[:,:3].T
+        app.console("Using gradient table from DWI header")
+        logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
+
+
+
+
+    # grad = np.column_stack((bvec, bval))
+
+    # Optional override from -bmat
+    if app.ARGS.bmat:
+        bmat = np.loadtxt(path.from_user(app.ARGS.bmat), dtype=float)
+
+        # Accept either (6,N) or (N,6)
+        if bmat.shape[0] == 6:
+            B6 = bmat
+        elif bmat.shape[1] == 6:
+            B6 = bmat.T
+        else:
+            raise MRtrixError(f"-bmat must be 6xN or Nx6, got {bmat.shape}")
+
+        N = dwi.shape[-1]
+        if B6.shape[1] != N:
+            raise MRtrixError(f"-bmat has {B6.shape[1]} volumes but DWI has {N}")
+
+        # Convert B6 -> (bvec,bval) via principal eigenpair of B (LTE assumption)
+        bvec = np.zeros((3, N), dtype=float)
+        bval = np.zeros((N,), dtype=float)
+
+        for i in range(N):
+            Bxx, Bxy, Bxz, Byy, Byz, Bzz = B6[:, i]
+            B = np.array([[Bxx, Bxy, Bxz],
+                        [Bxy, Byy, Byz],
+                        [Bxz, Byz, Bzz]], dtype=float)
+
+            # b0: all ~0
+            if np.allclose(B, 0, atol=0, rtol=0):
+                continue
+
+            w, v = np.linalg.eigh(B)
+            idx = np.argmax(w)
+            lam = w[idx]
+            if lam < 0:
+                # if numerical noise causes slightly negative, clamp
+                lam = 0.0
+            g = v[:, idx]
+            ng = np.linalg.norm(g)
+            if ng > 0:
+                g = g / ng
+            else:
+                g[:] = 0
+
+            bval[i] = lam
+            bvec[:, i] = g
 
     order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
     if order >= 2:
         bval = bval / 1000
         logger.info("bval converted normalized to ms/um^2.", extra={"bval": list(set(np.round(bval, 2)))})
 
-    grad = np.hstack((bvec.T, bval[None,...].T))
+    if bvec is None or bval is None:
+        raise MRtrixError("Gradient components were not initialized")
+
+    # Rebuild grad table used downstream (N,4)
+    # NOTE: your tensor.py will re-normalize bvec rows anyway, but keep consistent.
+    grad = np.column_stack([bvec.T, bval])
+
     logger.info("Gradient table created.", extra={"grad_shape": grad.shape})
+
+
+
+
+
+
+
+
 
     if app.ARGS.mask:
         if not path.from_user(app.ARGS.mask).endswith('.mif'):
@@ -247,7 +361,8 @@ def execute(): #pylint: disable=unused-variable
             bvec_dti = bvec[:,dtishell]
             grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
             dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
-            dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+            # dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+            dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask, L=L_field)
             logger.info("DTI fit completed.", extra={"dt_dti_shape": dt_dti.shape})
 
             dt_ = {}
@@ -294,7 +409,8 @@ def execute(): #pylint: disable=unused-variable
 
                 grad_dki = np.hstack((bvec_dki.T, bval_dki[None,...].T))
                 dki = tensor.TensorFitting(grad_dki, int(app.ARGS.n_cores))
-                dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                # dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints, L=L_field)
                 logger.info("DKI fit completed.", extra={"dt_dki_shape": dt_dki.shape})
 
                 dt_ = {}
@@ -447,7 +563,8 @@ def execute(): #pylint: disable=unused-variable
                 bvec_dti = bvec_te[:,dtishell]
                 grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
                 dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
-                dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+                # dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+                dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask, L=L_field)
                 logger.info(f"DTI fit completed for TE={te}.", extra={"dt_dti_shape": dt_dti.shape})
 
             if app.ARGS.DKI or app.ARGS.WDKI:
@@ -487,7 +604,8 @@ def execute(): #pylint: disable=unused-variable
 
                     grad = np.hstack((bvec_dki.T, bval_dki[None,...].T))
                     dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
-                    dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                    # dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                    dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints, L=L_field)
                     logger.info(f"DKI fit completed for TE={te}.", extra={"dt_dki_shape": dt_dki.shape})
 
                 if app.ARGS.polyreg:
