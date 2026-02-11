@@ -72,28 +72,36 @@ def compute_jacobian_weight_for_rpe_all(
     Higher weight indicates less distortion → higher contribution in recombination.
     
     Args:
-        field_map_path: Path to topup field coefficient map
+        field_map_path: Path to topup field map image
         pe_config_row: Single row from eddy_config.txt [pe_x, pe_y, pe_z, readout_time]
         output_suffix: Suffix for output weight file (e.g., 'fwd', 'rev')
         scratch_dir: Directory for output file (default: current directory)
     """
-    from mrtrix3 import run
+    from mrtrix3 import run, app
     
-    pe_axis = int(np.where(pe_config_row[:3] != 0)[0][0])
-    pe_sign = pe_config_row[pe_axis]
-    readout_time = pe_config_row[3]
+    pe_axis = int(np.where(pe_config_row[:3] != 0)[0][0])   # 0=x,1=y,2=z
+    pe_sign = float(pe_config_row[pe_axis])                 # +1 or -1
+    readout = float(pe_config_row[3])
+
+    scratch_dir = Path(scratch_dir)
+    jac = scratch_dir / f"jac_{output_suffix}.mif"
+    wgt = scratch_dir / f"weight_{output_suffix}.mif"
+
+    sign_mult = " -1.0 -mult" if pe_sign < 0 else ""
     
-    output_path = Path(scratch_dir) / f'weight_{output_suffix}.mif'
-    sign_mult = ' -1.0 -mult' if pe_sign < 0 else ''
-    
+    app.console(f"Computing Jacobian-based weight for {output_suffix} PE direction")
+
+    # J = max(0, 1 + d( field*readout*sign ) / dPE)
     run.command(
-        f'mrcalc {field_map_path} {readout_time} -mult{sign_mult} - | '
-        f'mrfilter - gradient - | '
-        f'mrconvert - - -coord 3 {pe_axis} -axes 0,1,2 | '
-        f'mrcalc 1.0 - -add 0.0 -max - | '
-        f'mrcalc - - -mult {output_path}',
-        show=False
+        f"mrcalc {field_map_path} {readout} -mult{sign_mult} - | "
+        f"mrfilter - gradient - | "
+        f"mrconvert - -coord 3 {pe_axis} -axes 0,1,2 - | "
+        f"mrcalc 1.0 - -add 0.0 -max {jac}",
     )
+
+    # weight = J^2
+    run.command(f"mrcalc {jac} {jac} -mult {wgt}")
+    run.function(Path.unlink, jac, show=False)
 
 
 def run_fsl_eddy(
@@ -157,6 +165,7 @@ def run_topup_and_prepare_for_eddy(
     scratch_dir: str | Path,
     *,
     acqp_file: Optional[str] = None,
+    include_field_map: bool = False,
 ) -> tuple[str, str]:
     """
     Run FSL topup and prepare brain mask for eddy.
@@ -198,12 +207,15 @@ def run_topup_and_prepare_for_eddy(
     # 2. Check for odd dimensions (affects topup subsampling)
     odd_dims = [int(s) for s in image.Header(b0_pair_file).size()[:3] if s % 2]
     subsamp_flag = '--subsamp=1' if np.any(np.array(odd_dims)) else ''
+
     
     # 3. Run topup
+    fout_flag = f'--fout={topup_prefix}_field_map.nii.gz' if include_field_map else ''
+
     run.command(
         f'topup --imain="{b0_pair_file}" --datain="{acqp_file}" '
         f'--config=b02b0.cnf {subsamp_flag} --scale=1 '
-        f'--out="{topup_prefix}" --iout="{topup_prefix}{fsl_suffix}"'
+        f'--out="{topup_prefix}" --iout="{topup_prefix}{fsl_suffix}" {fout_flag}'
     )
     
     # 4. Create brain mask from topup corrected image

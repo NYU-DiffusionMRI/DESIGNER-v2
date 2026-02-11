@@ -884,7 +884,8 @@ def run_eddy(shell_table, dwi_metadata):
                 'topup_results',
                 fsl_suffix,
                 eddy_proc_dir,
-                acqp_file=f'{eddy_proc_dir}/topup_acqp.txt'
+                acqp_file=f'{eddy_proc_dir}/topup_acqp.txt',
+                include_field_map=True
             )
 
             # Call eddy (PE info now in dwipe_rpe.mif header)
@@ -900,7 +901,8 @@ def run_eddy(shell_table, dwi_metadata):
             eddy_config = np.loadtxt(f'{eddy_proc_dir}/eddy_config.txt')
             if eddy_config.ndim == 1 or eddy_config.shape[0] != 2:
                 raise MRtrixError(f'Expected 2 PE directions for -rpe_all, got {eddy_config.shape[0] if eddy_config.ndim > 1 else 1}')
-            field_map = f'{topup_prefix}_fieldcoef.nii.gz'
+
+            field_map = f'{topup_prefix}_field_map.nii.gz'
             
             # Compute Jacobian-based weights for forward and reverse PE acquisitions
             compute_jacobian_weight_for_rpe_all(field_map, eddy_config[0], 'fwd', eddy_proc_dir)
