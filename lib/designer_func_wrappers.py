@@ -20,7 +20,7 @@ run_normalization:
 import time
 import shutil
 from pathlib import Path
-from lib.utils import run_fsl_eddy, run_topup_and_prepare_for_eddy
+from lib.utils import run_fsl_eddy, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -830,7 +830,7 @@ def run_eddy(shell_table, dwi_metadata):
             rpe_bids_path = rpe_fpath + '.json'
             
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('mrconvert -grad grad.txt -strides  -json_import "%s" "%s" dwirpe.mif' % (stride,rpe_bids_path,app.ARGS.rpe_all))
+                run.command('mrconvert -grad grad.txt -strides "%s" -json_import "%s" "%s" dwirpe.mif' % (stride, rpe_bids_path, app.ARGS.rpe_all))
                 run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -854,12 +854,25 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-            run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
-            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
+                run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
+                run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
+
             run.command('mrconvert b0pe.mif b0pe.nii')
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
+            
+            # Create manual PE scheme for concatenated data only when BIDS doesn't exist
+            # (when BIDS exists, PE info is already in working.mif and dwirpe.mif headers)
+            if not (os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path)):
+                n_vols_fwd = int(image.Header('working.mif').size()[3])
+                n_vols_rev = int(image.Header('dwirpe.mif').size()[3])
+                pe_scheme_path = f'{eddy_proc_dir}/dwi_manual_pe_scheme.txt'
+                write_rpe_all_pe_scheme(pe_scheme_path, pe_dir, n_vols_fwd, n_vols_rev)
+                
+                # Import PE scheme into concatenated image
+                run.command(f'mrconvert dwipe_rpe.mif -import_pe_table {pe_scheme_path} dwipe_rpe_with_pe.mif')
+                run.command('mv dwipe_rpe_with_pe.mif dwipe_rpe.mif')
 
             # Move intermediate files into scratch directory
             run.command('mv b0_pair_topup.nii topup_acqp.txt eddy_processing/')
@@ -874,12 +887,50 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp_file=f'{eddy_proc_dir}/topup_acqp.txt'
             )
 
-            # Call eddy
-            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            # Call eddy (PE info now in dwipe_rpe.mif header)
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
+            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
             
-            run.function(os.remove,'tmp.mif')
+            # Volume recombination with distortion-based weighting
+            # Eddy outputs 2N volumes (N forward + N reverse PE), which we combine
+            # into N volumes using Jacobian weights for optimal SNR (Skare & Bammer 2010)
+            n_vols = int(image.Header('working.mif').size()[3])
+            
+            # Load phase encoding parameters and get field map from topup
+            eddy_config = np.loadtxt(f'{eddy_proc_dir}/eddy_config.txt')
+            if eddy_config.ndim == 1 or eddy_config.shape[0] != 2:
+                raise MRtrixError(f'Expected 2 PE directions for -rpe_all, got {eddy_config.shape[0] if eddy_config.ndim > 1 else 1}')
+            field_map = f'{topup_prefix}_fieldcoef.nii.gz'
+            
+            # Compute Jacobian-based weights for forward and reverse PE acquisitions
+            compute_jacobian_weight_for_rpe_all(field_map, eddy_config[0], 'fwd', eddy_proc_dir)
+            compute_jacobian_weight_for_rpe_all(field_map, eddy_config[1], 'rev', eddy_proc_dir)
+            
+            # Combine each volume pair using formula: (I_fwd*w_fwd + I_rev*w_rev) / (w_fwd + w_rev)
+            app.console(f'Combining {n_vols} volume pairs with distortion-based weighting')
+            weight_fwd = f'{eddy_proc_dir}/weight_fwd.mif'
+            weight_rev = f'{eddy_proc_dir}/weight_rev.mif'
+            combined_files = []
+            for i in range(n_vols):
+                run.command(f'mrconvert dwiec.mif vol_fwd.mif -coord 3 {i}', show=False)
+                run.command(f'mrconvert dwiec.mif vol_rev.mif -coord 3 {i + n_vols}', show=False)
+                combined_file = f'combined{i}.mif'
+                run.command(f'mrcalc vol_fwd.mif {weight_fwd} -mult '
+                           f'vol_rev.mif {weight_rev} -mult -add '
+                           f'{weight_fwd} {weight_rev} -add -divide 0.0 -max {combined_file}', show=False)
+                combined_files.append(combined_file)
+                run.function(os.remove, 'vol_fwd.mif', show=False)
+                run.function(os.remove, 'vol_rev.mif', show=False)
+            
+            # Concatenate combined volumes and cleanup
+            combined_list = ' '.join(combined_files)
+            run.command(f'mrcat {combined_list} dwiec_combined.mif -axis 3')
+            for f in combined_files:
+                run.function(os.remove, f, show=False)
+            run.function(os.remove, weight_fwd)
+            run.function(os.remove, weight_rev)
+            run.command('mv dwiec_combined.mif dwiec.mif')
+            run.function(os.remove, 'tmp.mif')
 
         elif app.ARGS.rpe_header:
             # Extract PE information from header and identify opposing PE volumes

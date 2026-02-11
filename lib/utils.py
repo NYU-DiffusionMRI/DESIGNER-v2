@@ -10,9 +10,13 @@ def write_manual_pe_scheme(
     readout_time: float = 0.1,
 ):
     """
-    Reproduces dwifslpreproc behavior when:
-    - pe_dir is provided
-    - readout_time is NOT provided (defaults to 0.1)
+    Write PE scheme for single-direction acquisition.
+    
+    Args:
+        outfile: Output file path
+        pe_dir: Phase encoding direction (e.g., 'AP', 'PA', 'LR')
+        n_volumes: Number of volumes
+        readout_time: Total readout time (default: 0.1)
     """
     from mrtrix3 import phaseencoding
 
@@ -21,6 +25,75 @@ def write_manual_pe_scheme(
     with open(outfile, "w") as f:
         for _ in range(n_volumes):
             f.write(f"{pe_vec[0]} {pe_vec[1]} {pe_vec[2]} {readout_time}\n")
+
+
+def write_rpe_all_pe_scheme(
+    outfile: str | Path,
+    pe_dir: str,
+    n_volumes_forward: int,
+    n_volumes_reverse: int,
+    readout_time: float = 0.1,
+):
+    """
+    Write PE scheme for -rpe_all acquisition (forward + reverse PE).
+    
+    Args:
+        outfile: Output file path
+        pe_dir: Phase encoding direction for forward acquisition (e.g., 'AP')
+        n_volumes_forward: Number of forward PE volumes
+        n_volumes_reverse: Number of reverse PE volumes
+        readout_time: Total readout time (default: 0.1)
+    """
+    from mrtrix3 import phaseencoding
+
+    pe_vec_fwd = list(phaseencoding.direction(pe_dir))
+    pe_vec_rev = [-x for x in pe_vec_fwd]  # Reverse direction
+
+    with open(outfile, "w") as f:
+        # Forward PE volumes
+        for _ in range(n_volumes_forward):
+            f.write(f"{pe_vec_fwd[0]} {pe_vec_fwd[1]} {pe_vec_fwd[2]} {readout_time}\n")
+        # Reverse PE volumes
+        for _ in range(n_volumes_reverse):
+            f.write(f"{pe_vec_rev[0]} {pe_vec_rev[1]} {pe_vec_rev[2]} {readout_time}\n")
+
+
+def compute_jacobian_weight_for_rpe_all(
+    field_map_path: str | Path,
+    pe_config_row: np.ndarray,
+    output_suffix: str,
+    scratch_dir: str | Path = '.',
+):
+    """
+    Compute Jacobian-based weight for -rpe_all volume recombination.
+    
+    Creates weight image based on distortion field Jacobian.
+    Weight = J² where J = 1 + ∂(field)/∂(PE_direction)
+    Higher weight indicates less distortion → higher contribution in recombination.
+    
+    Args:
+        field_map_path: Path to topup field coefficient map
+        pe_config_row: Single row from eddy_config.txt [pe_x, pe_y, pe_z, readout_time]
+        output_suffix: Suffix for output weight file (e.g., 'fwd', 'rev')
+        scratch_dir: Directory for output file (default: current directory)
+    """
+    from mrtrix3 import run
+    
+    pe_axis = int(np.where(pe_config_row[:3] != 0)[0][0])
+    pe_sign = pe_config_row[pe_axis]
+    readout_time = pe_config_row[3]
+    
+    output_path = Path(scratch_dir) / f'weight_{output_suffix}.mif'
+    sign_mult = ' -1.0 -mult' if pe_sign < 0 else ''
+    
+    run.command(
+        f'mrcalc {field_map_path} {readout_time} -mult{sign_mult} - | '
+        f'mrfilter - gradient - | '
+        f'mrconvert - - -coord 3 {pe_axis} -axes 0,1,2 | '
+        f'mrcalc 1.0 - -add 0.0 -max - | '
+        f'mrcalc - - -mult {output_path}',
+        show=False
+    )
 
 
 def run_fsl_eddy(
