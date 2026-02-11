@@ -877,7 +877,7 @@ def run_eddy(shell_table, dwi_metadata):
             rpe_bids_path = rpe_fpath + '.json'
             
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('mrconvert -grad grad.txt -strides "%s" -json_import "%s" "%s" dwirpe.mif' % (stride, rpe_bids_path, app.ARGS.rpe_all))
+                run.command('mrconvert -grad grad.txt -strides  -json_import "%s" "%s" dwirpe.mif' % (stride,rpe_bids_path,app.ARGS.rpe_all))
                 run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -901,9 +901,8 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-                run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
-                run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
-
+            run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
+            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
             run.command('mrconvert b0pe.mif b0pe.nii')
             run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
             run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
