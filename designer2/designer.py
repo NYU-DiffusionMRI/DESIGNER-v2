@@ -185,7 +185,7 @@ def execute(): #pylint: disable=unused-variable
     # if app.ARGS.denoise_after_eddy:
     #     run_sigma_denoiser(dwi_metadata)
 
-    # b1 bias correction
+    # b1 bias correction and b0 normalization (runs by default if b) added by omnia (enable)
     if app.ARGS.b1correct:
         run_b1correct(dwi_metadata)
 
@@ -193,15 +193,20 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.mask or app.ARGS.normalize:
         create_brainmask(fsl_suffix,dwi_metadata)    
 
+
+    # Forced after b1 correction and moved before rician bias correction - added by omnia (enable)
+    # normalize separate input series (voxelwise) such that b0 images are properly scaled
+    if app.ARGS.normalize or app.ARGS.b1correct:
+        if app.ARGS.b1correct: 
+            print("running b0 normalization because -b1correct was requested.")
+        run_normalization(dwi_metadata)  
+
     # rician bias correction
     if app.ARGS.phase and app.ARGS.rician:
         print('phase included, skipping approximated bias correction')
     elif app.ARGS.rician and not app.ARGS.phase:
         run_rice_bias_correct(dwi_metadata)
 
-    # normalize separate input series (voxelwise) such that b0 images are properly scaled
-    if app.ARGS.normalize:
-        run_normalization(dwi_metadata)
 
     run.command('mrinfo -export_grad_fsl dwi_designer.bvec dwi_designer.bval working.mif', show=False)
 
