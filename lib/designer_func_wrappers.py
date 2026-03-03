@@ -492,7 +492,7 @@ def run_eddy(shell_table, dwi_metadata):
 
             fake_bvals = np.array([])
             for i, bval_path in enumerate(dwi_metadata['bvals']):
-                bvals = np.loadtxt(bval_path)
+                bvals = np.reshape(np.loadtxt(bval_path),(-1))
                 scaled_bvals = bvals * eddy_fakeb[i]
                 fake_bvals = np.concatenate((fake_bvals, scaled_bvals))
 
