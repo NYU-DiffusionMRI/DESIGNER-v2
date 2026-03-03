@@ -12,11 +12,44 @@ from scipy.ndimage import zoom, gaussian_filter
 import multiprocessing
 import warnings
 
+
 class TensorFitting(object):
 
     def __init__(self, grad, n_cores):
         self.grad = grad
         self.n_cores = n_cores
+
+    def _voxel_grad_from_L(self, grad_base, Lr):
+        """
+        grad_base: (N,4) rows [gx,gy,gz,b]
+        Lr: (3,3)
+        Uses q = sqrt(b)*g, q' = L q, then b' = ||q'||^2, g' = q'/||q'||.
+        Returns (N,4).
+        """
+        g = grad_base[:, :3]
+        b = grad_base[:, 3]
+
+        sb = np.sqrt(np.maximum(b, 0.0))
+        q = g * sb[:, None]            # (N,3)
+        qp = q @ Lr.T                  # (N,3)  (row-wise)
+        bp = np.sum(qp*qp, axis=1)     # (N,)
+        n = np.sqrt(np.maximum(bp, 0.0))
+
+        gp = np.zeros_like(qp)
+        nz = n > 0
+        gp[nz] = qp[nz] / n[nz, None]
+
+        return np.column_stack([gp, bp])
+
+
+    def _vectorize_L(self, L, mask):
+        """
+        L: (X,Y,Z,3,3)
+        returns Lvox: (Nvox,3,3) in same voxel ordering as vectorize(dwi,mask)
+        """
+        L9 = L.reshape(L.shape[0], L.shape[1], L.shape[2], 9)
+        L9_ = vectorize(L9, mask)          # (9, Nvox)
+        return L9_.T.reshape(-1, 3, 3)     # (Nvox,3,3)
 
     def create_tensor_order(self, order):
         """
@@ -28,8 +61,11 @@ class TensorFitting(object):
             ind = np.array(([1, 1], [1, 2], [1, 3], [2, 2], [2, 3], [3, 3])) - 1
         if order == 4:
             cnt = np.array([1, 4, 4, 6, 12, 6, 4, 12, 12, 4, 1, 4, 6, 4, 1], dtype=int)
-            ind = np.array(([1,1,1,1],[1,1,1,2],[1,1,1,3],[1,1,2,2],[1,1,2,3],[1,1,3,3],\
-                [1,2,2,2],[1,2,2,3],[1,2,3,3],[1,3,3,3],[2,2,2,2],[2,2,2,3],[2,2,3,3],[2,3,3,3],[3,3,3,3])) - 1
+            ind = np.array((
+                [1, 1, 1, 1], [1, 1, 1, 2], [1, 1, 1, 3], [1, 1, 2, 2], [1, 1, 2, 3], [1, 1, 3, 3],
+                [1, 2, 2, 2], [1, 2, 2, 3], [1, 2, 3, 3], [1, 3, 3, 3], [2, 2, 2, 2], [2, 2, 2, 3],
+                [2, 2, 3, 3], [2, 3, 3, 3], [3, 3, 3, 3]
+            )) - 1
         return cnt, ind
 
     def diffusion_coeff(self, dt, dir):
@@ -39,10 +75,9 @@ class TensorFitting(object):
         # compute ADC
         dcnt, dind = self.create_tensor_order(2)
         ndir = dir.shape[0]
-        bD = np.tile(dcnt,(ndir, 1)) * dir[:,dind[:, 0]] * dir[:,dind[:, 1]]
+        bD = np.tile(dcnt, (ndir, 1)) * dir[:, dind[:, 0]] * dir[:, dind[:, 1]]
         adc = bD @ dt
         return adc
-
 
     def kurtosis_coeff(self, dt, dir):
         """
@@ -51,12 +86,12 @@ class TensorFitting(object):
         # compute AKC
         wcnt, wind = self.create_tensor_order(4)
         ndir = dir.shape[0]
-        T = np.tile(wcnt,(ndir, 1)) * dir[:,wind[:, 0]] * dir[:,wind[:, 1]] * dir[:,wind[:, 2]] * dir[:,wind[:, 3]]
+        T = np.tile(wcnt, (ndir, 1)) * dir[:, wind[:, 0]] * dir[:, wind[:, 1]] * dir[:, wind[:, 2]] * dir[:, wind[:, 3]]
         akc = T @ dt[6:]
 
         adc = self.diffusion_coeff(dt[:6], dir)
-        md = np.sum(dt[np.array([0,3,5])], 0)/3
-        akc = (akc * md[np.newaxis]**2) / (adc**2)
+        md = np.sum(dt[np.array([0, 3, 5])], 0) / 3
+        akc = (akc * md[np.newaxis] ** 2) / (adc ** 2)
         return akc
 
     def w_kurtosis_coeff(self, dt, dir):
@@ -65,7 +100,7 @@ class TensorFitting(object):
         """
         # compute AKC
         wcnt, wind = self.create_tensor_order(4)
-        T = np.prod(np.reshape(dir[:,wind],(-1,15,4)), axis=2) @ np.diag(wcnt)
+        T = np.prod(np.reshape(dir[:, wind], (-1, 15, 4)), axis=2) @ np.diag(wcnt)
         akc = T @ dt[6:]
         return akc
 
@@ -78,15 +113,15 @@ class TensorFitting(object):
         if randomize:
             rnd = random.random() * samples
         points = []
-        offset = 2/samples
+        offset = 2 / samples
         increment = np.pi * (3. - np.sqrt(5.))
         for i in range(samples):
             y = ((i * offset) - 1) + (offset / 2)
-            r = np.sqrt(1 - pow(y,2))
+            r = np.sqrt(1 - pow(y, 2))
             phi = ((i + rnd) % samples) * increment
             x = np.cos(phi) * r
             z = np.sin(phi) * r
-            points.append([x,y,z])
+            points.append([x, y, z])
         return points
 
     def radial_sampling(self, dir, n):
@@ -94,17 +129,17 @@ class TensorFitting(object):
         Function to output the radial component of a set of evenly distribted direction vectors
         """
         # get the radial component of a set of directions
-        dt = 2*np.pi/n
-        theta = np.arange(0,2*np.pi,dt)
-        dirs = np.vstack((np.cos(theta), np.sin(theta), 0*theta))
-        
+        dt = 2 * np.pi / n
+        theta = np.arange(0, 2 * np.pi, dt)
+        dirs = np.vstack((np.cos(theta), np.sin(theta), 0 * theta))
+
         v = np.hstack((-dir[1], dir[0], 0))
-        s = np.sqrt(np.sum(v**2))
+        s = np.sqrt(np.sum(v ** 2))
         c = dir[2]
-        V = np.array([[0, -v[2], v[1]],[v[2], 0, -v[0]],[-v[1], v[0], 0]])
-        R = np.eye(3) + V + np.matmul(V,V) * (1-c)/(s**2)
+        V = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+        R = np.eye(3) + V + np.matmul(V, V) * (1 - c) / (s ** 2)
         dirs = np.matmul(R, dirs)
-        return dirs 
+        return dirs
 
     def wlls(self, shat, dwi, b, C=None):
         """
@@ -116,21 +151,18 @@ class TensorFitting(object):
             if C is None:
                 dt = scl.pinv(w @ b, check_finite=True) @ (w @ np.log(dwi))
             else:
-                x = cp.Variable((22,1))
+                x = cp.Variable((22, 1))
                 A = w @ b
-                B = w @ np.log(dwi[...,None])
+                B = w @ np.log(dwi[..., None])
                 objective = cp.Minimize(cp.sum_squares(A @ x - B))
                 constraints = [C @ x >= 0]
                 prob = cp.Problem(objective, constraints)
-                result = prob.solve()
+                _ = prob.solve()
                 dt = x.value.squeeze()
-                # dt,_ = opt.nnls(w @ b, w @ np.log(dwi))
-                # res = opt.lsq_linear(w @ b, w @ np.log(dwi), (-5, 1), method='trf', tol=1e-12, max_iter=220000)
-                # dt = res.x
         except:
             dt = np.zeros((b.shape[1]))
 
-        return dt  
+        return dt
 
     def dti_tensor_params(self, nn):
         """
@@ -141,7 +173,7 @@ class TensorFitting(object):
         idx = np.argsort(-values)
         values = -np.sort(-values)
         vectors = vectors[:, idx]
-        return values, vectors  
+        return values, vectors
 
     def dki_tensor_params(self, v1, dt, fit_w=False):
         """
@@ -162,49 +194,35 @@ class TensorFitting(object):
             dirs = self.radial_sampling(v1, 256).T
             akc = self.kurtosis_coeff(dt, dirs)
             rk = np.mean(akc)
-        return ak, rk    
+        return ak, rk
 
     def extract_parameters(self, dt, b, mask, extract_dti, extract_dki, fit_w=False):
         """
         Computes parameters MD, AD, RD, FA and Trace of the diffusion tensor, along with color encoded FA
         Computes parameters MK AK and RK of the kurtosis tensor
         """
-        # extract all tensor parameters from dt
-        # num_cores = multiprocessing.cpu_count()
-
         DT = np.reshape(np.concatenate(
-            (dt[0,:], dt[1,:], dt[2,:], dt[1,:], dt[3,:], dt[4,:], dt[2,:], dt[4,:], dt[5,:])
-            ), (3, 3, dt.shape[1]))
-        
-        # # get the trace
-        # rdwi = np.exp(np.matmul(b[:,1:], dt))
-        # B = np.round(self.grad[:,-1])
-        # uB = np.unique(B)
-        # trace = np.zeros((dt.shape[1], uB.shape[0]))
-        # for ib in range(0, uB.shape[0]): 
-        #     t = np.where(B == uB[ib])[0]
-        #     trace[:,ib] = np.mean(rdwi[t,:], axis=0)
+            (dt[0, :], dt[1, :], dt[2, :], dt[1, :], dt[3, :], dt[4, :], dt[2, :], dt[4, :], dt[5, :])
+        ), (3, 3, dt.shape[1]))
 
         nvox = dt.shape[1]
         inputs = range(0, nvox)
-        values, vectors = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
-            (delayed(self.dti_tensor_params)(DT[:,:,i]) for i in inputs))        
+        values, vectors = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')
+                              (delayed(self.dti_tensor_params)(DT[:, :, i]) for i in inputs))
         values = np.reshape(np.abs(values), (nvox, 3))
         vectors = np.reshape(vectors, (nvox, 3, 3))
 
-        l1 = vectorize(values[:,0], mask)
-        l2 = vectorize(values[:,1], mask)
-        l3 = vectorize(values[:,2], mask)
-        v1 = vectorize(vectors[:,:,0].T, mask)
+        l1 = vectorize(values[:, 0], mask)
+        l2 = vectorize(values[:, 1], mask)
+        l3 = vectorize(values[:, 2], mask)
+        v1 = vectorize(vectors[:, :, 0].T, mask)
 
-        md = (l1+l2+l3)/3
-        rd = (l2+l3)/2
+        md = (l1 + l2 + l3) / 3
+        rd = (l2 + l3) / 2
         ad = l1
-        fa = np.sqrt(1/2)*np.sqrt((l1-l2)**2+(l2-l3)**2+(l3-l1)**2)/np.sqrt(l1**2+l2**2+l3**2)
-        #trace = vectorize(trace.T, mask)
-        fe = np.abs(np.stack((fa*v1[:,:,:,0], fa*v1[:,:,:,1], fa*v1[:,:,:,2]), axis=3))
+        fa = np.sqrt(1 / 2) * np.sqrt((l1 - l2) ** 2 + (l2 - l3) ** 2 + (l3 - l1) ** 2) / np.sqrt(l1 ** 2 + l2 ** 2 + l3 ** 2)
+        fe = np.abs(np.stack((fa * v1[:, :, :, 0], fa * v1[:, :, :, 1], fa * v1[:, :, :, 2]), axis=3))
 
-        
         parameters = {}
         parameters['L1'] = l1
         parameters['L2'] = l2
@@ -215,29 +233,26 @@ class TensorFitting(object):
             parameters['ad'] = ad
             parameters['fa'] = fa
             parameters['fe'] = fe
-            #parameters['trace'] = trace
 
         if extract_dki:
-            #dirs = np.array(self.fibonacci_sphere(256, True))
             dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+            mat = sio.loadmat(os.path.join(dwd, 'constant', 'dirs256.mat'))
             dirs = mat['dirs']
-            
-            
+
             if fit_w:
                 akc = self.w_kurtosis_coeff(dt, dirs)
                 mk = np.mean(akc, axis=0)
-                ak, rk = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
-                    (delayed(self.dki_tensor_params)(vectors[i,:,0], dt[:,i], fit_w=True) for i in inputs))
+                ak, rk = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')
+                             (delayed(self.dki_tensor_params)(vectors[i, :, 0], dt[:, i], fit_w=True) for i in inputs))
                 ak = np.reshape(ak, (nvox))
                 rk = np.reshape(rk, (nvox))
-                ak = vectorize(ak, mask) * md**2 / ad**2
-                rk = vectorize(rk, mask) * md**2 / rd**2
+                ak = vectorize(ak, mask) * md ** 2 / ad ** 2
+                rk = vectorize(rk, mask) * md ** 2 / rd ** 2
             else:
                 akc = self.kurtosis_coeff(dt, dirs)
                 mk = np.mean(akc, axis=0)
-                ak, rk = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')\
-                   (delayed(self.dki_tensor_params)(vectors[i,:,0], dt[:,i], fit_w=False) for i in inputs))
+                ak, rk = zip(*Parallel(n_jobs=self.n_cores, prefer='processes')
+                             (delayed(self.dki_tensor_params)(vectors[i, :, 0], dt[:, i], fit_w=False) for i in inputs))
                 ak = np.reshape(ak, (nvox))
                 rk = np.reshape(rk, (nvox))
                 ak = vectorize(ak, mask)
@@ -247,139 +262,229 @@ class TensorFitting(object):
             parameters['mk'] = mk
             parameters['ak'] = ak
             parameters['rk'] = rk
-        
+
         return parameters
 
-    def dki_fit(self, dwi, mask, constraints=None):
+    def dki_fit(self, dwi, mask, constraints=None, L=None):
         """ 
-        Diffusion parameter estimation using weighted linear least squares fitting
-        Outputs the 6 parameter diffusion tensor and 21 parameter kurtosis tensor in dt[diffusion,kurtosis]
-        Outputs S0 the true quantitative mean signal at zero gradient strength
-        the gradient tensor b
+        Diffusion parameter estimation using weighted linear least squares fitting.
+
+        Outputs
+        -------
+        dt : array
+            (21, Nvox) with [D(6); W(15)] after scaling (same convention as original code).
+        s0 : array
+            (Nvox,) baseline signal.
+        b : array or None
+            Design matrix used for the fit. If L is provided, the design matrix is voxel-dependent,
+            so this returns None.
         """
         warnings.filterwarnings("ignore")
-        # run the fit
-        order = np.floor(np.log(np.abs(np.max(self.grad[:,-1])+1))/np.log(10))
-        if order >= 2:
-            self.grad[:, -1] = self.grad[:, -1]/1000
 
-        dwi.astype(np.double)
+        # --- sanitize / normalize input ---
+        order = np.floor(np.log(np.abs(np.max(self.grad[:, -1]) + 1)) / np.log(10))
+        if order >= 2:
+            self.grad[:, -1] = self.grad[:, -1] / 1000
+
+        dwi = dwi.astype(np.double, copy=False)
         dwi[dwi <= 0] = np.finfo(np.double).eps
         dwi[~np.isfinite(dwi)] = np.finfo(np.double).eps
 
-        self.grad = self.grad.astype(np.double)
-        normgrad = np.sqrt(np.sum(self.grad[:,:3]**2, 1))
-        normgrad[normgrad == 0] = 1
+        self.grad = self.grad.astype(np.double, copy=False)
+        normgrad = np.sqrt(np.sum(self.grad[:, :3] ** 2, 1))
+        normgrad[normgrad == 0] = 1.0
+        self.grad[:, :3] = self.grad[:, :3] / np.tile(normgrad, (3, 1)).T
+        self.grad[np.isnan(self.grad)] = 0.0
 
-        self.grad[:,:3] = self.grad[:,:3]/np.tile(normgrad, (3,1)).T
-        self.grad[np.isnan(self.grad)] = 0
+        grad_base = self.grad.copy()
 
         dcnt, dind = self.create_tensor_order(2)
         wcnt, wind = self.create_tensor_order(4)
 
-        ndwis = dwi.shape[-1]
-        bs = np.ones((ndwis, 1))
-        bD = np.tile(dcnt,(ndwis, 1))*self.grad[:,dind[:, 0]]*self.grad[:,dind[:, 1]]
-        bW = np.tile(wcnt,(ndwis, 1))*self.grad[:,wind[:, 0]]*self.grad[:,wind[:, 1]]*self.grad[:,wind[:, 2]]*self.grad[:,wind[:, 3]]
-        b = np.concatenate((bs, (np.tile(-self.grad[:,-1], (6,1)).T * bD), np.squeeze(1/6 * np.tile(self.grad[:,-1], (15,1)).T**2) * bW), 1)
-
-        dwi_ = vectorize(dwi, mask)
-        init = np.matmul(np.linalg.pinv(b), np.log(dwi_))
-        shat = np.exp(np.matmul(b, init))
-
+        # --- build constraints matrix C (does not depend on voxel) ---
         if np.any(constraints):
             dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            mat = sio.loadmat(os.path.join(dwd,'constant','dirs_constrained.mat'))
+            mat = sio.loadmat(os.path.join(dwd, 'constant', 'dirs_constrained.mat'))
             dir = mat['dir']
 
             ndir = dir.shape[0]
             C = []
             if constraints[0] > 0:
-                c0 = np.hstack((np.zeros((ndir,1)), 
-                    np.tile(dcnt, (ndir, 1)) * dir[:, dind[:,0]] * dir[:,dind[:,1]], 
-                    np.zeros((ndir, 15))))
+                c0 = np.hstack((
+                    np.zeros((ndir, 1)),
+                    np.tile(dcnt, (ndir, 1)) * dir[:, dind[:, 0]] * dir[:, dind[:, 1]],
+                    np.zeros((ndir, 15))
+                ))
                 C.append(c0)
             if constraints[1] > 0:
-                c1 = np.hstack((np.zeros((ndir,7)), 
-                    np.tile(wcnt, (ndir, 1)) * dir[:, wind[:,0]] * dir[:,wind[:,1]] * dir[:,wind[:,2]] * dir[:,wind[:,3]]))
+                c1 = np.hstack((
+                    np.zeros((ndir, 7)),
+                    np.tile(wcnt, (ndir, 1)) * dir[:, wind[:, 0]] * dir[:, wind[:, 1]] * dir[:, wind[:, 2]] * dir[:, wind[:, 3]]
+                ))
                 C.append(c1)
             if constraints[2] > 0:
-                c2 = np.hstack((np.zeros((ndir,1)), 
-                    3/np.max(self.grad[:,3]) * np.tile(dcnt, (ndir, 1)) * dir[:, dind[:,0]] * dir[:,dind[:,1]], 
-                    -np.tile(wcnt, (ndir, 1)) * dir[:,wind[:,0]] * dir[:,wind[:,1]] * dir[:,wind[:,2]] * dir[:,wind[:,3]]))
+                c2 = np.hstack((
+                    np.zeros((ndir, 1)),
+                    3 / np.max(grad_base[:, 3]) * np.tile(dcnt, (ndir, 1)) * dir[:, dind[:, 0]] * dir[:, dind[:, 1]],
+                    -np.tile(wcnt, (ndir, 1)) * dir[:, wind[:, 0]] * dir[:, wind[:, 1]] * dir[:, wind[:, 2]] * dir[:, wind[:, 3]]
+                ))
                 C.append(c2)
-            C = np.reshape(C, (ndir*np.sum(constraints), -1))
+            C = np.reshape(C, (ndir * np.sum(constraints), -1))
         else:
             C = None
 
-        inputs = tqdm(range(0, dwi_.shape[1]))
-        # num_cores = multiprocessing.cpu_count()
+        # --- vectorize data ---
+        dwi_ = vectorize(dwi, mask)  # (Ndwi, Nvox)
+        nvox = dwi_.shape[1]
+        inputs = tqdm(range(0, nvox))
 
-        # for i in inputs:
-        #     self.wlls(shat[:,i], dwi_[:,i], b, C)
-        
-        V = 0
-        if V == 1:
-            # vectorized fit is slow
-            import timeit
-            starting_time = timeit.default_timer()
-            shat_vw = shat.T[:, :, np.newaxis] * np.eye(b.shape[0])
-            wb = np.einsum('ijk,kl->ijl',shat_vw, b)
-            pinvwb = np.linalg.pinv(wb)
-            wlogdwi = np.einsum('ijk,ji->ij',shat_vw, np.log(dwi_))
-            dt = np.einsum('ijk,ik->ji',pinvwb, wlogdwi)
-            print("Time difference :", timeit.default_timer() - starting_time)
+        # --- build global design matrix if no L ---
+        if L is None:
+            ndwis = dwi.shape[-1]
+            bs = np.ones((ndwis, 1))
+            bD = np.tile(dcnt, (ndwis, 1)) * grad_base[:, dind[:, 0]] * grad_base[:, dind[:, 1]]
+            bW = np.tile(wcnt, (ndwis, 1)) * grad_base[:, wind[:, 0]] * grad_base[:, wind[:, 1]] * grad_base[:, wind[:, 2]] * grad_base[:, wind[:, 3]]
+            b = np.concatenate((
+                bs,
+                (np.tile(-grad_base[:, -1], (6, 1)).T * bD),
+                np.squeeze((1 / 6) * np.tile(grad_base[:, -1], (15, 1)).T ** 2) * bW
+            ), 1)
+
+            init = np.matmul(np.linalg.pinv(b), np.log(dwi_))
+            shat = np.exp(np.matmul(b, init))
+
+            dt = Parallel(n_jobs=self.n_cores, prefer='processes')(
+                delayed(self.wlls)(shat[:, i], dwi_[:, i], b, C) for i in inputs
+            )
+            dt = np.reshape(dt, (nvox, b.shape[1])).T
+
         else:
-            dt = Parallel(n_jobs=self.n_cores,prefer='processes')\
-                (delayed(self.wlls)(shat[:,i], dwi_[:,i], b, C) for i in inputs)
-            dt = np.reshape(dt, (dwi_.shape[1], b.shape[1])).T
-        
+            # Expect L as (X,Y,Z,3,3)
+            if L.ndim != 5 or L.shape[-2:] != (3, 3):
+                raise ValueError(f"L must have shape (X,Y,Z,3,3). Got {L.shape}")
 
-        s0 = np.exp(dt[0,:])
-        dt = dt[1:,:]
-        D_apprSq = 1/(np.sum(dt[(0,3,5),:], axis=0)/3)**2
-        dt[6:,:] = dt[6:,:]*np.tile(D_apprSq, (15,1))
+            # Vectorize L in the same voxel ordering as dwi_
+            L9 = L.reshape(L.shape[0], L.shape[1], L.shape[2], 9)
+            L9_ = vectorize(L9, mask)              # (9, Nvox)
+            Lvox = L9_.T.reshape(-1, 3, 3)         # (Nvox, 3, 3)
+
+            def _fit_one_voxel(i):
+                Lr = Lvox[i]
+                grad_i = self._voxel_grad_from_L(grad_base, Lr)
+
+                ndwis = grad_i.shape[0]
+                bs = np.ones((ndwis, 1))
+                bD = np.tile(dcnt, (ndwis, 1)) * grad_i[:, dind[:, 0]] * grad_i[:, dind[:, 1]]
+                bW = np.tile(wcnt, (ndwis, 1)) * grad_i[:, wind[:, 0]] * grad_i[:, wind[:, 1]] * grad_i[:, wind[:, 2]] * grad_i[:, wind[:, 3]]
+                b_i = np.concatenate((
+                    bs,
+                    (np.tile(-grad_i[:, -1], (6, 1)).T * bD),
+                    np.squeeze((1 / 6) * np.tile(grad_i[:, -1], (15, 1)).T ** 2) * bW
+                ), 1)
+
+                y = np.log(dwi_[:, i])
+                init_i = np.linalg.pinv(b_i) @ y
+                shat_i = np.exp(b_i @ init_i)
+
+                return self.wlls(shat_i, dwi_[:, i], b_i, C)
+
+            dt = Parallel(n_jobs=self.n_cores, prefer='processes')(
+                delayed(_fit_one_voxel)(i) for i in inputs
+            )
+            dt = np.reshape(dt, (nvox, 22)).T  # 1 + 6 + 15 = 22
+            b = None
+
+        # --- unpack + rescale kurtosis block exactly as original code ---
+        s0 = np.exp(dt[0, :])
+        dt = dt[1:, :]
+
+        D_apprSq = 1 / (np.sum(dt[(0, 3, 5), :], axis=0) / 3) ** 2
+        dt[6:, :] = dt[6:, :] * np.tile(D_apprSq, (15, 1))
+
         return dt, s0, b
 
-    def dti_fit(self, dwi, mask):
+    def dti_fit(self, dwi, mask, L=None):
+        """
+        Diffusion tensor estimation using weighted linear least squares.
 
-        # run the fit
-        order = np.floor(np.log(np.abs(np.max(self.grad[:,-1])+1))/np.log(10))
+        Outputs
+        -------
+        dt : array
+            (6, Nvox) diffusion tensor elements in order [xx,xy,xz,yy,yz,zz].
+        s0 : array
+            (Nvox,) baseline signal.
+        b : array or None
+            Design matrix used for the fit. If L is provided, the design matrix is voxel-dependent,
+            so this returns None.
+        """
+        # --- sanitize / normalize input ---
+        order = np.floor(np.log(np.abs(np.max(self.grad[:, -1]) + 1)) / np.log(10))
         if order >= 2:
-            self.grad[:, -1] = self.grad[:, -1]/1000
+            self.grad[:, -1] = self.grad[:, -1] / 1000
 
-        dwi.astype(np.double)
+        dwi = dwi.astype(np.double, copy=False)
         dwi[dwi <= 0] = np.finfo(np.double).eps
         dwi[~np.isfinite(dwi)] = np.finfo(np.double).eps
 
-        self.grad = self.grad.astype(np.double)
-        normgrad = np.sqrt(np.sum(self.grad[:,:3]**2, 1))
-        normgrad[normgrad == 0] = 1
+        self.grad = self.grad.astype(np.double, copy=False)
+        normgrad = np.sqrt(np.sum(self.grad[:, :3] ** 2, 1))
+        normgrad[normgrad == 0] = 1.0
+        self.grad[:, :3] = self.grad[:, :3] / np.tile(normgrad, (3, 1)).T
+        self.grad[np.isnan(self.grad)] = 0.0
 
-        self.grad[:,:3] = self.grad[:,:3]/np.tile(normgrad, (3,1)).T
-        self.grad[np.isnan(self.grad)] = 0
+        grad_base = self.grad.copy()
 
         dcnt, dind = self.create_tensor_order(2)
 
-        ndwis = dwi.shape[-1]
-        bs = np.ones((ndwis, 1))
-        bD = np.tile(dcnt,(ndwis, 1))*self.grad[:,dind[:, 0]]*self.grad[:,dind[:, 1]]
-        b = np.concatenate((bs, (np.tile(-self.grad[:,-1], (6,1)).T * bD)),1)
+        dwi_ = vectorize(dwi, mask)  # (Ndwi, Nvox)
+        nvox = dwi_.shape[1]
+        inputs = tqdm(range(0, nvox))
 
-        dwi_ = vectorize(dwi, mask)
-        init = np.matmul(np.linalg.pinv(b), np.log(dwi_))
-        shat = np.exp(np.matmul(b, init))
+        if L is None:
+            ndwis = dwi.shape[-1]
+            bs = np.ones((ndwis, 1))
+            bD = np.tile(dcnt, (ndwis, 1)) * grad_base[:, dind[:, 0]] * grad_base[:, dind[:, 1]]
+            b = np.concatenate((bs, (np.tile(-grad_base[:, -1], (6, 1)).T * bD)), 1)
 
-        inputs = tqdm(range(0, dwi_.shape[1]))
-        # num_cores = multiprocessing.cpu_count()
-        
-        dt = Parallel(n_jobs=self.n_cores, prefer='processes')\
-            (delayed(self.wlls)(shat[:,i], dwi_[:,i], b) for i in inputs)
-        
-        dt = np.reshape(dt, (dwi_.shape[1], b.shape[1])).T
+            init = np.matmul(np.linalg.pinv(b), np.log(dwi_))
+            shat = np.exp(np.matmul(b, init))
 
-        s0 = np.exp(dt[0,:])
-        dt = dt[1:,:]
+            dt = Parallel(n_jobs=self.n_cores, prefer='processes')(
+                delayed(self.wlls)(shat[:, i], dwi_[:, i], b) for i in inputs
+            )
+            dt = np.reshape(dt, (nvox, b.shape[1])).T
+
+        else:
+            if L.ndim != 5 or L.shape[-2:] != (3, 3):
+                raise ValueError(f"L must have shape (X,Y,Z,3,3). Got {L.shape}")
+
+            L9 = L.reshape(L.shape[0], L.shape[1], L.shape[2], 9)
+            L9_ = vectorize(L9, mask)              # (9, Nvox)
+            Lvox = L9_.T.reshape(-1, 3, 3)         # (Nvox, 3, 3)
+
+            def _fit_one_voxel(i):
+                Lr = Lvox[i]
+                grad_i = self._voxel_grad_from_L(grad_base, Lr)
+
+                ndwis = grad_i.shape[0]
+                bs = np.ones((ndwis, 1))
+                bD = np.tile(dcnt, (ndwis, 1)) * grad_i[:, dind[:, 0]] * grad_i[:, dind[:, 1]]
+                b_i = np.concatenate((bs, (np.tile(-grad_i[:, -1], (6, 1)).T * bD)), 1)
+
+                y = np.log(dwi_[:, i])
+                init_i = np.linalg.pinv(b_i) @ y
+                shat_i = np.exp(b_i @ init_i)
+
+                return self.wlls(shat_i, dwi_[:, i], b_i)
+
+            dt = Parallel(n_jobs=self.n_cores, prefer='processes')(
+                delayed(_fit_one_voxel)(i) for i in inputs
+            )
+            dt = np.reshape(dt, (nvox, 7)).T  # 1 + 6 = 7
+            b = None
+
+        s0 = np.exp(dt[0, :])
+        dt = dt[1:, :]
         return dt, s0, b
 
     def compute_outliers(self, dt, dir):
@@ -394,16 +499,16 @@ class TensorFitting(object):
 
         try:
             N = 10000
-            akc_mask = Parallel(n_jobs=self.n_cores, prefer='threads')\
+            akc_mask = Parallel(n_jobs=self.n_cores, prefer='threads') \
                 (delayed(self.compute_outliers)
-                (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
-                )
+                 (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :]) for i in range(1, nblocks + 1)
+                 )
         except:
             N = 1000
-            akc_mask = Parallel(n_jobs=8)\
+            akc_mask = Parallel(n_jobs=8) \
                 (delayed(self.compute_outliers)
-                (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
-                )
+                 (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :]) for i in range(1, nblocks + 1)
+                 )
 
         return np.sum(akc_mask, axis=0)
     
