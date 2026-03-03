@@ -332,18 +332,32 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         img_dn1, sigma1, npars1 = mp_phase.process()
         phi_dn = np.angle(img_dn1)
         
-        # out = ants.from_numpy(abs(npars1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
-        # ants.image_write(out, 'phase_npars.nii')        
+        out = ants.from_numpy(abs(npars1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
+        ants.image_write(out, 'phase_npars.nii')   
+
+        out = ants.from_numpy(abs(sigma1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
+        ants.image_write(out, 'phase_sigma.nii')   
+
+        out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+        ants.image_write(out, 'phase_dn.nii')
+             
         # img_phase = np.angle(img * np.exp(-1j*phi_dn))
         # out = ants.from_numpy(img_phase, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
         # ants.image_write(out, 'phase_dn.nii')
-        out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
-        ants.image_write(out, 'phase_dn.nii')
-
+       
         print('magnitude denoising')
-        img_np = np.real(img*np.exp(-1j*phi_dn))
-        mp = MP(img_np, kernel, step, shrinkage, algorithm, crop, n_cores)
+        img_np = img*np.exp(-1j*phi_dn)
+        #img_np = np.real(img*np.exp(-1j*phi_dn))
+        mp = MP(np.real(img_np), kernel, step, shrinkage, algorithm, crop, n_cores)
         Signal, Sigma, Npars = mp.process()
+
+        out = ants.from_numpy(np.real(img_np), origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+        ants.image_write(out, 'img_ph_unwind_real.nii')
+
+        out = ants.from_numpy(np.imag(img_np), origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+        ants.image_write(out, 'img_ph_unwind_imag.nii')
+
+
     else:
         zeroinds = np.where(img==0)
         img[zeroinds] = np.finfo(img.dtype).eps
@@ -353,6 +367,7 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         Signal[zeroinds] = 0
 
     return Signal, Sigma, Npars
+
 
 def generate_parser():
     import argparse
