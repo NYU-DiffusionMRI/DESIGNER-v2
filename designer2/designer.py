@@ -185,7 +185,7 @@ def execute(): #pylint: disable=unused-variable
     # if app.ARGS.denoise_after_eddy:
     #     run_sigma_denoiser(dwi_metadata)
 
-    # b1 bias correction and b0 normalization (runs by default if b) added by omnia (enable)
+    # b1 bias correction and b0 normalization - added by omnia (enable)
     if app.ARGS.b1correct:
         run_b1correct(dwi_metadata)
 
