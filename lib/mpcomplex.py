@@ -332,14 +332,19 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         img_dn1, sigma1, npars1 = mp_phase.process()
         phi_dn = np.angle(img_dn1)
         
-        # out = ants.from_numpy(abs(npars1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
-        # ants.image_write(out, 'phase_npars.nii')        
+        out = ants.from_numpy(abs(npars1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
+        ants.image_write(out, 'phase_npars.nii')   
+
+        out = ants.from_numpy(abs(sigma1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
+        ants.image_write(out, 'phase_sigma.nii')   
+
+        out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+        ants.image_write(out, 'phase_dn.nii')
+             
         # img_phase = np.angle(img * np.exp(-1j*phi_dn))
         # out = ants.from_numpy(img_phase, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
         # ants.image_write(out, 'phase_dn.nii')
-        out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
-        ants.image_write(out, 'phase_dn.nii')
-
+       
         print('magnitude denoising')
         img_np = np.real(img*np.exp(-1j*phi_dn))
         mp = MP(img_np, kernel, step, shrinkage, algorithm, crop, n_cores)
