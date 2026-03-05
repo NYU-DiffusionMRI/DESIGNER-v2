@@ -1051,17 +1051,17 @@ def run_rice_bias_correct(dwi_metadata):
     from mrtrix3 import run, app
 
     print("...Rician Bias correction...")
-    if app.ARGS.denoise and not app.ARGS.b1correct: # added by omnia
+    if app.ARGS.denoise and not app.ARGS.b1correct: # edited by omnia
         run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
         run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
         run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
 
-    elif app.ARGS.denoise and app.ARGS.b1correct:
-        DWInlist = dwi_metadata['dwi_list'] # added by omnia
-        idxlist  = dwi_metadata['idxlist'] # added by omnia
+    elif app.ARGS.denoise and app.ARGS.b1correct: # added by omnia
+        DWInlist = dwi_metadata['dwi_list'] 
+        idxlist  = dwi_metadata['idxlist'] 
         run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
   
-        if len(DWInlist) == 1: # added by omnia
+        if len(DWInlist) == 1: 
             # normalize sigma by B1 field
             run.command('mrcalc -force lowbnoisemap.mif biasfield.mif -div lowbnoisemap_b1corr.mif ')
             # rician correction
