@@ -1051,20 +1051,25 @@ def run_rice_bias_correct(dwi_metadata):
     from mrtrix3 import run, app
 
     print("...Rician Bias correction...")
-    if app.ARGS.denoise:
-       
-        DWInlist = dwi_metadata['dwi_list'] # added by omnia
-        idxlist  = dwi_metadata['idxlist'] # added by omnia
+
+    if app.ARGS.denoise and not app.ARGS.b1correct: # edited by omnia
+        run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
+        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+        run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
+
+    elif app.ARGS.denoise and app.ARGS.b1correct: # added by omnia
+        DWInlist = dwi_metadata['dwi_list'] 
+        idxlist  = dwi_metadata['idxlist'] 
         run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
   
-        if len(DWInlist) == 1: # added by omnia
+        if len(DWInlist) == 1: 
             # normalize sigma by B1 field
             run.command('mrcalc -force lowbnoisemap.mif biasfield.mif -div lowbnoisemap_b1corr.mif ')
             # rician correction
             run.command('mrcalc working.mif 2 -pow lowbnoisemap_b1corr.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
             run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
         else:
-            # handle multiple DWI series individually, then concat
+            # handle multiple DWI series individually, then concatenate
             miflist = []
             for idx,i in enumerate(DWInlist):
                 run.command('mrconvert -coord 3 "%s" working.mif dwiprerc%s.mif' %
@@ -1081,7 +1086,6 @@ def run_rice_bias_correct(dwi_metadata):
             DWImif = ' '.join(miflist)
             run.command('mrcat -axis 3 ' + DWImif + ' dwirc.mif')
             run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
-
     else:
         if app.ARGS.noisemap:
             stride=dwi_metadata['designer_stride_3dim']
