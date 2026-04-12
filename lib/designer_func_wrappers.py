@@ -246,6 +246,104 @@ def run_degibbs(pf, pe_dir,orig_stride):
     print(f"RPG gibbs correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
 
+def run_degibbs_flexible(input_file, pf, pe_dir, orig_stride, output_prefix="working"):
+    """
+    wrapper for rpg degibbs flexible for running other files besides main dMRI image
+    """
+
+    import lib.rpg as rpg
+    from mrtrix3 import run, app
+    from ants import image_read, image_write, from_numpy
+    import os, time, shutil
+    import numpy as np
+
+    # make optional if file name is the b0_pair_topup.nii -- dont need this
+    if ".mif" in input_file:
+        # if the file is a mif file then export the gradient information and convert to nifti
+        run.command(
+            f'mrconvert -force -export_grad_fsl {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {input_file} {output_prefix}.nii',
+            show=False
+        )
+    else:
+        # if the topup image is the b0 pair then don't make the bvec/bvals
+        if f'{input_file}' != f'{output_prefix}.nii':
+            run.command(
+                f'mrconvert -force {input_file} {output_prefix}.nii',
+                show=False
+            )
+        
+    nii = image_read(f'{output_prefix}.nii')
+    dwi = nii.numpy()
+
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print(f'...RPG degibbsing {output_prefix}...')
+    start_time = time.time()
+
+    n_cores = app.ARGS.n_cores
+
+    strides_orig = [x for x in orig_stride.split(',')]
+    orient_orig = [abs(int(i)) for i in strides_orig]
+
+    if 'i' in pe_dir:
+        pe_dir = 0
+    elif 'j' in pe_dir:
+        pe_dir = 1
+    elif 'k' in pe_dir:
+        pe_dir = 2
+
+    pe_dir_orig = (np.array(orient_orig)-1)[pe_dir]
+    if pe_dir_orig == 2:
+        raise ValueError("PE dir=k should not be possible. Phase encoding direction must be along the first or second axis of the image.")
+
+    transpose_order = np.argsort(orient_orig)
+
+    # TESTING for 3D image transposing 
+    if dwi.ndim == 3:
+        dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(2,1,0))
+    elif dwi.ndim == 4:
+        dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(3,2,1,0))
+
+
+    dwi_dg_t = rpg.unring(
+        dwi_t, minW=1, maxW=3, nsh=20, 
+        pfv=float(pf), pfdimf=pe_dir_orig, phase_flag=False
+    )
+
+    if dwi.ndim == 3:
+        dwi_dg = dwi_dg_t[0].copy().transpose(2,1,0).transpose(np.argsort(transpose_order))
+    elif dwi.ndim == 4:
+        dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0).transpose(np.argsort(transpose_order))
+
+    out = from_numpy(
+        dwi_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction
+    )
+    image_write(out, f'{output_prefix}_rpg.nii')
+
+    if input_file != "b0_pair_topup.nii":
+        # if the file is not the paired topup image then convert back to nifti 
+        run.command(
+            f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}.mif',
+            show=False
+        )
+
+        # also saving out mif file with _rpg prefix name 
+        run.command(
+            f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}_rpg.mif',
+            show=False
+        )
+
+    # Timer
+    elapsed_time = time.time() - start_time
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"RPG gibbs correction on {output_prefix} completed in {int(hours):02}h {int(minutes):02}m {int(seconds):02}s.")
+    print(separator + "\n")
+
+
 def group_alignment(group_list):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
     import numpy as np
@@ -619,7 +717,6 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command(f'flirt -in "pe_original_brain{fsl_suffix}" -ref "{eddy_proc_dir}/b0_pre_eddy_brain" -out "{eddy_proc_dir}/pe_to_ref" -dof 6')
 
                 run.command(f'mrcat -force -axis 3 "{eddy_proc_dir}/pe_to_ref{fsl_suffix}" "{eddy_proc_dir}/rpe_to_ref{fsl_suffix}" "{eddy_proc_dir}/b0_pair_topup.nii"')
-
                 # Prepare topup acquisition parameters from BIDS if available
                 topup_acqp_file = None
                 if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
@@ -632,9 +729,10 @@ def run_eddy(shell_table, dwi_metadata):
                             with open(fname) as infile:
                                 outfile.write(infile.read())
 
+                topupinputfile = 'b0_pair_topup.nii'
                 # Run topup and prepare mask for eddy
                 brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
-                    f'{eddy_proc_dir}/b0_pair_topup.nii',
+                    f'{eddy_proc_dir}/"{topupinputfile}"',
                     pe_dir,
                     f'topup_results_{i}',
                     fsl_suffix,
@@ -673,9 +771,10 @@ def run_eddy(shell_table, dwi_metadata):
                 # Concatenate for topup
                 run.command(f'mrcat -axis 3 "{eddy_proc_dir}/b0_forward.nii" "{eddy_proc_dir}/b0_reverse_to_forward{fsl_suffix}" "{eddy_proc_dir}/b0_pair_topup.nii"')
                 
+                topupinputfile = 'b0_pair_topup.nii'
                 # Run topup and prepare mask for eddy
                 brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
-                    f'{eddy_proc_dir}/b0_pair_topup.nii',
+                    f'{eddy_proc_dir}/{topupinputfile}',
                     pe_dir,
                     f'topup_results_{i}',
                     fsl_suffix,
@@ -702,9 +801,10 @@ def run_eddy(shell_table, dwi_metadata):
                 # Extract PE info for topup from the b0 volumes
                 run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrinfo -export_pe_eddy "{eddy_proc_dir}/topup_config.txt" "{eddy_proc_dir}/topup_indices.txt" -')
                 
+                topupinputfile = 'b0_pair_topup.nii'
                 # Run topup and prepare mask for eddy
                 brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
-                    f'{eddy_proc_dir}/b0_pair_topup.nii',
+                    f'{eddy_proc_dir}/{topupinputfile}',
                     pe_dir,
                     f'topup_results_{i}',
                     fsl_suffix,
@@ -748,13 +848,61 @@ def run_eddy(shell_table, dwi_metadata):
             rpe_bvals_path = rpe_fpath + '.bval'
             rpe_bvec_path = rpe_fpath + '.bvec'
             
+            rpe_dir = app.ARGS.rpe_pair
+
+           # if json for both rpe and pe data exists 
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
+                #if user wants to denoise their data, take the denoised result. Otherwise, take the raw dmri
+                if getattr(app.ARGS, "denoise", False):
+                    run.command('dwiextract -bzero dwidn.mif - | mrconvert -coord 3 0 - b0pe.mif')
+                else:
+                    run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                n=1
+                #if rpe data has more than one volumes
                 if len(rpe_size) == 4:
-                    run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
+                    n = rpe_size[-1] # number of rpe b0s 
+                    # we may dg or dn rpe b0 if there are multiple rpe b0
+                    if n>1:
+                        #if degibbs, degibbs each rpe b0
+                        if getattr(app.ARGS, "degibbs", False):
+                            # degibbs individual rpe b0
+                            run_degibbs_flexible(app.ARGS.rpe_pair, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
+
+                        #if denoise
+                        if getattr(app.ARGS, "denoise", False):
+                            # extract each rpe b0 into individual volumes
+                            rpeb0s_dir = Path('eddy_processing/rpe_b0s')
+                            rpeb0s_dir.mkdir(parents=True, exist_ok=True)
+
+                            rpelist=""
+                            for i in range(n):
+                                run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii ' %
+                                            (rpe_dir, str(i), rpeb0s_dir, str(i)))
+                                if i!=0:
+                                    rpelist=rpelist + " {}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                                else:
+                                    rpelist="{}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+
+                            # rigid register to unbiased population template
+                            run.command('population_template "%s" -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
+                                        (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
+                            # merge to 4D rpe and average to denoise
+                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
+                                    (rpelist, stride, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
+                            run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
+                                (rpe_dir, stride, rpe_bids_path))
+
+                    #take the first rpe b0
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    if len(rpe_size) == 4:
+                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' % 
+                                (rpe_dir, stride, rpe_bids_path))
+                        
                 else: 
+                    #if just one single rpe b0, can't do denoising and don't do degibbsing on rpe b0 yet
                     run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
                             (app.ARGS.rpe_pair, stride, rpe_bids_path))
                 
@@ -769,10 +917,52 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('mrconvert b0rpe.mif b0rpe.nii')
                 run.command('mrconvert b0pe.mif b0pe.nii')
             else:
-                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
+                if getattr(app.ARGS, "denoise", False):
+                    run.command('dwiextract -bzero dwidn.mif - | mrconvert -coord 3 0 - b0pe.nii')
+                else:
+                    run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
+
                 rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                n=1
                 if len(rpe_size) == 4:
-                    run.command('mrconvert "%s" -strides "%s" -coord 3 0 b0rpe.nii' % (app.ARGS.rpe_pair, stride))
+                    n = rpe_size[-1] # number of rpe b0s 
+                    # we may dg or dn rpe b0 if there are multiple rpe b0
+                    if n>1:
+                        #if degibbs
+                        if getattr(app.ARGS, "degibbs", False):
+                            # degibbs individual rpe b0
+                            run_degibbs_flexible(app.ARGS.rpe_pair, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
+                        
+                        #if denoise
+                        if getattr(app.ARGS, "denoise", False):
+                            # extract each rpe b0 into individual volumes
+                            rpeb0s_dir = Path('eddy_processing/rpe_b0s')
+                            rpeb0s_dir.mkdir(parents=True, exist_ok=True)
+                            rpelist=""
+                            for i in range(n):
+                                run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii ' %
+                                            (rpe_dir, str(i), rpeb0s_dir, str(i)))
+                                if i!=0:
+                                    rpelist=rpelist + " {}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                                else:
+                                    rpelist="{}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                            # rigid register to unbiased population template
+                            run.command('population_template %s -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
+                                        (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
+                            # merge to 4D rpe and average to denoise
+                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
+                                    (rpelist, stride, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
+                            run.command('mrconvert "%s" -strides "%s" b0rpe.nii' % 
+                                (rpe_dir, stride))
+
+                    #take the first rpe b0
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    if len(rpe_size) == 4:
+                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" b0rpe.nii' % 
+                                (rpe_dir, stride))
+                                  
                 else: 
                     run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
 
@@ -789,15 +979,41 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
-            run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+            #if degibbs is on and there is only one rpe b0 volume (has not been corrected for gibbs)
+            if getattr(app.ARGS, "degibbs", False) and (n==1):
+                # assuming the input data can be the same for forward and reversed phase encoding? *** 
+                # the degibbsed image will be called b0_pair_topup_rpg.nii
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+                run_degibbs_flexible("b0_pair_topup.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0_pair_topup")
+            
+            #if degibbs is on and there multiple rpe b0 volumes (has been corrected for gibbs)
+            elif getattr(app.ARGS, "degibbs", False) and (n>1):
+                # degibbs pe only
+                run.command('mrcat -axis 3 b0pe.nii b0pe.nii b0_pair_topup_temp.nii')
+                run_degibbs_flexible("b0_pair_topup_temp.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="b0_pair_topup_temp")
+                run.command('mrconvert b0_pair_topup_temp_rpg.nii -coord 3 0 b0pe_rpg.nii')
+                run.command('flirt -in b0rpe.nii -ref b0pe_rpg.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe_rpg.nii b0rpe2pe.nii.gz "%s"'  % 
+                            (f"{eddy_proc_dir}/b0_pair_topup_rpg.nii"))
+                run.function(os.remove, 'b0_pair_topup_temp.nii', show=False)
+                run.function(os.remove, 'b0_pair_topup_temp_rpg.nii', show=False)
+            else:
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+
+            if getattr(app.ARGS, "degibbs", False):
+                topupinputfile = 'b0_pair_topup_rpg.nii'
+            else:
+                topupinputfile = 'b0_pair_topup.nii'
+
 
             # Move intermediate files into scratch directory
             run.command('mv b0_pair_topup.nii topup_acqp.txt eddy_processing/')
             
             # Run topup and prepare mask for eddy
             brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
-                f'{eddy_proc_dir}/b0_pair_topup.nii',
+                f'{eddy_proc_dir}/{topupinputfile}',
                 pe_dir,
                 'topup_results',
                 fsl_suffix,
@@ -823,7 +1039,12 @@ def run_eddy(shell_table, dwi_metadata):
         elif app.ARGS.rpe_all:
             # run an initial topup to create a brain mask
             run.command('mrconvert -export_grad_mrtrix grad.txt dwi.mif tmp.mif', show=False)
-            run.command('dwiextract -bzero working.mif - | mrconvert -coord 3 0 - b0pe.mif')
+
+            #if user wants to denoise their data
+            if getattr(app.ARGS, "denoise", False):
+                run.command('dwiextract -bzero dwidn.mif - | mrconvert -coord 3 0 - b0pe.mif')
+            else:
+                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
 
             bidslist = dwi_metadata['bidslist']
             rpe_fpath = splitext_(app.ARGS.rpe_all)[0]
@@ -831,15 +1052,16 @@ def run_eddy(shell_table, dwi_metadata):
             
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
                 run.command('mrconvert -grad grad.txt -strides "%s" -json_import "%s" "%s" dwirpe.mif' % (stride, rpe_bids_path, app.ARGS.rpe_all))
-                run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
+                run.command('dwiextract -bzero dwirpe.mif b0rpe.mif')
+                run.command('mrconvert -coord 3 0 b0rpe.mif b0rpe_0.mif')
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
-                run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                run.command('mrinfo b0rpe_0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
                 filenames = ['topup_config_1.txt', 'topup_config_2.txt']
                 with open('topup_acqp.txt', 'w') as outfile:
                     for fname in filenames:
                         with open(fname) as infile:
                             outfile.write(infile.read())
-                run.command('mrconvert b0rpe.mif b0rpe.nii')
+                # run.command('mrconvert b0rpe.mif b0rpe.nii')
             else:
                 acqp = np.zeros((2,3))
                 if 'i' in pe_dir: acqp[:,0] = 1
@@ -855,12 +1077,84 @@ def run_eddy(shell_table, dwi_metadata):
                 np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
                 run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
-                run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
+                run.command('dwiextract -bzero dwirpe.mif b0rpe.mif')
+                # run.command('dwiextract -bzero dwirpe.mif - | mrconvert -strides "%s" -coord 3 0 - b0rpe.nii' % 
+                #             (stride))
 
+            rpe_size = [ int(s) for s in image.Header("b0rpe.mif").size() ]
+            n=1
+            if len(rpe_size) == 4:
+                n = rpe_size[-1] # number of rpe b0s 
+                # we may dg or dn rpe b0 if there are multiple rpe b0
+                if n>1:
+                    #if degibbs
+                    if getattr(app.ARGS, "degibbs", False):
+                        # degibbs individual rpe b0
+                        run_degibbs_flexible("b0rpe.mif", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
+                    
+                    #if denoise
+                    if getattr(app.ARGS, "denoise", False):
+                        # extract each rpe b0 into individual volumes
+                        rpeb0s_dir = Path('eddy_processing/rpe_b0s')
+                        rpeb0s_dir.mkdir(parents=True, exist_ok=True)
+                        rpelist=""
+                        for i in range(n):
+                            run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii ' %
+                                        (rpe_dir, str(i), rpeb0s_dir, str(i)))
+                            if i!=0:
+                                rpelist=rpelist + " {}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                            else:
+                                rpelist="{}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                        # rigid register to unbiased population template
+                        run.command('population_template "%s" -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
+                                    (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
+                        # merge to 4D rpe and average to denoise
+                        run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
+                                (rpelist, stride, eddy_proc_dir))
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
+                        run.command('mrconvert "%s" -strides "%s" b0rpe.nii' % 
+                                (rpe_dir, stride))
+
+                    #take the first rpe b0
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    if len(rpe_size) == 4:
+                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" b0rpe.nii' % 
+                                (rpe_dir, stride))
+                                    
+                else: 
+                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
+                    rpe_dir = "b0rpe.nii"
+                
             run.command('mrconvert b0pe.mif b0pe.nii')
-            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
-            run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
+
+            if getattr(app.ARGS, "degibbs", False) and (n==0):
+                # assuming the input data can be the same for forward and reversed phase encoding? *** 
+                # the degibbsed image will be called b0_pair_topup_rpg.nii
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
+                run_degibbs_flexible("b0_pair_topup.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0_pair_topup")
+            elif getattr(app.ARGS, "degibbs", False) and (n>1):
+                # degibbs pe only
+                run.command('mrcat -axis 3 b0pe.nii b0pe.nii b0_pair_topup_temp.nii')
+                run_degibbs_flexible("b0_pair_topup_temp.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="b0_pair_topup_temp")
+                run.command('mrconvert b0_pair_topup_temp_rpg.nii -coord 3 0 b0pe_rpg.nii')
+                run.command('flirt -in b0rpe.nii -ref b0pe_rpg.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe_rpg.nii b0rpe2pe.nii.gz "%s"'  % 
+                            (f"{eddy_proc_dir}/b0_pair_topup_rpg.nii"))
+                run.function(os.remove, 'b0_pair_topup_temp.nii', show=False)
+                run.function(os.remove, 'b0_pair_topup_temp_rpg.nii', show=False)
+            else:
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
+
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
+
+
+            if getattr(app.ARGS, "degibbs", False):
+                topupinputfile = 'b0_pair_topup_rpg.nii'
+            else:
+                topupinputfile = 'b0_pair_topup.nii'
             
             # Create manual PE scheme for concatenated data only when BIDS doesn't exist
             # (when BIDS exists, PE info is already in working.mif and dwirpe.mif headers)
@@ -946,12 +1240,14 @@ def run_eddy(shell_table, dwi_metadata):
             run.command(f'mrmath "{eddy_proc_dir}/b0_pair_topup.nii" mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
             run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
             
+            topupinputfile = 'b0_pair_topup.nii'
+
             # Extract PE info for topup from the b0 volumes
             run.command(f'dwiextract -bzero working.mif - | mrinfo -export_pe_eddy "{eddy_proc_dir}/topup_config.txt" "{eddy_proc_dir}/topup_indices.txt" -')
             
             # Run topup and prepare mask for eddy
             brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
-                f'{eddy_proc_dir}/b0_pair_topup.nii',
+                f'{eddy_proc_dir}/{topupinputfile}',
                 pe_dir,
                 'topup_results',
                 fsl_suffix,
