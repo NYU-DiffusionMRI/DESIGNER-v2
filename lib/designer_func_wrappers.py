@@ -83,7 +83,7 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
         Nparameters, origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
     image_write(out, 'Npars_fixed_strides.nii')
 
-    run.command('mrconvert -fslgrad dwidn.bvec dwidn.bval dwidn.nii dwidn.mif', show=False)
+    run.command('mrconvert -fslgrad dwidn.bvec dwidn.bval -json_import working.json dwidn.nii dwidn.mif', show=False)
 
     stride=dwi_metadata['stride_3dim']
     run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
@@ -322,7 +322,9 @@ def run_degibbs_flexible(input_file, pf, pe_dir, orig_stride, output_prefix="wor
     )
     image_write(out, f'{output_prefix}_rpg.nii')
 
-    if input_file != "b0_pair_topup.nii":
+    print(output_prefix)
+    print('b0rpe' not in output_prefix)
+    if ('b0_pair_topup' not in output_prefix) and ('b0rpe' not in output_prefix):
         # if the file is not the paired topup image then convert back to nifti 
         run.command(
             f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}.mif',
@@ -1006,10 +1008,10 @@ def run_eddy(shell_table, dwi_metadata):
                 topupinputfile = 'b0_pair_topup_rpg.nii'
             else:
                 topupinputfile = 'b0_pair_topup.nii'
+                # Move intermediate files into scratch directory
+                run.command('mv b0_pair_topup.nii eddy_processing/')
 
-
-            # Move intermediate files into scratch directory
-            run.command('mv b0_pair_topup.nii topup_acqp.txt eddy_processing/')
+            run.command('mv topup_acqp.txt eddy_processing/')
             
             # Run topup and prepare mask for eddy
             brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
@@ -1155,7 +1157,9 @@ def run_eddy(shell_table, dwi_metadata):
                 topupinputfile = 'b0_pair_topup_rpg.nii'
             else:
                 topupinputfile = 'b0_pair_topup.nii'
-            
+                # Move intermediate files into scratch directory
+                run.command('mv b0_pair_topup.nii eddy_processing/')
+            run.command('mv topup_acqp.txt eddy_processing/')
             # Create manual PE scheme for concatenated data only when BIDS doesn't exist
             # (when BIDS exists, PE info is already in working.mif and dwirpe.mif headers)
             if not (os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path)):
@@ -1167,9 +1171,6 @@ def run_eddy(shell_table, dwi_metadata):
                 # Import PE scheme into concatenated image
                 run.command(f'mrconvert dwipe_rpe.mif -import_pe_table {pe_scheme_path} dwipe_rpe_with_pe.mif')
                 run.command('mv dwipe_rpe_with_pe.mif dwipe_rpe.mif')
-
-            # Move intermediate files into scratch directory
-            run.command('mv b0_pair_topup.nii topup_acqp.txt eddy_processing/')
             
             # Run topup and prepare mask for eddy
             brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
