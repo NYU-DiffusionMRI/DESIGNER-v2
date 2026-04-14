@@ -322,8 +322,6 @@ def run_degibbs_flexible(input_file, pf, pe_dir, orig_stride, output_prefix="wor
     )
     image_write(out, f'{output_prefix}_rpg.nii')
 
-    print(output_prefix)
-    print('b0rpe' not in output_prefix)
     if ('b0_pair_topup' not in output_prefix) and ('b0rpe' not in output_prefix):
         # if the file is not the paired topup image then convert back to nifti 
         run.command(
@@ -1039,6 +1037,8 @@ def run_eddy(shell_table, dwi_metadata):
             run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg)
             
         elif app.ARGS.rpe_all:
+            rpe_dir = app.ARGS.rpe_all
+
             # run an initial topup to create a brain mask
             run.command('mrconvert -export_grad_mrtrix grad.txt dwi.mif tmp.mif', show=False)
 
@@ -1172,9 +1172,10 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command(f'mrconvert dwipe_rpe.mif -import_pe_table {pe_scheme_path} dwipe_rpe_with_pe.mif')
                 run.command('mv dwipe_rpe_with_pe.mif dwipe_rpe.mif')
             
+
             # Run topup and prepare mask for eddy
             brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
-                f'{eddy_proc_dir}/b0_pair_topup.nii',
+                f'{eddy_proc_dir}/{topupinputfile}',
                 pe_dir,
                 'topup_results',
                 fsl_suffix,
