@@ -857,17 +857,22 @@ def run_eddy(shell_table, dwi_metadata):
                     run.command('dwiextract -bzero dwidn.mif - | mrconvert -coord 3 0 - b0pe.mif')
                 else:
                     run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+
+                rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
                 n=1
                 #if rpe data has more than one volumes
                 if len(rpe_size) == 4:
+                    #extract rpe b0 only
+                    run.command('dwiextract -bzero "%s" "%s"' % (rpe_dir,f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    rpe_dir=f"{eddy_proc_dir}/b0rpe_raw.nii"
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
                     n = rpe_size[-1] # number of rpe b0s 
                     # we may dg or dn rpe b0 if there are multiple rpe b0
                     if n>1:
                         #if degibbs, degibbs each rpe b0
                         if getattr(app.ARGS, "degibbs", False):
                             # degibbs individual rpe b0
-                            run_degibbs_flexible(app.ARGS.rpe_pair, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                            run_degibbs_flexible(rpe_dir, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
                             rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
 
                         #if denoise
@@ -878,7 +883,7 @@ def run_eddy(shell_table, dwi_metadata):
 
                             rpelist=""
                             for i in range(n):
-                                run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii ' %
+                                run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii' %
                                             (rpe_dir, str(i), rpeb0s_dir, str(i)))
                                 if i!=0:
                                     rpelist=rpelist + " {}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
@@ -900,11 +905,14 @@ def run_eddy(shell_table, dwi_metadata):
                     if len(rpe_size) == 4:
                         run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' % 
                                 (rpe_dir, stride, rpe_bids_path))
+                    else:
+                        run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
+                                (rpe_dir, stride, rpe_bids_path))
                         
                 else: 
                     #if just one single rpe b0, can't do denoising and don't do degibbsing on rpe b0 yet
                     run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
+                            (rpe_dir, stride, rpe_bids_path))
                 
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -922,9 +930,13 @@ def run_eddy(shell_table, dwi_metadata):
                 else:
                     run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
 
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
                 n=1
                 if len(rpe_size) == 4:
+                    #extract rpe b0 only
+                    run.command('dwiextract -bzero "%s" "%s"' % (rpe_dir,f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    rpe_dir=f"{eddy_proc_dir}/b0rpe_raw.nii"
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
                     n = rpe_size[-1] # number of rpe b0s 
                     # we may dg or dn rpe b0 if there are multiple rpe b0
                     if n>1:
@@ -961,6 +973,9 @@ def run_eddy(shell_table, dwi_metadata):
                     rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
                     if len(rpe_size) == 4:
                         run.command('mrconvert "%s" -coord 3 0 -strides "%s" b0rpe.nii' % 
+                                (rpe_dir, stride))
+                    else:
+                        run.command('mrconvert "%s" -strides "%s" b0rpe.mif' % 
                                 (rpe_dir, stride))
                                   
                 else: 
