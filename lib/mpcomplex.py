@@ -325,10 +325,11 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         
         kernel_phase = [15, 15, 1]
         step_phase = [kernel_phase[0]//2-1, kernel_phase[1]//2-1, 1]
-        
+        crop_phase = min(phi.shape[-1] // 2, np.prod(kernel_phase) // 2)
+
         print('phase denoising')
         img = mag*np.exp(1j*phi)
-        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', phi.shape[-1]//2, n_cores)
+        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', crop_phase, n_cores)
         img_dn1, sigma1, npars1 = mp_phase.process()
         phi_dn = np.angle(img_dn1)
         
