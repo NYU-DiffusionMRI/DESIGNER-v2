@@ -191,6 +191,7 @@ def execute(): #pylint: disable=unused-variable
 
     mif = load_mrtrix('dwi.mif')
     dwi = mif.data
+    dwi=abs(dwi)
     # grad_mif = mif.grad
     # bval = grad_mif[:,3]
     # bvec = grad_mif[:,:3].T

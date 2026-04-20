@@ -448,7 +448,7 @@ def main():
    
     (Signal, Sigma, Npars) = denoise(img_mag, kernel=extent, step=[2,2,2],  shrinkage=args.shrinkage, algorithm=args.algorithm, crop=0, phase=img_phi)
     
-    Signal_ants = ants.from_numpy(abs(Signal), origin=img_mag_ants.origin, spacing=img_mag_ants.spacing, direction=img_mag_ants.direction)
+    Signal_ants = ants.from_numpy(Signal, origin=img_mag_ants.origin, spacing=img_mag_ants.spacing, direction=img_mag_ants.direction)
     ants.image_write(Signal_ants, args.output)
 
     if args.noisemap:
