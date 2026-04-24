@@ -894,8 +894,10 @@ def run_eddy(shell_table, dwi_metadata):
                             run.command('population_template "%s" -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
                                         (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
                             # merge to 4D rpe and average to denoise
+                            rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
+                            rpelist_transformed = " ".join(rpelist_new)
                             run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
-                                    (rpelist, stride, eddy_proc_dir))
+                                    (rpelist_transformed, stride, eddy_proc_dir))
                             rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
                             run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
                                 (rpe_dir, stride, rpe_bids_path))
@@ -963,8 +965,10 @@ def run_eddy(shell_table, dwi_metadata):
                             run.command('population_template %s -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
                                         (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
                             # merge to 4D rpe and average to denoise
+                            rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
+                            rpelist_transformed = " ".join(rpelist_new)
                             run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
-                                    (rpelist, stride, eddy_proc_dir))
+                                    (rpelist_transformed, stride, eddy_proc_dir))
                             rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
                             run.command('mrconvert "%s" -strides "%s" b0rpe.nii' % 
                                 (rpe_dir, stride))
@@ -1127,8 +1131,10 @@ def run_eddy(shell_table, dwi_metadata):
                         run.command('population_template "%s" -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
                                     (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
                         # merge to 4D rpe and average to denoise
+                        rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
+                        rpelist_transformed = " ".join(rpelist_new)
                         run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
-                                (rpelist, stride, eddy_proc_dir))
+                                (rpelist_transformed, stride, eddy_proc_dir))
                         rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
                         run.command('mrconvert "%s" -strides "%s" b0rpe.nii' % 
                                 (rpe_dir, stride))
@@ -1142,6 +1148,9 @@ def run_eddy(shell_table, dwi_metadata):
                 else: 
                     run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
                     rpe_dir = "b0rpe.nii"
+               
+            else: 
+                run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
                 
             run.command('mrconvert b0pe.mif b0pe.nii')
 
