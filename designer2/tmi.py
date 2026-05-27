@@ -128,7 +128,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for SMI polynomial regression. must be 0,2,4, or 6.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
     smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
-
+    smi_options.add_argument('-smi_fw_thres', metavar=(''), type=float, default=0.2, help='Free-water threshold used by the SMI two-step free-water fit. Only used when FW is included in -compartments. Default=0.2.')
 
     #wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
     #wmti_options.add_argument('-WMTI', action='store_true', help='Include WMTI parameters in output folder (awf,ias_params,eas_params)')
@@ -220,7 +220,6 @@ def execute(): #pylint: disable=unused-variable
         logger.info("Multi-TE or Multi-beta detected.", extra={"multi_te_beta": multi_te_beta})
     else:
         multi_te_beta = False
-
 
     if len(set(dwi_metadata['bshape_per_volume'])) > 1:
         if (app.ARGS.DTI) or (app.ARGS.DKI) or (app.ARGS.WDKI):
@@ -649,6 +648,9 @@ def execute(): #pylint: disable=unused-variable
                 compartments = ['IAS', 'EAS']
                 logger.info("Using default SMI compartments.", extra={"compartments": compartments})
 
+            if 'FW' in compartments:
+                logger.info("SMI free-water two-step threshold.", extra={"smi_fw_thres": float(app.ARGS.smi_fw_thres)})
+
             if app.ARGS.lmax:
                 if int(app.ARGS.lmax) not in {0, 2, 4, 6}:
                     raise ValueError("lmax value must be 0, 2, 4, or 6.")
@@ -693,7 +695,7 @@ def execute(): #pylint: disable=unused-variable
                 prior = mat[array_name[-1]]
                 smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres))
                 
 
                 logger.info("SMI model initialized for multi-TE/beta data.")
@@ -733,7 +735,7 @@ def execute(): #pylint: disable=unused-variable
                 
                 smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres))
 
                 # else:
                 #     smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,

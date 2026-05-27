@@ -21,7 +21,7 @@ class SMI(object):
     def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
-        l_max_training=None, seed=42):
+        l_max_training=None, seed=42, smi_fw_thres=0.2):
         """
         Setting some default values and initialization required for class functions
         """
@@ -40,6 +40,7 @@ class SMI(object):
         
         self.rotinv_lmax = rotinv_lmax
         self.n_training = int(n_training)
+        self.smi_fw_thres = float(smi_fw_thres)
 
         # set up required inputs
         self.set_compartments(compartments)
@@ -1270,71 +1271,196 @@ class SMI(object):
 
         return epsilon_all.T
 
+    def _get_wide_fw_prior(self):
+        """
+        Generate the wide-prior variant used to detect high-CSF / high-free-water voxels.
+
+        This mirrors the MATLAB logic:
+
+            prior_wide = prior
+            prior_wide[:, 1] = f_wide
+            prior_wide[:, 5] = f_FW_wide
+
+        using zero-based Python columns:
+
+            prior_wide[:, 0] = f_wide
+            prior_wide[:, 4] = f_FW_wide
+
+        The other prior columns are intentionally left unchanged, matching the MATLAB fix.
+        """
+
+        prior_wide = self.prior.copy()
+
+        bounds_wide_priors = np.array([
+            [0.0, 1.5, 1.5, 0.4, 0.0,  50.0,  50.0, 0.0],
+            [1.0, 2.5, 2.5, 0.8, 1.0, 150.0, 120.0, 1.0]
+        ])
+
+        # Store current attributes, if they exist.
+        had_lb_training = hasattr(self, "lb_training")
+        had_ub_training = hasattr(self, "ub_training")
+        had_flag_Depar_Deperp = hasattr(self, "flag_Depar_Deperp")
+
+        lb_training_original = self.lb_training.copy() if had_lb_training and hasattr(self.lb_training, "copy") else getattr(self, "lb_training", None)
+        ub_training_original = self.ub_training.copy() if had_ub_training and hasattr(self.ub_training, "copy") else getattr(self, "ub_training", None)
+        flag_Depar_Deperp_original = getattr(self, "flag_Depar_Deperp", None)
+
+        l_max_training_original = self.l_max_training
+        n_training_original = self.n_training
+
+        try:
+            self.lb_training = bounds_wide_priors[0, :]
+            self.ub_training = bounds_wide_priors[1, :]
+
+            # Match the number of samples in the existing prior.
+            # This avoids shape mismatches when using a loaded .mat prior.
+            self.n_training = prior_wide.shape[0]
+
+            self.l_max_training = 6
+
+            # Needed by get_uniformly_distributed_SM_prior().
+            # The MATLAB wide-prior code does not enforce Depar > Deperp.
+            self.flag_Depar_Deperp = False
+
+            wide_prior_full = self.get_uniformly_distributed_SM_prior()
+
+            prior_wide[:, 0] = wide_prior_full[:, 0]  # f
+            prior_wide[:, 4] = wide_prior_full[:, 4]  # f_FW
+
+        finally:
+            self.l_max_training = l_max_training_original
+            self.n_training = n_training_original
+
+            if had_lb_training:
+                self.lb_training = lb_training_original
+            else:
+                del self.lb_training
+
+            if had_ub_training:
+                self.ub_training = ub_training_original
+            else:
+                del self.ub_training
+
+            if had_flag_Depar_Deperp:
+                self.flag_Depar_Deperp = flag_Depar_Deperp_original
+            else:
+                del self.flag_Depar_Deperp
+
+        return prior_wide
+
     def fit(self, dwi, mask=None, sigma=None):
         """
         Main fitting function for SMI class
-        Inputs: 
+
+        Inputs:
         -------
-        dwi (4d NDarray)
-        bval (1d NDarray)
-        bvec (2d NDarray)
-        optional (mask: 3d NDarray, sigma: 3d NDarray)
+        dwi : 4D NDarray
+            Diffusion-weighted data.
+        mask : 3D NDarray, optional
+            Brain / fitting mask.
+        sigma : 3D NDarray, optional
+            Noise map.
 
         Outputs:
         --------
-        kernel (4d NDarray)
-        RotInvs (4d NDarray)
-
+        output : dict
+            SMI parameter maps and rotational invariants.
         """
 
-        self.dwishape = dwi.shape    
-        self.set_mask(mask)
+        self.dwishape = dwi.shape
 
+        self.set_mask(mask)
         self.set_sigma(sigma, dwi)
 
-        # set l_max for smi and rotinv
+        # Set l_max for SMI and rotational invariants
         self.set_lmax_rotinv_smi()
 
-        # set SMI priors
+        # Set SMI priors
         self.set_priors()
 
         dwi = dwi.astype(np.float32)
-        # correct for rician bias if the flag is on
-        if self.flag_rician_bias:
-            dwi = np.sqrt(abs(dwi**2 - sigma[...,None]**2))
 
-        # spherical harmonic fit
+        # Correct for Rician bias if the flag is on
+        if self.flag_rician_bias:
+            dwi = np.sqrt(abs(dwi**2 - sigma[..., None]**2))
+
+        # Spherical harmonic fit / rotational invariants
         rot_invs = self.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi, self.mask)
-        
-        output = {}
-        # standard model fit
+
+        # First, run the standard/default SMI fit
         kernel = self.standard_model_mlfit_rot_invs(rot_invs, [0, 0.2])
-        output['f'] = kernel[:,:,:,0]
-        output['Da'] = kernel[:,:,:,1]
-        output['DePar'] = kernel[:,:,:,2]
-        output['DePerp'] = kernel[:,:,:,3]
-        output['fw'] = kernel[:,:,:,4]
+
+        # ------------------------------------------------------------------
+        # Two-step free-water fit
+        #
+        # Mirrors the MATLAB logic:
+        #
+        #   1. Run default fit.
+        #   2. If FW is estimated, build a wide-prior version.
+        #   3. Run the wide-prior fit with compartments [IAS, EAS, FW].
+        #   4. Flag voxels where wide-fit fw > threshold.
+        #   5. Replace only those voxels in the final kernel.
+        #
+        # This only changes behavior when FW is included in compartments.
+        # ------------------------------------------------------------------
+        if self.flag_compartments[2]:
+
+            prior_original = self.prior.copy()
+            flag_compartments_original = self.flag_compartments.copy()
+
+            try:
+                self.prior = self._get_wide_fw_prior()
+
+                # MATLAB equivalent: [1 1 1 0]
+                self.flag_compartments = [1, 1, 1, 0]
+
+                kernel_wide = self.standard_model_mlfit_rot_invs(rot_invs, [0, 0.2])
+
+            finally:
+                self.prior = prior_original
+                self.flag_compartments = flag_compartments_original
+
+            mask_flag_fw = kernel_wide[..., 4] > self.smi_fw_thres
+
+            if np.any(mask_flag_fw):
+                kernel[mask_flag_fw, :] = kernel_wide[mask_flag_fw, :]
+
+        output = {}
+
+        output['f'] = kernel[:, :, :, 0]
+        output['Da'] = kernel[:, :, :, 1]
+        output['DePar'] = kernel[:, :, :, 2]
+        output['DePerp'] = kernel[:, :, :, 3]
+        output['fw'] = kernel[:, :, :, 4]
+
         if self.fit_T2:
-            output['T2a'] = kernel[:,:,:,5]
-            output['T2e'] = kernel[:,:,:,6]
-            output['p2'] = kernel[:,:,:,7]
+            output['T2a'] = kernel[:, :, :, 5]
+            output['T2e'] = kernel[:, :, :, 6]
+            output['p2'] = kernel[:, :, :, 7]
+
             if self.rotinv_lmax == 4:
-                output['p4'] = kernel[:,:,:,8]
+                output['p4'] = kernel[:, :, :, 8]
+
             if self.rotinv_lmax == 6:
-                output['p6'] = kernel[:,:,:,9]
+                output['p6'] = kernel[:, :, :, 9]
+
         else:
-            output['p2'] = kernel[:,:,:,5]
+            output['p2'] = kernel[:, :, :, 5]
+
             if self.rotinv_lmax == 4:
-                output['p4'] = kernel[:,:,:,6]
+                output['p4'] = kernel[:, :, :, 6]
+
             if self.rotinv_lmax == 6:
-                output['p6'] = kernel[:,:,:,7]
+                output['p6'] = kernel[:, :, :, 7]
+
         output['rotinvs'] = rot_invs
 
-
         if self.flag_fit_fodf:
-            s0 = rot_invs[:,:,:,0]
+            s0 = rot_invs[:, :, :, 0]
             dwi_norm = np.divide(dwi, s0, where=s0 != 0)
-            (plm, pl) = self.get_plm_from_s_and_kernel(dwi_norm, kernel)
+
+            plm, pl = self.get_plm_from_s_and_kernel(dwi_norm, kernel)
+
             output['plm'] = plm
             output['pl'] = pl
 
