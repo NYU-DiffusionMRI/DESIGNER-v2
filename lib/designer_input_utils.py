@@ -287,6 +287,7 @@ def convert_input_data(dwi_metadata):
     import inspect
     import json
     from colorama import Fore
+    from lib.utils import get_bids_total_readout_time
 
     caller = os.path.basename(inspect.stack()[-1].filename)
 
@@ -300,6 +301,7 @@ def convert_input_data(dwi_metadata):
     te_per_series = []
     pf_per_series = []
     ped_per_series = []
+    readout_per_series = []
 
     dwi_n_list = dwi_metadata['dwi_list']
     isdicom = dwi_metadata['isdicom']
@@ -398,6 +400,7 @@ def convert_input_data(dwi_metadata):
             run.command(cmd)
         dwi_header = image.Header("%s/dwi.mif" % (app.SCRATCH_DIR))
         dwi_ind_size.append([ int(s) for s in dwi_header.size() ])
+        readout_per_series.append(get_bids_total_readout_time(dwi_header.keyval()))
         
         if caller == 'designer':
             if app.ARGS.pf:
@@ -485,6 +488,7 @@ def convert_input_data(dwi_metadata):
             dwi_header = image.Header("%s/dwi%s.mif" % (app.SCRATCH_DIR, str(idx)))
             dwi_ind_size.append([ int(s) for s in dwi_header.size() ])
             miflist.append('"%s/dwi%s.mif"' % (app.SCRATCH_DIR, str(idx)))
+            readout_per_series.append(get_bids_total_readout_time(dwi_header.keyval()))
             
             if caller == 'designer':
                 if app.ARGS.pf:
@@ -602,6 +606,7 @@ def convert_input_data(dwi_metadata):
     dwi_ind_size = [i + [1] if len(i)==3 else i for i in dwi_ind_size]
 
     nvols = [i[3] for i in dwi_ind_size]
+    readoutlist = []
     for idx,i in enumerate(dwi_n_list):
         if len(dwi_n_list) == 1:
             tmpidxlist = range(0,num_volumes)
@@ -610,9 +615,11 @@ def convert_input_data(dwi_metadata):
         idxlist.append(','.join(str(i) for i in tmpidxlist))
         telist.append([te_per_series[idx]] * nvols[idx+1])
         bshapelist.append([bshape_per_series[idx]] * nvols[idx+1])
+        readoutlist.append([readout_per_series[idx]] * nvols[idx+1])
 
     telist = [item for sublist in telist for item in sublist]
     bshapelist = [item for sublist in bshapelist for item in sublist]
+    readoutlist = [item for sublist in readoutlist for item in sublist]
 
     if telist_input is not None:
         telist = np.hstack([np.loadtxt(i) for i in telist_input])
@@ -622,6 +629,7 @@ def convert_input_data(dwi_metadata):
     dwi_metadata['idxlist'] = idxlist
     dwi_metadata['echo_time_per_volume'] = np.array(telist)
     dwi_metadata['bshape_per_volume'] = np.array(bshapelist)
+    dwi_metadata['readout_time'] = np.array(readoutlist)
     dwi_metadata['grad'] = grad
 
     if grad is None:
