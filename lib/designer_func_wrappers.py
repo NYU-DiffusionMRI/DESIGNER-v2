@@ -534,6 +534,7 @@ def run_ants_moco(dwi_metadata):
 def run_eddy(shell_table, dwi_metadata):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
     from lib.designer_input_utils import splitext_
+    from lib.utils import get_bids_total_readout_time
     import numpy as np
     import json
     import os
@@ -576,6 +577,10 @@ def run_eddy(shell_table, dwi_metadata):
         flag_variable_bshape = False
     else:
         flag_variable_bshape = True
+
+    readout_time_per_volume = np.asarray(dwi_metadata.get('readout_time')) if dwi_metadata.get('readout_time') is not None else None
+
+    # BIDS-backed readout time is only threaded through the active rpe_pair / rpe_all paths.
 
     if flag_variable_TE or flag_variable_bshape:
         if app.ARGS.eddy_groups is None and app.ARGS.eddy_fakeb is None:
@@ -699,7 +704,6 @@ def run_eddy(shell_table, dwi_metadata):
                 gindsi_str = ','.join([str(k) for k in gindsi])
                 ginds.append(gindsi_str)
                 start += len(group_vol_inds[j])            
-           
             run.command('mrconvert -coord 3 "%s" working.mif "%s"' % 
                 (volume_idx,
                 'dwi_pre_eddy_' + str(i) + '.mif'),
@@ -1043,7 +1047,7 @@ def run_eddy(shell_table, dwi_metadata):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'))
             
         elif app.ARGS.rpe_none:
             # Create brain mask from mean b0 for eddy
@@ -1053,7 +1057,7 @@ def run_eddy(shell_table, dwi_metadata):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg)
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'))
             
         elif app.ARGS.rpe_all:
             rpe_dir = app.ARGS.rpe_all
@@ -1198,6 +1202,10 @@ def run_eddy(shell_table, dwi_metadata):
             
 
             # Run topup and prepare mask for eddy
+            readout_time_arg = None
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                n_vols_rev = int(image.Header('dwirpe.mif').size()[3])
+                readout_time_arg = list(np.asarray(dwi_metadata.get('readout_time')).tolist()) + [get_bids_total_readout_time(rpe_bids_path)] * n_vols_rev
             brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
                 f'{eddy_proc_dir}/{topupinputfile}',
                 pe_dir,
@@ -1210,7 +1218,7 @@ def run_eddy(shell_table, dwi_metadata):
 
             # Call eddy (PE info now in dwipe_rpe.mif header)
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
+            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=readout_time_arg)
             
             # Volume recombination with distortion-based weighting
             # Eddy outputs 2N volumes (N forward + N reverse PE), which we combine
@@ -1284,7 +1292,7 @@ def run_eddy(shell_table, dwi_metadata):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix)
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'))
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")

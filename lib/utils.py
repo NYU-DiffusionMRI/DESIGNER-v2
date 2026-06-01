@@ -1,13 +1,71 @@
 from pathlib import Path
 from typing import Optional
+from collections.abc import Sequence
 import numpy as np
+
+
+def get_bids_total_readout_time(bids_json: str | Path | dict, default: float = 0.1) -> float:
+    """Return the BIDS total readout time if available.
+
+    Prefers ``TotalReadoutTime`` and falls back to the standard BIDS
+    ``EffectiveEchoSpacing * (ReconMatrixPE - 1)`` derivation when needed.
+    """
+    import json
+
+    if isinstance(bids_json, (str, Path)):
+        with open(bids_json) as f:
+            keyval = json.load(f)
+    else:
+        keyval = bids_json
+
+    if 'TotalReadoutTime' in keyval:
+        return float(keyval['TotalReadoutTime'])
+
+    if 'EffectiveEchoSpacing' in keyval:
+        matrix_pe = keyval.get('ReconMatrixPE', keyval.get('AcquisitionMatrixPE'))
+        if matrix_pe is not None:
+            return float(keyval['EffectiveEchoSpacing']) * (int(matrix_pe) - 1)
+
+    return default
+
+
+def _expand_readout_times(
+    readout_time: float | Sequence[float] | None,
+    n_volumes: int,
+    *,
+    n_forward: Optional[int] = None,
+    n_reverse: Optional[int] = None,
+) -> list[float]:
+    if readout_time is None:
+        return [0.1] * n_volumes
+
+    if isinstance(readout_time, np.ndarray):
+        values = readout_time.tolist()
+    elif isinstance(readout_time, Sequence) and not isinstance(readout_time, (str, bytes, Path)):
+        values = list(readout_time)
+    else:
+        values = [readout_time]
+
+    if len(values) == 1:
+        return [float(values[0])] * n_volumes
+
+    if n_forward is not None and n_reverse is not None and len(values) == 2:
+        return [float(values[0])] * n_forward + [float(values[1])] * n_reverse
+
+    if len(values) == n_volumes:
+        return [float(value) for value in values]
+
+    raise ValueError(
+        'readout_time must be a scalar, a single value, a two-value forward/reverse pair, '
+        'or a per-volume sequence matching the input volume count'
+    )
 
 
 def write_manual_pe_scheme(
     outfile: str | Path,
     pe_dir: str,
     n_volumes: int,
-    readout_time: float = 0.1,
+    readout_time: float | Sequence[float] | None = 0.1,
 ):
     """
     Write PE scheme for single-direction acquisition.
@@ -21,10 +79,11 @@ def write_manual_pe_scheme(
     from mrtrix3 import phaseencoding
 
     pe_vec = list(phaseencoding.direction(pe_dir))    # [dx, dy, dz]
+    readout_times = _expand_readout_times(readout_time, n_volumes)
 
     with open(outfile, "w") as f:
-        for _ in range(n_volumes):
-            f.write(f"{pe_vec[0]} {pe_vec[1]} {pe_vec[2]} {readout_time}\n")
+        for value in readout_times:
+            f.write(f"{pe_vec[0]} {pe_vec[1]} {pe_vec[2]} {value}\n")
 
 
 def write_rpe_all_pe_scheme(
@@ -32,7 +91,7 @@ def write_rpe_all_pe_scheme(
     pe_dir: str,
     n_volumes_forward: int,
     n_volumes_reverse: int,
-    readout_time: float = 0.1,
+    readout_time: float | Sequence[float] | None = 0.1,
 ):
     """
     Write PE scheme for -rpe_all acquisition (forward + reverse PE).
@@ -48,14 +107,20 @@ def write_rpe_all_pe_scheme(
 
     pe_vec_fwd = list(phaseencoding.direction(pe_dir))
     pe_vec_rev = [-x for x in pe_vec_fwd]  # Reverse direction
+    readout_times = _expand_readout_times(
+        readout_time,
+        n_volumes_forward + n_volumes_reverse,
+        n_forward=n_volumes_forward,
+        n_reverse=n_volumes_reverse,
+    )
 
     with open(outfile, "w") as f:
         # Forward PE volumes
-        for _ in range(n_volumes_forward):
-            f.write(f"{pe_vec_fwd[0]} {pe_vec_fwd[1]} {pe_vec_fwd[2]} {readout_time}\n")
+        for value in readout_times[:n_volumes_forward]:
+            f.write(f"{pe_vec_fwd[0]} {pe_vec_fwd[1]} {pe_vec_fwd[2]} {value}\n")
         # Reverse PE volumes
-        for _ in range(n_volumes_reverse):
-            f.write(f"{pe_vec_rev[0]} {pe_vec_rev[1]} {pe_vec_rev[2]} {readout_time}\n")
+        for value in readout_times[n_volumes_forward:]:
+            f.write(f"{pe_vec_rev[0]} {pe_vec_rev[1]} {pe_vec_rev[2]} {value}\n")
 
 
 def compute_jacobian_weight_for_rpe_all(
@@ -114,6 +179,7 @@ def run_fsl_eddy(
     topup_prefix: Optional[str] = None,
     pe_dir: Optional[str] = None,
     grad_file: Optional[str] = None,
+    readout_time: float | Sequence[float] | None = None,
 ):
     from mrtrix3 import run, image
 
@@ -128,7 +194,7 @@ def run_fsl_eddy(
     if pe_dir is not None:
         manual_pe_scheme_path = scratch_dir / 'dwi_manual_pe_scheme.txt'
         n_volumes = int(image.Header(mif_input).size()[3])
-        write_manual_pe_scheme(manual_pe_scheme_path, pe_dir, n_volumes)
+        write_manual_pe_scheme(manual_pe_scheme_path, pe_dir, n_volumes, readout_time=readout_time)
         cmd += f' -import_pe_table {manual_pe_scheme_path}'
 
     if grad_file is not None:
