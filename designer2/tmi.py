@@ -5,7 +5,7 @@ import json
 from logging import StreamHandler, FileHandler
 
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
-from lib.designer_fit_wrappers import refit_or_smooth, save_params
+from lib.designer_fit_wrappers import refit_or_smooth, save_params, b0restore_slope, akc_out
 from lib.io import load_mrtrix
 from mrtrix3 import run, path
 
@@ -121,6 +121,15 @@ def usage(cmdline): #pylint: disable=unused-variable
     dki_options.add_argument('-fit_smoothing',metavar=('<percentile>'),help='NLM smoothing on wlls fit')
     dki_options.add_argument('-polyreg',action='store_true',help='polynomial regression based DKI estimation')
     dki_options.add_argument('-maxb', metavar=('<bmax>'),help='maximum b-value for DKI fitting, default=3.')
+
+    #=======================================tmi black voxel======================================
+    dki_options.add_argument('-akc_lowerlim', metavar=('<akc_lowerlim>'),help='akc lower threshold, default=-1')
+    dki_options.add_argument('-akc_uplim', metavar=('<akc_uplim>'),help='akc upper threshold, default=10')
+    dki_options.add_argument('-b0restore', action='store_true',help='b0-restore dki outlier correction')
+    dki_options.add_argument('-kernal', metavar=('<kernal_size>'),help='kernal/patch size for b0-restore correction, default=5')
+    dki_options.add_argument('-percentile', metavar=('<percentile>'),help='percentile of patch to include, default=10')
+    dki_options.add_argument('-thresh_criteria', metavar=('<criteria>'),help='outlier percent improvement iteration threshold, default 0.05')
+    #=======================================tmi black voxel======================================
 
     smi_options = cmdline.add_argument_group('tensor options for the TMI script')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
@@ -431,20 +440,231 @@ def execute(): #pylint: disable=unused-variable
                 dt_poly_dti = dti.train_rotated_bayes_fit(dwi_dti, dt_dti, s0_dti, b_dti, mask, True)
                 logger.info("Polyreg DTI fit completed.", extra={"dt_poly_dti_shape": dt_poly_dti.shape})
 
+
+        #=======================================tmi black voxel======================================
+        if app.ARGS.b0restore:
+            from lib.mpunits import vectorize
+            import scipy.io as sio
+
+            #DETECTING OUTLIERS
+            logger.info("Starting AKC outlier detection...")
+            dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+            dir = mat['dirs']
+            # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+            # dir = mat['dir']
+
+            if not app.ARGS.akc_lowerlim:
+                akc_lowerlim=-1
+            else:
+                akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+            if not app.ARGS.akc_uplim:
+                akc_uplim=10
+            else:
+                akc_uplim=int(app.ARGS.akc_uplim)
+
+            if not (app.ARGS.DKI or app.ARGS.WDKI):
+                logger.error("AKC Outlier detection must be accompanied by DKI option")
+                raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+            else:
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_uplim)
+                
+            logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
+
+            outlier_mask = {}
+            akc_mask_tmp = vectorize(akc_mask, mask)
+            outlier_mask['akc'] = akc_mask_tmp
+            save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+            x=np.shape(mask)[0]
+            y=np.shape(mask)[1]
+            z=np.shape(mask)[2]
+            akc_dirs=np.zeros((x,y,z,np.shape(akc_d)[0]))
+            # print(np.shape(akc_d))
+            for i in range(np.shape(akc_d)[0]):
+                akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+
+
+        # ====================================================================================
+            params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+            rk = params_dki['rk']
+            md = params_dki['md']
+            fa = params_dki['fa']
+        # first akc outlier mask
+            print("============AKC mask============")
+            outlier_inds=np.array(np.where(mask>0))
+            # n=np.shape(outlier_inds)[-1]
+            dwi_norm = abs(dwi_dki) / np.amax(dwi_dki, axis=(0,1,2))
+            akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+            
+            outlier_mask = {}
+            akc_mask[akc_mask!=0]=1
+            akc_mask=vectorize(akc_mask, mask)
+            akc_mask[akc_mask_new==1]=1
+            outlier_mask['outlier_mask'] = akc_mask
+            save_params(outlier_mask, mif, model='dki', outdir=outdir)
+            akc_mask = akc_mask.astype(bool)
+            noutlier0=np.sum(akc_mask)
+
+        # =======================================b0-restore=======================================
+            print("==============b0-restore==============")
+            if not app.ARGS.percentile:
+                percentile=10
+            else:
+                percentile=int(app.ARGS.percentile)
+
+            if not app.ARGS.kernal:
+                kernal=5
+            else:
+                kernal=int(app.ARGS.kernal)
+
+            #new dwi with restored b0
+            dwi_new = b0restore_slope(akc_mask, dwi_dki, bval_dki, kernal,percentile,fa, md,mask=None, n_cores=-3)
+            newdwi = {}
+            newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
+            save_params(newdwi, mif, model='dki', outdir=outdir)
+
+            dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+            dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
+
+            x,y,z = np.where(akc_mask == 1)
+            DT = vectorize(dt_dki, mask)
+            DT[x,y,z,:] = dt_new.T
+            dt_dki = vectorize(DT, mask)
+
+            # Detect Outlier
+            print("============Detect Outlier after lowb_slope============")
+            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+            akc_mask = vectorize(akc_mask, mask)
+            akc_mask_tmp = akc_mask
+            
+            #extract new rk, md, fa
+            params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+            rk = params_dki['rk']
+            md = params_dki['md']
+            fa = params_dki['fa']
+
+            #new akc outlier mask based on rk and md
+            xx=np.shape(mask)[0]
+            yy=np.shape(mask)[1]
+            zz=np.shape(mask)[2]
+            dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+            akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+            for i in range(np.shape(akc_d)[0]):
+                akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+            akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+            akc_mask[akc_mask!=0]=1
+            akc_mask[akc_mask_new==1]=1
+            # akc_dirs_mask= np.repeat(np.reshape(akc_mask,(xx,yy,zz,1)),np.shape(akc_d)[0],axis=3)
+            akc_mask = akc_mask.astype(bool)
+
+            # # print('dir shape: {}'.format(np.shape(dir)))
+            # # print('dir type: {}'.format(type(dir)))
+            # # print('bvec shape: {}'.format(np.shape(np.reshape(bvec_dki,(-1,3)))))
+            # _,akc_d_temp = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+            # akc_dirs_temp=np.zeros((xx,yy,zz,np.shape(akc_d_temp)[0]))
+            # for i in range(np.shape(akc_d_temp)[0]):
+            #     akc_dirs_temp[:,:,:,i]=vectorize(akc_d_temp[i,:],mask)
+            # akc_dirs_mask[np.where(akc_dirs_mask>0) and np.where(akc_dirs_temp>1)]=0
+
+            noutlier=np.sum(akc_mask)
+            c=np.sum(akc_mask)+1
+            count=0
+            improve=(noutlier0-noutlier)/noutlier0
+            print('Number of outliers: {}'.format(np.sum(mask)))
+
+            # ==========================iteration===========================
+            if app.ARGS.thresh_criteria:
+                thresh=float(app.ARGS.thresh_criteria)
+            else:
+                thresh=0.05
+
+            if improve>thresh:
+                print('{} > {}'.format(improve, thresh))
+            
+            while improve>thresh and improve<1 :
+                count=count+1
+                print('iteration {}'.format(count))
+                noutlier0=np.sum(akc_mask)
+
+                # iterate b0-restore
+                print('Start correction {}'.format(count))
+                dwi_new = b0restore_slope(akc_mask, dwi_new, bval_dki, kernal,percentile,fa,md,mask=None,n_cores=-3)
+
+                # detect new outliers
+                dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+                x,y,z = np.where(akc_mask == 1)
+                # DT = vectorize(dt_dki, mask)
+                DT[x,y,z,:] = dt_new.T
+                dt_dki = vectorize(DT, mask)
+                print('detecting outliers')
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                akc_mask_copy = akc_mask.copy()
+
+                #akc mask
+                dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+                akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+                for i in range(np.shape(akc_d)[0]):
+                    akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask_tmp = akc_mask
+                params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                rk = params_dki['rk']
+                md = params_dki['md']
+                fa = params_dki['fa']
+                print('detecting outliers')
+                akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                akc_mask[akc_mask!=0]=1
+                akc_mask[akc_mask_new==1]=1
+                akc_mask = akc_mask.astype(bool)
+                noutlier=np.sum(akc_mask)
+                improve=(noutlier0-noutlier)/noutlier0
+                print("nOutlier {}".format(np.sum(akc_mask)))
+                # print('{} > {}'.format(improve, thresh))
+
+                #save new outlier mask
+                outlier_mask = {}
+                akc_mask_copy[akc_mask_copy!=0]=1
+                akc_mask_copy=vectorize(akc_mask_copy, mask)
+                akc_mask_copy[akc_mask_new==1]=1
+                outlier_mask['outlier_mask_final'] = akc_mask_copy
+                save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+                logger.info("Outlier correction iteration {}".format(count), extra={"num_outliers": str(np.sum(akc_mask))})
+            # ==========================iteration===========================
+
+            logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
+        else:
+            akc_mask = np.zeros_like(mask)
+
+        #=======================================tmi black voxel======================================
+
+
         if app.ARGS.akc_outliers:
             from lib.mpunits import vectorize
             import scipy.io as sio
 
             logger.info("Starting AKC outlier detection...")
             dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
-            dir = mat['dir']
+            # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+            mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+            dir = mat['dirs']
 
             if not (app.ARGS.DKI or app.ARGS.WDKI):
                 logger.error("AKC Outlier detection must be accompanied by DKI option")
                 raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
             else:
-                akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                if not app.ARGS.akc_lowerlim:
+                    akc_lowerlim=-1
+                else:
+                    akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                if not app.ARGS.akc_uplim:
+                    akc_uplim=10
+                else:
+                    akc_uplim=int(app.ARGS.akc_uplim)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_uplim)
                 
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -462,7 +682,7 @@ def execute(): #pylint: disable=unused-variable
             logger.info("DKT with AKC saved.")
 
             dt_dki = vectorize(DT, mask)
-            akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
         else:
@@ -616,20 +836,233 @@ def execute(): #pylint: disable=unused-variable
                         dt_poly_dti = dti.train_rotated_bayes_fit(dwi_dti, dt_dti, s0_dti, b_dti, mask, True)
                         logger.info(f"Polyreg DTI fit completed for TE={te}.", extra={"dt_poly_dti_shape": dt_poly_dti.shape})
 
+                #=======================================tmi black voxel======================================
+                if app.ARGS.b0restore:
+                    from lib.mpunits import vectorize
+                    import scipy.io as sio
+
+                    #DETECTING OUTLIERS
+                    logger.info("Starting AKC outlier detection...")
+                    dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+                    dir = mat['dirs']
+                    # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+                    # dir = mat['dir']
+
+                    if not app.ARGS.akc_lowerlim:
+                        akc_lowerlim=-1
+                    else:
+                        akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                    if not app.ARGS.akc_uplim:
+                        akc_uplim=10
+                    else:
+                        akc_uplim=int(app.ARGS.akc_uplim)
+
+                    if not (app.ARGS.DKI or app.ARGS.WDKI):
+                        logger.error("AKC Outlier detection must be accompanied by DKI option")
+                        raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+                    else:
+                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_uplim)
+                        
+                    logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
+
+                    outlier_mask = {}
+                    akc_mask_tmp = vectorize(akc_mask, mask)
+                    outlier_mask['akc'] = akc_mask_tmp
+                    save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+                    x=np.shape(mask)[0]
+                    y=np.shape(mask)[1]
+                    z=np.shape(mask)[2]
+                    akc_dirs=np.zeros((x,y,z,np.shape(akc_d)[0]))
+                    # print(np.shape(akc_d))
+                    for i in range(np.shape(akc_d)[0]):
+                        akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+
+
+                # ====================================================================================
+                    params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                    rk = params_dki['rk']
+                    md = params_dki['md']
+                    fa = params_dki['fa']
+                # first akc outlier mask
+                    print("============AKC mask============")
+                    outlier_inds=np.array(np.where(mask>0))
+                    # n=np.shape(outlier_inds)[-1]
+                    dwi_norm = abs(dwi_dki) / np.amax(dwi_dki, axis=(0,1,2))
+                    akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                    
+                    outlier_mask = {}
+                    akc_mask[akc_mask!=0]=1
+                    akc_mask=vectorize(akc_mask, mask)
+                    akc_mask[akc_mask_new==1]=1
+                    outlier_mask['outlier_mask'] = akc_mask
+                    save_params(outlier_mask, mif, model='dki', outdir=outdir)
+                    akc_mask = akc_mask.astype(bool)
+                    noutlier0=np.sum(akc_mask)
+
+                # =======================================b0-restore=======================================
+                    print("==============b0-restore==============")
+                    if not app.ARGS.percentile:
+                        percentile=10
+                    else:
+                        percentile=int(app.ARGS.percentile)
+
+                    if not app.ARGS.kernal:
+                        kernal=5
+                    else:
+                        kernal=int(app.ARGS.kernal)
+
+                    #new dwi with restored b0
+                    dwi_new = b0restore_slope(akc_mask, dwi_dki, bval_dki, kernal,percentile,fa, md,mask=None, n_cores=-3)
+                    newdwi = {}
+                    newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
+                    save_params(newdwi, mif, model='dki', outdir=outdir)
+
+                    dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+                    dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
+
+                    x,y,z = np.where(akc_mask == 1)
+                    DT = vectorize(dt_dki, mask)
+                    DT[x,y,z,:] = dt_new.T
+                    dt_dki = vectorize(DT, mask)
+
+                    # Detect Outlier
+                    print("============Detect Outlier after lowb_slope============")
+                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                    akc_mask = vectorize(akc_mask, mask)
+                    akc_mask_tmp = akc_mask
+                    
+                    #extract new rk, md, fa
+                    params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                    rk = params_dki['rk']
+                    md = params_dki['md']
+                    fa = params_dki['fa']
+
+                    #new akc outlier mask based on rk and md
+                    xx=np.shape(mask)[0]
+                    yy=np.shape(mask)[1]
+                    zz=np.shape(mask)[2]
+                    dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+                    akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+                    for i in range(np.shape(akc_d)[0]):
+                        akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                    akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                    akc_mask[akc_mask!=0]=1
+                    akc_mask[akc_mask_new==1]=1
+                    # akc_dirs_mask= np.repeat(np.reshape(akc_mask,(xx,yy,zz,1)),np.shape(akc_d)[0],axis=3)
+                    akc_mask = akc_mask.astype(bool)
+
+                    # # print('dir shape: {}'.format(np.shape(dir)))
+                    # # print('dir type: {}'.format(type(dir)))
+                    # # print('bvec shape: {}'.format(np.shape(np.reshape(bvec_dki,(-1,3)))))
+                    # _,akc_d_temp = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                    # akc_dirs_temp=np.zeros((xx,yy,zz,np.shape(akc_d_temp)[0]))
+                    # for i in range(np.shape(akc_d_temp)[0]):
+                    #     akc_dirs_temp[:,:,:,i]=vectorize(akc_d_temp[i,:],mask)
+                    # akc_dirs_mask[np.where(akc_dirs_mask>0) and np.where(akc_dirs_temp>1)]=0
+
+                    noutlier=np.sum(akc_mask)
+                    c=np.sum(akc_mask)+1
+                    count=0
+                    improve=(noutlier0-noutlier)/noutlier0
+                    print('Number of outliers: {}'.format(np.sum(mask)))
+
+                    # # ====================================iteration===================================
+                    # iteration
+                    if app.ARGS.thresh_criteria:
+                        thresh=float(app.ARGS.thresh_criteria)
+                    else:
+                        thresh=0.05
+
+                    if improve>thresh:
+                        print('{} > {}'.format(improve, thresh))
+                    
+                    while improve>thresh and improve<1 :
+                        count=count+1
+                        print('iteration {}'.format(count))
+                        noutlier0=np.sum(akc_mask)
+
+                        # iterate b0-restore
+                        print('Start correction {}'.format(count))
+                        dwi_new = b0restore_slope(akc_mask, dwi_new, bval_dki, kernal,percentile,fa,md,mask=None,n_cores=-3)
+
+                        # detect new outliers
+                        dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+                        x,y,z = np.where(akc_mask == 1)
+                        # DT = vectorize(dt_dki, mask)
+                        DT[x,y,z,:] = dt_new.T
+                        dt_dki = vectorize(DT, mask)
+                        print('detecting outliers')
+                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                        akc_mask_copy = akc_mask.copy()
+
+                        #akc mask
+                        dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+                        akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+                        for i in range(np.shape(akc_d)[0]):
+                            akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                        akc_mask = vectorize(akc_mask, mask).astype(bool)
+                        akc_mask_tmp = akc_mask
+                        params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                        rk = params_dki['rk']
+                        md = params_dki['md']
+                        fa = params_dki['fa']
+                        print('detecting outliers')
+                        akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                        akc_mask[akc_mask!=0]=1
+                        akc_mask[akc_mask_new==1]=1
+                        akc_mask = akc_mask.astype(bool)
+                        noutlier=np.sum(akc_mask)
+                        improve=(noutlier0-noutlier)/noutlier0
+                        print("nOutlier {}".format(np.sum(akc_mask)))
+                        # print('{} > {}'.format(improve, thresh))
+
+                        #save new outlier mask
+                        outlier_mask = {}
+                        akc_mask_copy[akc_mask_copy!=0]=1
+                        akc_mask_copy=vectorize(akc_mask_copy, mask)
+                        akc_mask_copy[akc_mask_new==1]=1
+                        outlier_mask['outlier_mask_final'] = akc_mask_copy
+                        save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+                        logger.info("Outlier correction iteration {} for TE={}".format(count,te), extra={"num_outliers": str(np.sum(akc_mask))})
+                    # ====================================iteration===================================
+
+                    logger.info("b0-restore AKC outlier post-processing completed for TE={}.".format(te), extra={"num_outliers": str(np.sum(akc_mask))})
+                else:
+                    akc_mask = np.zeros_like(mask)
+
+                #=======================================tmi black voxel======================================
+
+
+
             if app.ARGS.akc_outliers:
                 from lib.mpunits import vectorize
                 import scipy.io as sio
 
                 logger.info(f"Starting AKC outlier detection for TE={te}...")
                 dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
-                dir = mat['dir']
+                # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+                mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+                dir = mat['dirs']
+
+                if not app.ARGS.akc_lowerlim:
+                    akc_lowerlim=-1
+                else:
+                    akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                if not app.ARGS.akc_uplim:
+                    akc_uplim=10
+                else:
+                    akc_uplim=int(app.ARGS.akc_uplim)
 
                 if not (app.ARGS.DKI or app.ARGS.WDKI):
                     logger.error(f"AKC Outlier detection for TE={te} must be accompanied by DKI option.")
                     raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
                 else:
-                    akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
                     
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"Outlier detection completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -641,7 +1074,7 @@ def execute(): #pylint: disable=unused-variable
                 DT = vectorize(dt_dki, mask)
                 DT[x,y,z,:] = dt_new.T
                 dt_dki = vectorize(DT, mask)
-                akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"AKC outlier post-processing completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
             else:
