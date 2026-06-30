@@ -55,8 +55,15 @@ By default, if none of the below options are used, TMI will not estimate paramet
 ## Options for outlier replacement
 
 ### `-akc_outliers`
-- Brute force K tensor outlier detection and filtering. The kurtosis tensor is projected onto a sphere with 10,000 directions. Voxels where mean kurtosis is less than -1 or greater than 10 are labelled as outliers.
+- Brute force K tensor outlier detection and filtering. The kurtosis tensor is projected onto a sphere with 256 directions. Voxels where mean kurtosis is less than -1 or greater than 10 are labelled as outliers.
+- Use `-akc_lowerlim <default="-1">` and `akc_upperlim <default=10>` to set your own lower and upper AKC limit respectively.
 - Outliers are replaced by the median value of neighboring (26 adjacent) non-outlier voxels in all diffusion weighted images and the DKI fit is done again.
+<!-- 
+### `-b0restore`
+- Outlier voxels show flatter spherical mean slopes at low b-values, so this is an iterative correction method that adjusts outlier voxel’s b=0 signal using neighboring voxels’ (5x5x5 patch) log signal decay slope/rate (between b=0 signal and spherical mean signal of b=1000 shell).
+- Outliers are detected using the same method as `-akc_outliers`, plus any voxels with RK < 0.5 (excluding CSF).
+- Neighboring voxels are selected as the top 10 percent (may be adjusted using `-percentile <default=10>`) with in patch 5x5x5 patch (`-kernal <default=5>`) most similar voxels using Euclidean distance of signals.  
+- This is iteratively corrected until outlier reduction is <5% `-thesh_criteria <default=0.05>` -->
 
 ### `-fit_smoothing <percentile>`
 - Windowed adaptive nonlocal means filter on the dwi.

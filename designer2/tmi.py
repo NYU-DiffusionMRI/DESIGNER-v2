@@ -124,7 +124,7 @@ def usage(cmdline): #pylint: disable=unused-variable
 
     #=======================================tmi black voxel======================================
     dki_options.add_argument('-akc_lowerlim', metavar=('<akc_lowerlim>'),help='akc lower threshold, default=-1')
-    dki_options.add_argument('-akc_uplim', metavar=('<akc_uplim>'),help='akc upper threshold, default=10')
+    dki_options.add_argument('-akc_upperlim', metavar=('<akc_upperlim>'),help='akc upper threshold, default=10')
     dki_options.add_argument('-b0restore', action='store_true',help='b0-restore dki outlier correction')
     dki_options.add_argument('-kernal', metavar=('<kernal_size>'),help='kernal/patch size for b0-restore correction, default=5')
     dki_options.add_argument('-percentile', metavar=('<percentile>'),help='percentile of patch to include, default=10')
@@ -459,16 +459,17 @@ def execute(): #pylint: disable=unused-variable
             else:
                 akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
-            if not app.ARGS.akc_uplim:
-                akc_uplim=10
+            if not app.ARGS.akc_upperlim:
+                akc_upperlim=10
             else:
-                akc_uplim=int(app.ARGS.akc_uplim)
+                akc_upperlim=int(app.ARGS.akc_upperlim)
 
             if not (app.ARGS.DKI or app.ARGS.WDKI):
                 logger.error("AKC Outlier detection must be accompanied by DKI option")
                 raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
             else:
-                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_uplim)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_upperlim)
+                akc_mask_copy = akc_mask.copy()
                 
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
 
@@ -521,9 +522,6 @@ def execute(): #pylint: disable=unused-variable
 
             #new dwi with restored b0
             dwi_new = b0restore_slope(akc_mask, dwi_dki, bval_dki, kernal,percentile,fa, md,mask=None, n_cores=-3)
-            newdwi = {}
-            newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
-            save_params(newdwi, mif, model='dki', outdir=outdir)
 
             dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
             dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
@@ -535,7 +533,8 @@ def execute(): #pylint: disable=unused-variable
 
             # Detect Outlier
             print("============Detect Outlier after lowb_slope============")
-            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
+            akc_mask_copy = akc_mask.copy()
             akc_mask = vectorize(akc_mask, mask)
             akc_mask_tmp = akc_mask
             
@@ -562,7 +561,7 @@ def execute(): #pylint: disable=unused-variable
             # # print('dir shape: {}'.format(np.shape(dir)))
             # # print('dir type: {}'.format(type(dir)))
             # # print('bvec shape: {}'.format(np.shape(np.reshape(bvec_dki,(-1,3)))))
-            # _,akc_d_temp = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+            # _,akc_d_temp = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
             # akc_dirs_temp=np.zeros((xx,yy,zz,np.shape(akc_d_temp)[0]))
             # for i in range(np.shape(akc_d_temp)[0]):
             #     akc_dirs_temp[:,:,:,i]=vectorize(akc_d_temp[i,:],mask)
@@ -599,7 +598,7 @@ def execute(): #pylint: disable=unused-variable
                 DT[x,y,z,:] = dt_new.T
                 dt_dki = vectorize(DT, mask)
                 print('detecting outliers')
-                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                 akc_mask_copy = akc_mask.copy()
 
                 #akc mask
@@ -623,16 +622,27 @@ def execute(): #pylint: disable=unused-variable
                 print("nOutlier {}".format(np.sum(akc_mask)))
                 # print('{} > {}'.format(improve, thresh))
 
-                #save new outlier mask
-                outlier_mask = {}
-                akc_mask_copy[akc_mask_copy!=0]=1
-                akc_mask_copy=vectorize(akc_mask_copy, mask)
-                akc_mask_copy[akc_mask_new==1]=1
-                outlier_mask['outlier_mask_final'] = akc_mask_copy
-                save_params(outlier_mask, mif, model='dki', outdir=outdir)
-
                 logger.info("Outlier correction iteration {}".format(count), extra={"num_outliers": str(np.sum(akc_mask))})
             # ==========================iteration===========================
+
+            #save new b0
+            newdwi = {}
+            newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
+            save_params(newdwi, mif, model='dki', outdir=outdir)
+
+            #save new dt
+            dt_ = {}
+            dt_['dt'] = DT
+            save_params(dt_, mif, model='dki_b0restore', outdir=outdir)
+            logger.info("DKT with b0-restore saved.")
+
+            #save new outlier mask
+            outlier_mask = {}
+            akc_mask_copy[akc_mask_copy!=0]=1
+            akc_mask_copy=vectorize(akc_mask_copy, mask)
+            akc_mask_copy[akc_mask_new==1]=1
+            outlier_mask['outliermask_final'] = akc_mask_copy
+            save_params(outlier_mask, mif, model='dki', outdir=outdir)
 
             logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
         else:
@@ -660,11 +670,11 @@ def execute(): #pylint: disable=unused-variable
                 else:
                     akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
-                if not app.ARGS.akc_uplim:
-                    akc_uplim=10
+                if not app.ARGS.akc_upperlim:
+                    akc_upperlim=10
                 else:
-                    akc_uplim=int(app.ARGS.akc_uplim)
-                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_uplim)
+                    akc_upperlim=int(app.ARGS.akc_upperlim)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_upperlim)
                 
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -682,7 +692,7 @@ def execute(): #pylint: disable=unused-variable
             logger.info("DKT with AKC saved.")
 
             dt_dki = vectorize(DT, mask)
-            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
         else:
@@ -854,16 +864,17 @@ def execute(): #pylint: disable=unused-variable
                     else:
                         akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
-                    if not app.ARGS.akc_uplim:
-                        akc_uplim=10
+                    if not app.ARGS.akc_upperlim:
+                        akc_upperlim=10
                     else:
-                        akc_uplim=int(app.ARGS.akc_uplim)
+                        akc_upperlim=int(app.ARGS.akc_upperlim)
 
                     if not (app.ARGS.DKI or app.ARGS.WDKI):
                         logger.error("AKC Outlier detection must be accompanied by DKI option")
                         raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
                     else:
-                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_uplim)
+                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_upperlim)
+                        akc_mask_copy = akc_mask.copy()
                         
                     logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
 
@@ -916,9 +927,6 @@ def execute(): #pylint: disable=unused-variable
 
                     #new dwi with restored b0
                     dwi_new = b0restore_slope(akc_mask, dwi_dki, bval_dki, kernal,percentile,fa, md,mask=None, n_cores=-3)
-                    newdwi = {}
-                    newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
-                    save_params(newdwi, mif, model='dki', outdir=outdir)
 
                     dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
                     dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
@@ -930,7 +938,8 @@ def execute(): #pylint: disable=unused-variable
 
                     # Detect Outlier
                     print("============Detect Outlier after lowb_slope============")
-                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
+                    akc_mask_copy = akc_mask.copy()
                     akc_mask = vectorize(akc_mask, mask)
                     akc_mask_tmp = akc_mask
                     
@@ -957,7 +966,7 @@ def execute(): #pylint: disable=unused-variable
                     # # print('dir shape: {}'.format(np.shape(dir)))
                     # # print('dir type: {}'.format(type(dir)))
                     # # print('bvec shape: {}'.format(np.shape(np.reshape(bvec_dki,(-1,3)))))
-                    # _,akc_d_temp = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                    # _,akc_d_temp = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                     # akc_dirs_temp=np.zeros((xx,yy,zz,np.shape(akc_d_temp)[0]))
                     # for i in range(np.shape(akc_d_temp)[0]):
                     #     akc_dirs_temp[:,:,:,i]=vectorize(akc_d_temp[i,:],mask)
@@ -995,7 +1004,7 @@ def execute(): #pylint: disable=unused-variable
                         DT[x,y,z,:] = dt_new.T
                         dt_dki = vectorize(DT, mask)
                         print('detecting outliers')
-                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                         akc_mask_copy = akc_mask.copy()
 
                         #akc mask
@@ -1019,16 +1028,27 @@ def execute(): #pylint: disable=unused-variable
                         print("nOutlier {}".format(np.sum(akc_mask)))
                         # print('{} > {}'.format(improve, thresh))
 
-                        #save new outlier mask
-                        outlier_mask = {}
-                        akc_mask_copy[akc_mask_copy!=0]=1
-                        akc_mask_copy=vectorize(akc_mask_copy, mask)
-                        akc_mask_copy[akc_mask_new==1]=1
-                        outlier_mask['outlier_mask_final'] = akc_mask_copy
-                        save_params(outlier_mask, mif, model='dki', outdir=outdir)
-
                         logger.info("Outlier correction iteration {} for TE={}".format(count,te), extra={"num_outliers": str(np.sum(akc_mask))})
                     # ====================================iteration===================================
+                    
+                    #save new b0
+                    newdwi = {}
+                    newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
+                    save_params(newdwi, mif, model='dki', outdir=outdir)
+
+                    #save new dt
+                    dt_ = {}
+                    dt_['dt'] = DT
+                    save_params(dt_, mif, model='dki_b0restore', outdir=outdir)
+                    logger.info("DKT with b0-restore saved.")
+
+                    #save new outlier mask
+                    outlier_mask = {}
+                    akc_mask_copy[akc_mask_copy!=0]=1
+                    akc_mask_copy=vectorize(akc_mask_copy, mask)
+                    akc_mask_copy[akc_mask_new==1]=1
+                    outlier_mask['outliermask_final'] = akc_mask_copy
+                    save_params(outlier_mask, mif, model='dki', outdir=outdir)
 
                     logger.info("b0-restore AKC outlier post-processing completed for TE={}.".format(te), extra={"num_outliers": str(np.sum(akc_mask))})
                 else:
@@ -1053,16 +1073,16 @@ def execute(): #pylint: disable=unused-variable
                 else:
                     akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
-                if not app.ARGS.akc_uplim:
-                    akc_uplim=10
+                if not app.ARGS.akc_upperlim:
+                    akc_upperlim=10
                 else:
-                    akc_uplim=int(app.ARGS.akc_uplim)
+                    akc_upperlim=int(app.ARGS.akc_upperlim)
 
                 if not (app.ARGS.DKI or app.ARGS.WDKI):
                     logger.error(f"AKC Outlier detection for TE={te} must be accompanied by DKI option.")
                     raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
                 else:
-                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                     
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"Outlier detection completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -1074,7 +1094,7 @@ def execute(): #pylint: disable=unused-variable
                 DT = vectorize(dt_dki, mask)
                 DT[x,y,z,:] = dt_new.T
                 dt_dki = vectorize(DT, mask)
-                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_uplim)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"AKC outlier post-processing completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
             else:
