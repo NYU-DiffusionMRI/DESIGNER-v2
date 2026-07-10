@@ -455,7 +455,7 @@ def execute(): #pylint: disable=unused-variable
             # dir = mat['dir']
 
             if not app.ARGS.akc_lowerlim:
-                akc_lowerlim=-1
+                akc_lowerlim=0
             else:
                 akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
@@ -532,7 +532,8 @@ def execute(): #pylint: disable=unused-variable
             dt_dki = vectorize(DT, mask)
 
             # Detect Outlier
-            print("============Detect Outlier after lowb_slope============")
+            print("============Detect Outlier now with conservative outlier detection (AKC < -2)============")
+            akc_lowerlim=-2
             akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
             akc_mask_copy = akc_mask.copy()
             akc_mask = vectorize(akc_mask, mask)
@@ -580,9 +581,9 @@ def execute(): #pylint: disable=unused-variable
                 thresh=0.05
 
             if improve>thresh:
-                print('{} > {}'.format(improve, thresh))
+                print(f"{improve} > {thresh}")
             
-            while improve>thresh and improve<1 :
+            while True:
                 count=count+1
                 print('iteration {}'.format(count))
                 noutlier0=np.sum(akc_mask)
@@ -597,7 +598,8 @@ def execute(): #pylint: disable=unused-variable
                 # DT = vectorize(dt_dki, mask)
                 DT[x,y,z,:] = dt_new.T
                 dt_dki = vectorize(DT, mask)
-                print('detecting outliers')
+
+                print('detecting AKC outliers')
                 akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                 akc_mask_copy = akc_mask.copy()
 
@@ -608,11 +610,13 @@ def execute(): #pylint: disable=unused-variable
                     akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 akc_mask_tmp = akc_mask
+
                 params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
                 rk = params_dki['rk']
                 md = params_dki['md']
                 fa = params_dki['fa']
-                print('detecting outliers')
+
+                print('detecting RK outliers')
                 akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
                 akc_mask[akc_mask!=0]=1
                 akc_mask[akc_mask_new==1]=1
@@ -623,11 +627,15 @@ def execute(): #pylint: disable=unused-variable
                 # print('{} > {}'.format(improve, thresh))
 
                 logger.info("Outlier correction iteration {}".format(count), extra={"num_outliers": str(np.sum(akc_mask))})
+                if improve < thresh:
+                    break
             # ==========================iteration===========================
 
             #save new b0
             newdwi = {}
-            newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
+            b0_idx = np.where(bval_dki < 0.01)[0]
+            np.savetxt('{}/b0_indices.txt'.format(outdir),b0_idx,fmt='%d')
+            newdwi['b0'] = dwi_new[:,:,:,b0_idx]
             save_params(newdwi, mif, model='dki', outdir=outdir)
 
             #save new dt
@@ -666,7 +674,7 @@ def execute(): #pylint: disable=unused-variable
                 raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
             else:
                 if not app.ARGS.akc_lowerlim:
-                    akc_lowerlim=-1
+                    akc_lowerlim=0
                 else:
                     akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
@@ -679,7 +687,10 @@ def execute(): #pylint: disable=unused-variable
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
 
-            dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
+            if app.ARGS.b0restore:
+                dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
+            else:
+                dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
             dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
 
             x,y,z = np.where(akc_mask == 1)
@@ -712,7 +723,10 @@ def execute(): #pylint: disable=unused-variable
 
                 logger.info("DTI fit after smoothing completed.", extra={"dt_dti_shape": dt_dti.shape})
             if (app.ARGS.DKI or app.ARGS.WDKI):
-                dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                if app.ARGS.b0restore:
+                    dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                else:
+                    dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
 
                 DT = vectorize(dt_dki, mask)
@@ -860,7 +874,7 @@ def execute(): #pylint: disable=unused-variable
                     # dir = mat['dir']
 
                     if not app.ARGS.akc_lowerlim:
-                        akc_lowerlim=-1
+                        akc_lowerlim=0
                     else:
                         akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
@@ -937,7 +951,8 @@ def execute(): #pylint: disable=unused-variable
                     dt_dki = vectorize(DT, mask)
 
                     # Detect Outlier
-                    print("============Detect Outlier after lowb_slope============")
+                    print("============Detect Outlier now with conservative AKC outlier detection (AKC < -2)============")
+                    akc_lowerlim=-2
                     akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                     akc_mask_copy = akc_mask.copy()
                     akc_mask = vectorize(akc_mask, mask)
@@ -988,7 +1003,7 @@ def execute(): #pylint: disable=unused-variable
                     if improve>thresh:
                         print('{} > {}'.format(improve, thresh))
                     
-                    while improve>thresh and improve<1 :
+                    while True:
                         count=count+1
                         print('iteration {}'.format(count))
                         noutlier0=np.sum(akc_mask)
@@ -1029,11 +1044,15 @@ def execute(): #pylint: disable=unused-variable
                         # print('{} > {}'.format(improve, thresh))
 
                         logger.info("Outlier correction iteration {} for TE={}".format(count,te), extra={"num_outliers": str(np.sum(akc_mask))})
+                        if improve < thresh:
+                            break
                     # ====================================iteration===================================
                     
                     #save new b0
                     newdwi = {}
-                    newdwi['b0'] = dwi_new[:,:,:,bval_dki<0.01]
+                    b0_idx = np.where(bval_dki < 0.01)[0]
+                    np.savetxt('{}/b0_indices.txt'.format(outdir),b0_idx,fmt='%d')
+                    newdwi['b0'] = dwi_new[:,:,:,b0_idx]
                     save_params(newdwi, mif, model='dki', outdir=outdir)
 
                     #save new dt
@@ -1069,7 +1088,7 @@ def execute(): #pylint: disable=unused-variable
                 dir = mat['dirs']
 
                 if not app.ARGS.akc_lowerlim:
-                    akc_lowerlim=-1
+                    akc_lowerlim=0
                 else:
                     akc_lowerlim=int(app.ARGS.akc_lowerlim)
 
@@ -1087,7 +1106,10 @@ def execute(): #pylint: disable=unused-variable
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"Outlier detection completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
 
-                dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
+                if app.ARGS.b0restore:
+                    dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
+                else:
+                    dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
                 dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
 
                 x,y,z = np.where(akc_mask == 1)
@@ -1107,7 +1129,10 @@ def execute(): #pylint: disable=unused-variable
                     dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
                     logger.info(f"DTI fit after smoothing completed for TE={te}.", extra={"dt_dti_shape": dt_dti.shape})
                 if (app.ARGS.DKI or app.ARGS.WDKI):
-                    dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    if app.ARGS.b0restore:
+                        dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    else:
+                        dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                     dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
                     logger.info(f"DKI fit after smoothing completed for TE={te}.", extra={"dt_dki_shape": dt_dki.shape})
 

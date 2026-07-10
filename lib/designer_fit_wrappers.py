@@ -89,8 +89,8 @@ def parallel_outlier_akc(inds, akc_mask_tmp, akc_dirs,rk,md,fa):
     val_fa=fa[x,y,z]
     max_akc=np.max(akc_dirs[x,y,z,:])
     min_akc=np.min(akc_dirs[x,y,z,:])
-    if max_akc>10 or min_akc<0:
-        O=1
+    # if max_akc>10 or min_akc<0:
+    #     O=1
 
     if val_rk<0.5 and val_md<2:
         O=1
@@ -116,6 +116,11 @@ def akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3):
 
 def parallel_outlier_slope(inds, kernel, outlier_locations, bval, dwi_norm, dwi, fa,md, md_mask, smoothlevel):
     import numpy as np
+    import warnings
+
+    warnings.filterwarnings("ignore",
+    message="Mean of empty slice",
+    category=RuntimeWarning)
 
     x, y, z = inds
     k = kernel // 2
