@@ -9,6 +9,9 @@
 			"VARIANT": "3.12"
 		}
 	},
+	"features": {
+		"ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  }
 	"customizations": {
 		// Configure properties specific to VS Code.
 		"vscode": {
