@@ -38,7 +38,7 @@ scikit-image==0.24.0
 scikit-learn==1.5.0
 scipy==1.13.1
 scs==3.2.4.post2
-setuptools==70.1.0
+setuptools==78.1.1
 setuptools-scm==8.1.0
 six==1.16.0
 statsmodels==0.14.2
