@@ -867,10 +867,18 @@ def run_eddy(shell_table, dwi_metadata):
                 #if rpe data has more than one volumes
                 if len(rpe_size) == 4:
                     #extract rpe b0 only
-                    run.command('dwiextract -bzero "%s" "%s"' % (rpe_dir,f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    if os.path.exists(rpe_bvals_path) and os.path.exists(rpe_bvec_path):
+                        # rpe_pair may contain non-b0 volumes; filter using its gradient table
+                        run.command('dwiextract -fslgrad "%s" "%s" -bzero "%s" "%s"' %
+                                    (rpe_bvec_path, rpe_bvals_path, rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    else:
+                        # no gradient table available for the rpe_pair image; assume all
+                        # volumes are already b=0 (per -rpe_pair's "reverse PE b=0 image" doc)
+                        print('rpe_pair image has multiple volumes but no matching .bval/.bvec found; assuming all volumes are b=0')
+                        run.command('mrconvert "%s" "%s"' % (rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
                     rpe_dir=f"{eddy_proc_dir}/b0rpe_raw.nii"
                     rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
-                    n = rpe_size[-1] # number of rpe b0s 
+                    n = rpe_size[-1] # number of rpe b0s
                     # we may dg or dn rpe b0 if there are multiple rpe b0
                     if n>1:
                         #if degibbs, degibbs each rpe b0
@@ -940,10 +948,18 @@ def run_eddy(shell_table, dwi_metadata):
                 n=1
                 if len(rpe_size) == 4:
                     #extract rpe b0 only
-                    run.command('dwiextract -bzero "%s" "%s"' % (rpe_dir,f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    if os.path.exists(rpe_bvals_path) and os.path.exists(rpe_bvec_path):
+                        # rpe_pair may contain non-b0 volumes; filter using its gradient table
+                        run.command('dwiextract -fslgrad "%s" "%s" -bzero "%s" "%s"' %
+                                    (rpe_bvec_path, rpe_bvals_path, rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    else:
+                        # no gradient table available for the rpe_pair image; assume all
+                        # volumes are already b=0 (per -rpe_pair's "reverse PE b=0 image" doc)
+                        print('rpe_pair image has multiple volumes but no matching .bval/.bvec found; assuming all volumes are b=0')
+                        run.command('mrconvert "%s" "%s"' % (rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
                     rpe_dir=f"{eddy_proc_dir}/b0rpe_raw.nii"
                     rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
-                    n = rpe_size[-1] # number of rpe b0s 
+                    n = rpe_size[-1] # number of rpe b0s
                     # we may dg or dn rpe b0 if there are multiple rpe b0
                     if n>1:
                         #if degibbs
