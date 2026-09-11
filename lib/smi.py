@@ -15,28 +15,72 @@ import scipy.io as sio
 import scipy.optimize as sco
 
 import warnings
+import multiprocessing as _multiprocessing
 from contextlib import contextmanager
 
-# --- BLAS thread uncap for one heavy op (shared-toolbox safe) --------------------------------
+# --- BLAS thread sizing for one heavy op (shared-toolbox safe) -------------------------------
 # Some callers pin BLAS to a single core globally (e.g. OMP_NUM_THREADS=1 for a fork pool). The
-# dominant cost in standard_model_mlfit_rot_invs is a single large scl.pinv(x_train) SVD, which
-# is a pure BLAS op and benefits from ALL cores. `_blas_uncap()` lets JUST that one op use every
-# core, then restores the caller's thread state on exit -- so no other smi.py caller changes
-# behavior. Guarded: if threadpoolctl is unavailable, it is a transparent no-op (plain pinv).
+# dominant cost in standard_model_mlfit_rot_invs is a single large scl.pinv(x_train) SVD, a pure
+# BLAS op that threads well. `_blas_uncap()` raises the cap for JUST that one op, then restores
+# the caller's thread state on exit -- so no other smi.py caller changes behavior.
+#
+# How many threads: the IDLE cores, capped at 32. Measured on a shared 128-core Xeon (OpenBLAS
+# 0.3.33, scl.pinv on x_train 100000x5456, load 79-218), wall seconds by thread count:
+#   1: 581.7 | 2: 380.4 | 4: 187.5 | 8: 163.4 | 16: 101.2 | 32: 82.2 | 64: 264.8 | 128: 2327.7
+# Past ~32 it collapses: 128 threads ran 4x SLOWER than one thread while burning 202,761 s of
+# CPU, the threads spinning at sync barriers. So "all cores" is the worst setting available; the
+# count must track what is actually free. Threaded results match the single-thread result to
+# 1e-18 absolute (reduction reordering moves the last bits; it is NOT bit-identical).
+#
+# Set SMI_BLAS_THREADS=<n> to pin the count when a run must reproduce the same bits.
+#
+# Guarded: if threadpoolctl is unavailable, this is a transparent no-op (plain pinv). NOTE on
+# macOS: numpy/scipy commonly link Apple Accelerate, which threadpoolctl cannot see or control
+# (threadpool_info() returns []), so this is a no-op there too. Accelerate latches its thread
+# count at the first BLAS call; the only lever is to start the process with VECLIB unpinned.
 try:
     import threadpoolctl as _threadpoolctl
 except Exception:  # threadpoolctl not installed -> no-op fallback (pinv runs at the ambient cap)
     _threadpoolctl = None
 
+_BLAS_THREAD_CAP = 32
+
+
+def _blas_threads():
+    """Threads to hand one heavy BLAS op: idle cores capped at _BLAS_THREAD_CAP, 1 in a worker."""
+    env = os.environ.get("SMI_BLAS_THREADS")
+    if env:
+        try:
+            return max(1, int(env))
+        except ValueError:
+            pass
+    # Inside a multiprocessing/joblib-loky worker the pool already owns the cores; N workers each
+    # claiming the idle count would multiply into the collapse regime above.
+    try:
+        if _multiprocessing.parent_process() is not None:
+            return 1
+    except AttributeError:  # python < 3.8
+        pass
+    try:
+        avail = len(os.sched_getaffinity(0))  # honors taskset / cgroup limits
+    except AttributeError:                    # macOS / Windows have no sched_getaffinity
+        avail = os.cpu_count() or 1
+    try:
+        idle = avail - os.getloadavg()[0]
+    except (OSError, AttributeError):
+        idle = avail
+    return int(max(1, min(_BLAS_THREAD_CAP, idle)))
+
 
 @contextmanager
 def _blas_uncap():
-    """Temporarily let BLAS use all cores inside the `with` block, then restore. No-op (yields
-    unchanged) when threadpoolctl is missing. Scope this TIGHTLY around one heavy BLAS op only."""
+    """Raise the BLAS thread cap to `_blas_threads()` inside the `with` block, then restore.
+    No-op (yields unchanged) when threadpoolctl is missing or cannot see the BLAS in use.
+    Scope this TIGHTLY around one heavy BLAS op only."""
     if _threadpoolctl is None:
         yield
         return
-    with _threadpoolctl.threadpool_limits(limits=None):
+    with _threadpoolctl.threadpool_limits(limits=_blas_threads()):
         yield
 
 
