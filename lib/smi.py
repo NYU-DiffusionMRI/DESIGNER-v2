@@ -15,6 +15,30 @@ import scipy.io as sio
 import scipy.optimize as sco
 
 import warnings
+from contextlib import contextmanager
+
+# --- BLAS thread uncap for one heavy op (shared-toolbox safe) --------------------------------
+# Some callers pin BLAS to a single core globally (e.g. OMP_NUM_THREADS=1 for a fork pool). The
+# dominant cost in standard_model_mlfit_rot_invs is a single large scl.pinv(x_train) SVD, which
+# is a pure BLAS op and benefits from ALL cores. `_blas_uncap()` lets JUST that one op use every
+# core, then restores the caller's thread state on exit -- so no other smi.py caller changes
+# behavior. Guarded: if threadpoolctl is unavailable, it is a transparent no-op (plain pinv).
+try:
+    import threadpoolctl as _threadpoolctl
+except Exception:  # threadpoolctl not installed -> no-op fallback (pinv runs at the ambient cap)
+    _threadpoolctl = None
+
+
+@contextmanager
+def _blas_uncap():
+    """Temporarily let BLAS use all cores inside the `with` block, then restore. No-op (yields
+    unchanged) when threadpoolctl is missing. Scope this TIGHTLY around one heavy BLAS op only."""
+    if _threadpoolctl is None:
+        yield
+        return
+    with _threadpoolctl.threadpool_limits(limits=None):
+        yield
+
 
 class SMI(object):
 
@@ -816,11 +840,33 @@ class SMI(object):
             pell_xi = (6435 * x**8 - 12012 * x**6 + 6930 * x**4 - 1260 * x**2 + 35) / 128
         
         kell = np.zeros((n_voxels, len(b)))
-        for i in range(n_voxels):
-            kell[i,:] = w @ ((f[i] * np.exp(-bval * bshape * da[i] * x**2 - bval * da[i]/3 * (1-bshape) - te_rep/t2a[i]) + 
-                f_extra[i] * np.exp(-bval * bshape * deltae[i] * x**2 - bval * deltae[i]/3 * (1-bshape) - bval * deperp[i] - te_rep/t2e[i]) +
-                fw[i] * np.exp(-bval * d_fw - te_rep/t2_fw)) * pell_xi)
-        
+        # GUARDED VECTORIZED FAST PATH (SMI_VECTORIZE=1, default). The original per-voxel loop
+        # below is a pure Python loop over n_voxels (= n_training ~ 40k-100k during SM training)
+        # and is the single-core training bottleneck. The fast path evaluates the SAME Gaussian-
+        # quadrature integrand for a CHUNK of voxels at once via numpy broadcasting (memory bounded
+        # by SMI_VEC_CHUNK), then contracts the n-node axis with the SAME weights w. Output is
+        # numerically identical to the loop (~1e-12, quadrature-reduction reordering only). Set
+        # SMI_VECTORIZE=0 to force the original loop (exact byte baseline / safety fallback).
+        if os.environ.get("SMI_VECTORIZE", "1") not in ("0", "", "false", "False") and n_voxels > 1:
+            wq = np.asarray(w).ravel()                                 # (n,)
+            chunk = int(os.environ.get("SMI_VEC_CHUNK", "4000"))
+            bv = bval[None, :, :]; bs = bshape[None, :, :]; x2 = (x ** 2)[None, :, :]
+            tr = te_rep[None, :, :]; pe = pell_xi[None, :, :]
+            for s in range(0, n_voxels, chunk):
+                e = min(s + chunk, n_voxels)
+                fi = f[s:e, :, None]; fei = f_extra[s:e, :, None]; fwi = fw[s:e, :, None]
+                dai = da[s:e, :, None]; dei = deltae[s:e, :, None]; dpi = deperp[s:e, :, None]
+                t2ai = t2a[s:e, :, None]; t2ei = t2e[s:e, :, None]
+                integ = (fi * np.exp(-bv * bs * dai * x2 - bv * dai / 3 * (1 - bs) - tr / t2ai) +
+                         fei * np.exp(-bv * bs * dei * x2 - bv * dei / 3 * (1 - bs) - bv * dpi - tr / t2ei) +
+                         fwi * np.exp(-bv * d_fw - tr / t2_fw)) * pe
+                kell[s:e, :] = np.einsum('q,cql->cl', wq, integ)
+        else:
+            for i in range(n_voxels):
+                kell[i,:] = w @ ((f[i] * np.exp(-bval * bshape * da[i] * x**2 - bval * da[i]/3 * (1-bshape) - te_rep/t2a[i]) +
+                    f_extra[i] * np.exp(-bval * bshape * deltae[i] * x**2 - bval * deltae[i]/3 * (1-bshape) - bval * deperp[i] - te_rep/t2e[i]) +
+                    fw[i] * np.exp(-bval * d_fw - te_rep/t2_fw)) * pell_xi)
+
         abs_beta = abs(beta)
        
         if ell > 0:
@@ -1038,7 +1084,8 @@ class SMI(object):
             x_train = self.compute_extended_moments(
                 meas_rotinvs_train[:, keep_rot_invs_kernel], degree=degree_kernel)
         
-            pinv_x = scl.pinv(x_train)
+            with _blas_uncap():                 # let this ONE big SVD-pinv use all cores (BLAS)
+                pinv_x = scl.pinv(x_train)
             # pinv_x = np.linalg.pinv(x_train)
             coeffs_f = pinv_x @ f
             coeffs_da = pinv_x @ da
@@ -1076,7 +1123,7 @@ class SMI(object):
                 p2_ml_fit[flag_current_noise_level] = (
                     x_fit_norm[flag_current_noise_level, :] @ coeffs_p2
                     )
-                p2_ml_fit[p2_ml_fit < 0] = 0 
+                p2_ml_fit[p2_ml_fit < 0] = 0
                 p2_ml_fit[p2_ml_fit > 1] = 1
             if self.rotinv_lmax >= 4:
                 p4 = self.prior[:, 8]
@@ -1084,7 +1131,7 @@ class SMI(object):
                 p4_ml_fit[flag_current_noise_level] = (
                     x_fit_norm[flag_current_noise_level, :] @ coeffs_p4
                     )
-                p4_ml_fit[p4_ml_fit < 0] = 0 
+                p4_ml_fit[p4_ml_fit < 0] = 0
                 p4_ml_fit[p4_ml_fit > 1] = 1
             if self.rotinv_lmax >=6:
                 p6 = self.prior[:, 9]
@@ -1092,7 +1139,7 @@ class SMI(object):
                 p6_ml_fit[flag_current_noise_level] = (
                     x_fit_norm[flag_current_noise_level, :] @ coeffs_p6
                     )
-                p6_ml_fit[p6_ml_fit < 0] = 0 
+                p6_ml_fit[p6_ml_fit < 0] = 0
                 p6_ml_fit[p6_ml_fit > 1] = 1
 
         f_ml_fit[f_ml_fit < 0] = 0
