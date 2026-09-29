@@ -9,9 +9,16 @@
 			"VARIANT": "3.12"
 		}
 	},
+	"mounts": [
+		"source=${localEnv:DESIGNER_DATA},target=/data,type=bind"
+	],
+	"runArgs": [
+		"--gpus",
+		"all"
+  	],
 	"features": {
 		"ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
-  }
+    },
 	"customizations": {
 		// Configure properties specific to VS Code.
 		"vscode": {
