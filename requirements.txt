@@ -50,3 +50,4 @@ trx-python==0.2.9
 tzdata==2024.1
 webcolors==24.6.0
 colorama==0.4.6
+gradunwarp @ git+https://github.com/Washington-University/gradunwarp.git@da4ceba7c16c8db2b53846bd455b53b24f840447
