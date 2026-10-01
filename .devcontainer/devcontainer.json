@@ -10,7 +10,8 @@
 		}
 	},
 	"mounts": [
-		"source=${localEnv:DESIGNER_DATA},target=/data,type=bind"
+		"source=${localEnv:DMITRY_LABSPACE},target=/workspaces/${localWorkspaceFolderBasename}/data/novikd01lab,type=bind",
+		"source=${localEnv:ELS_LABSPACE},target=/workspaces/${localWorkspaceFolderBasename}/data/fieree01lab,type=bind"
 	],
 	"runArgs": [
 		"--gpus",
