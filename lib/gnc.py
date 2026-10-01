@@ -200,7 +200,9 @@ def finalize_single_interpolation(
 
     stride = dwi_metadata['stride']
 
-    run.command('fslsplit working_predistort.mif vol_predistort_ -t')
+    # fslsplit only understands NIfTI, so convert through a NIfTI intermediate first.
+    run.command('mrconvert -force working_predistort.mif working_predistort.nii.gz')
+    run.command('fslsplit working_predistort.nii.gz vol_predistort_ -t')
 
     corrected_files = []
     for i in range(n_volumes):
