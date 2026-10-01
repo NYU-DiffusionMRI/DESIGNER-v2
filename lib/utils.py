@@ -180,6 +180,7 @@ def run_fsl_eddy(
     pe_dir: Optional[str] = None,
     grad_file: Optional[str] = None,
     readout_time: float | Sequence[float] | None = None,
+    dfields: bool = False,
 ):
     from mrtrix3 import run, image
 
@@ -216,7 +217,9 @@ def run_fsl_eddy(
     )
     if topup_prefix is not None:
         cmd += f" --topup={topup_prefix}"
-    
+    if dfields:
+        cmd += " --dfields"
+
     run.command(cmd)
 
     # 4. convert the eddy output nifti to mif

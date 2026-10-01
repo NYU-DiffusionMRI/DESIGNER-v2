@@ -531,7 +531,26 @@ def run_ants_moco(dwi_metadata):
 
     pre_eddy_ants_moco(dwi_metadata)
 
-def run_eddy(shell_table, dwi_metadata):
+def finalize_gnc_single_interpolation(eddy_proc_dir: Path, dwi_metadata: dict) -> None:
+    """
+    Stash eddy's sequential (double-interpolation) output for comparison,
+    then replace dwiec.mif with the single-interpolation GNC+eddy composite.
+
+    Args:
+        eddy_proc_dir: Eddy's scratch processing directory (holds
+            dwi_post_eddy, its .eddy_displacement_fields.*, and bvals)
+        dwi_metadata: DESIGNER's input metadata dict (used for 'stride')
+    """
+    from mrtrix3 import run, image
+    from lib.gnc import finalize_single_interpolation
+
+    run.command('mrconvert -force dwiec.mif dwiec_gnc_doubleinterp.mif')
+    n_volumes = int(image.Header('dwiec.mif').size()[3])
+    eddy_out_prefix = str(eddy_proc_dir / 'dwi_post_eddy')
+    eddy_bvals_file = str(eddy_proc_dir / 'bvals')
+    finalize_single_interpolation(eddy_out_prefix, eddy_bvals_file, n_volumes, dwi_metadata, 'dwiec.mif')
+
+def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
     from lib.designer_input_utils import splitext_
     from lib.utils import get_bids_total_readout_time
@@ -556,6 +575,16 @@ def run_eddy(shell_table, dwi_metadata):
     if app.ARGS.set_seed:
         eddyopts_list.append('--initrand')
     eddyopts = ' '.join(eddyopts_list)
+
+    # GNC (gradient nonlinearity correction) needs eddy's per-volume displacement
+    # fields to compose a single-interpolation GNC+eddy warp afterwards; see
+    # run_gnc_precorrection()/finalize_single_interpolation() in lib/gnc.py.
+    # Scope is validated in designer.py's execute() (rpe_pair/rpe_none only).
+    gnc_enabled = bool(getattr(app.ARGS, 'gnc_grad_coeff', None))
+
+    # Use the GNC-corrected rpe_pair (if GNC ran) throughout this function
+    # instead of reading/mutating the global app.ARGS.rpe_pair.
+    rpe_pair = gnc_rpe_pair if gnc_rpe_pair else app.ARGS.rpe_pair
 
     fsl_suffix = fsl.suffix()
 
@@ -610,11 +639,11 @@ def run_eddy(shell_table, dwi_metadata):
             print(f"Scaled b-values and concatenated b-vectors have been saved to {fakeb_grad_file}")
         
          # get TE of the PA
-        if app.ARGS.rpe_pair:
+        if rpe_pair:
             if app.ARGS.rpe_te:
                 te_pa = float(app.ARGS.rpe_te)
             else:
-                pa_fpath = splitext_(app.ARGS.rpe_pair)[0]
+                pa_fpath = splitext_(rpe_pair)[0]
                 pa_bids_path = pa_fpath + '.json'
                 if not os.path.exists(pa_bids_path):
                     raise MRtrixError('for variable TE data the RPE \
@@ -635,7 +664,7 @@ def run_eddy(shell_table, dwi_metadata):
                                   match any of the input echo times, please check.')
 
             bidslist = dwi_metadata['bidslist']
-            rpe_fpath = splitext_(app.ARGS.rpe_pair)[0]
+            rpe_fpath = splitext_(rpe_pair)[0]
             rpe_bids_path = rpe_fpath + '.json'
             rpe_bvals_path = rpe_fpath + '.bval'
             rpe_bvec_path = rpe_fpath + '.bvec'
@@ -649,13 +678,13 @@ def run_eddy(shell_table, dwi_metadata):
                     'pe_original_meanb0.mif'),
                     show=False)
                 
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                rpe_size = [ int(s) for s in image.Header(rpe_pair).size() ]
                 if len(rpe_size) == 4:
                     run.command('mrconvert -coord 3 0 -strides "%s" -json_import "%s" "%s" "%s"' % 
-                        (stride, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                        (stride, rpe_bids_path, rpe_pair, 'rpe_b0.mif'))
                 else: 
                     run.command('mrconvert -strides "%s" -json_import "%s" "%s" "%s"' % 
-                        (stride,rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                        (stride,rpe_bids_path, rpe_pair, 'rpe_b0.mif'))
                     
                 #need to import pe_original_meanb0 bids with phase encoding info so we can run mrinfo -export_pe_eddy
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
@@ -668,13 +697,13 @@ def run_eddy(shell_table, dwi_metadata):
                     'pe_original_meanb0.nii'),
                     show=False)
 
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                rpe_size = [ int(s) for s in image.Header(rpe_pair).size() ]
                 if len(rpe_size) == 4:
                     run.command('mrconvert -coord 3 0 -strides "%s" "%s" "%s"' % 
-                        (stride, app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                        (stride, rpe_pair, 'rpe_b0.nii'))
                 else: 
                     run.command('mrconvert -strides "%s" "%s" "%s"' % 
-                        (stride, app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                        (stride, rpe_pair, 'rpe_b0.nii'))
             
             # extract brain from mean b0
             run.command('bet "%s" "%s" -f 0.2 -m' %
@@ -712,7 +741,7 @@ def run_eddy(shell_table, dwi_metadata):
             eddy_proc_dir = Path(f'eddy_processing_{i}')
             eddy_proc_dir.mkdir(parents=True, exist_ok=True)
             
-            if app.ARGS.rpe_pair:
+            if rpe_pair:
                 run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_pre_eddy.nii" -axis 3')
                 run.command(f'bet "{eddy_proc_dir}/b0_pre_eddy.nii" "{eddy_proc_dir}/b0_pre_eddy_brain" -f 0.2 -m')
 
@@ -845,14 +874,14 @@ def run_eddy(shell_table, dwi_metadata):
         eddy_proc_dir = Path('eddy_processing')
         eddy_proc_dir.mkdir(parents=True, exist_ok=True)
 
-        if app.ARGS.rpe_pair:
+        if rpe_pair:
             bidslist = dwi_metadata['bidslist']
-            rpe_fpath = splitext_(app.ARGS.rpe_pair)[0]
+            rpe_fpath = splitext_(rpe_pair)[0]
             rpe_bids_path = rpe_fpath + '.json'
             rpe_bvals_path = rpe_fpath + '.bval'
             rpe_bvec_path = rpe_fpath + '.bvec'
             
-            rpe_dir = app.ARGS.rpe_pair
+            rpe_dir = rpe_pair
 
            # if json for both rpe and pe data exists 
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
@@ -965,7 +994,7 @@ def run_eddy(shell_table, dwi_metadata):
                         #if degibbs
                         if getattr(app.ARGS, "degibbs", False):
                             # degibbs individual rpe b0
-                            run_degibbs_flexible(app.ARGS.rpe_pair, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                            run_degibbs_flexible(rpe_pair, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
                             rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
                         
                         #if denoise
@@ -1003,7 +1032,7 @@ def run_eddy(shell_table, dwi_metadata):
                                 (rpe_dir, stride))
                                   
                 else: 
-                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
+                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, rpe_pair))
 
                 acqp = np.zeros((2,3))
                 if 'i' in pe_dir: acqp[:,0] = 1
@@ -1063,8 +1092,11 @@ def run_eddy(shell_table, dwi_metadata):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'))
-            
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
+
+            if gnc_enabled:
+                finalize_gnc_single_interpolation(eddy_proc_dir, dwi_metadata)
+
         elif app.ARGS.rpe_none:
             # Create brain mask from mean b0 for eddy
             run.command(f'dwiextract -bzero working.mif - | mrconvert -coord 3 0 - "{eddy_proc_dir}/b0_mean.nii"')
@@ -1073,8 +1105,11 @@ def run_eddy(shell_table, dwi_metadata):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'))
-            
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
+
+            if gnc_enabled:
+                finalize_gnc_single_interpolation(eddy_proc_dir, dwi_metadata)
+
         elif app.ARGS.rpe_all:
             rpe_dir = app.ARGS.rpe_all
 
@@ -1166,11 +1201,11 @@ def run_eddy(shell_table, dwi_metadata):
                                 (rpe_dir, stride))
                                     
                 else: 
-                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
+                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, rpe_pair))
                     rpe_dir = "b0rpe.nii"
                
             else: 
-                run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
+                run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, rpe_pair))
                 
             run.command('mrconvert b0pe.mif b0pe.nii')
 
@@ -1310,7 +1345,7 @@ def run_eddy(shell_table, dwi_metadata):
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
             run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'))
 
-        elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
+        elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
 
     run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)

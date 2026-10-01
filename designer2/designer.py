@@ -2,6 +2,7 @@
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
+from lib.gnc import run_gnc_precorrection
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -100,22 +101,40 @@ def usage(cmdline): #pylint: disable=unused-variable
     rpe_options.add_argument('-eddy_quad_output', metavar=('<path>'), help='path to a not yet existing directory you want to save eddy_quad output to')
     rpe_options.add_argument('-eddy_quad_off', action='store_true', help='skip eddy_quad')
 
+    gnc_options = cmdline.add_argument_group('Options for gradient nonlinearity correction')
+    gnc_options.add_argument('-gnc_grad_coeff', metavar=('<coeff file>'),
+        help='Path to scanner gradient coefficient file for gradient nonlinearity '
+             'correction (spatial unwarping via gradunwarp). Providing this enables '
+             'the step. Currently only supported with -eddy combined with -rpe_pair '
+             'or -rpe_none (not -rpe_all, -rpe_header, -eddy_groups, -pre_align, or '
+             '-ants_motion_correction).')
+    gnc_options.add_argument('-gnc_scanner', metavar=('<vendor>'),
+        help='Scanner vendor passed to gradient_unwarp (e.g. siemens, ge).', default='siemens')
+
     etc_options = cmdline.add_argument_group('Other options')
     etc_options.add_argument('-set_seed', action='store_true', help='set random seed and make eddy deterministic', default=False)
 
 def execute(): #pylint: disable=unused-variable
-    from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
+    from mrtrix3 import app, fsl, run, path, MRtrixError #pylint: disable=no-name-in-module, import-outside-toplevel
     import pandas as pd
     import numpy as np
     import os
     import random
 
     from pathlib import Path
-    
+
     if app.ARGS.set_seed:
         seed = 42
         np.random.seed(seed)
-        random.seed(seed) 
+        random.seed(seed)
+
+    if app.ARGS.gnc_grad_coeff and app.ARGS.eddy:
+        gnc_unsupported = (app.ARGS.rpe_all or app.ARGS.rpe_header or app.ARGS.eddy_groups
+                            or app.ARGS.pre_align or app.ARGS.ants_motion_correction)
+        if gnc_unsupported or not (app.ARGS.rpe_pair or app.ARGS.rpe_none):
+            raise MRtrixError('-gnc_grad_coeff currently only supports -eddy combined '
+                               'with -rpe_pair or -rpe_none (no -rpe_all, -rpe_header, '
+                               '-eddy_groups, -pre_align, or -ants_motion_correction).')
 
     # create a temporary directory to store processing files
     app.make_scratch_dir()
@@ -194,6 +213,13 @@ def execute(): #pylint: disable=unused-variable
     if getattr(app.ARGS, "degibbs", False):
         run_degibbs_flexible("working.mif", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="working")
 
+    # gradient nonlinearity correction (spatial unwarping) - must run before any
+    # other spatial transform (pre_align/ants_motion_correction/eddy) so its warp
+    # can later be composed with eddy's per-volume displacement field
+    gnc_rpe_pair = None
+    if app.ARGS.gnc_grad_coeff:
+        gnc_rpe_pair = run_gnc_precorrection(dwi_metadata)
+
     # rigid alignment of b0s from separate input series
     if app.ARGS.pre_align:
         run_pre_align(dwi_metadata)
@@ -204,7 +230,7 @@ def execute(): #pylint: disable=unused-variable
 
     # eddy current, succeptibility, motion correction
     if app.ARGS.eddy:
-        run_eddy(shell_table, dwi_metadata)
+        run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=gnc_rpe_pair)
 
     # if app.ARGS.denoise_after_eddy:
     #     run_sigma_denoiser(dwi_metadata)
@@ -264,6 +290,19 @@ def execute(): #pylint: disable=unused-variable
 
     if len(set(tes)) > 1:
         np.savetxt(dir_path / f"{out_name}.echotime", tes, fmt='%s', delimiter=' ', newline=' ')
+
+    # GNC comparison export: the standard sequential (double-interpolation)
+    # eddy result, saved alongside the single-interpolation primary output
+    # (dwi_designer.nii above) so the two can be validated against each other.
+    if app.ARGS.gnc_grad_coeff and app.ARGS.eddy:
+        comparison_mif = 'dwiec_gnc_doubleinterp.mif'
+        if Path(comparison_mif).exists():
+            run.command('mrconvert -force -stride %s -export_grad_fsl "%s" "%s" %s "%s"' %
+                (orig_stride,
+                dir_path / f"{out_name}_gnc_doubleinterp.bvec",
+                dir_path / f"{out_name}_gnc_doubleinterp.bval",
+                comparison_mif,
+                dir_path / f"{out_name}_gnc_doubleinterp.nii"))
 
     #eddy_quad
     if app.ARGS.eddy:
