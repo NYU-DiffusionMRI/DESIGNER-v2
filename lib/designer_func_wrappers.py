@@ -940,16 +940,14 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
                             run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
                                     (rpelist_transformed, stride, eddy_proc_dir))
                             rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
-                            run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
-                                (rpe_dir, stride, rpe_bids_path))
 
                     #take the first rpe b0
                     rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
                     if len(rpe_size) == 4:
-                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' % 
+                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' %
                                 (rpe_dir, stride, rpe_bids_path))
                     else:
-                        run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
+                        run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' %
                                 (rpe_dir, stride, rpe_bids_path))
                         
                 else: 
