@@ -58,5 +58,17 @@
         "vector": "cpp",
         "algorithm": "cpp"
     },
-    "python-envs.defaultEnvManager": "ms-python.python:system"
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "files.watcherExclude": {
+        "**/data/novikd01lab/**": true,
+        "**/data/fieree01lab/**": true
+    },
+    "search.exclude": {
+        "**/data/novikd01lab/**": true,
+        "**/data/fieree01lab/**": true
+    },
+    "files.exclude": {
+        "**/data/novikd01lab": true,
+        "**/data/fieree01lab": true
+    }
 }
