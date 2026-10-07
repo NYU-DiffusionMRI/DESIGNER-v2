@@ -77,7 +77,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-fslbvec',metavar=('<bvecs>'),help='specify bvec path if path is different from the path to the dwi or the file has an unusual extension')
     options.add_argument('-fslbval',metavar=('<bvals>'),help='specify bval path if path is different from the path to the dwi or the file has an unusual extension')
     options.add_argument('-bids',metavar=('<bids1,bids2,...>'),help='specify bids.json path if path is different from the path to the dwi or the file has an unusual extension')
-    options.add_argument('-n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasks, by default designer will use available cores - 2', default=-3)
+    options.add_argument('-n_cores',type=int,metavar=('<ncores>'),help='specify the number of cores to use in parallel tasks, by default designer will use available cores - 2', default=-3)
 
     mp_options = cmdline.add_argument_group('Options for specifying denoising parameters')
     mp_options.add_argument('-patch2self', action='store_true', help='Perform patch2self')

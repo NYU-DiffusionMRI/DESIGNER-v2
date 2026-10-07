@@ -65,7 +65,7 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
             adapt_length = None
 
         Signal, Sigma, Nparameters = mp.denoise(
-            dwi, phase=args_phase, kernel=extent, patchtype='nonlocal', patchsize=adapt_length, shrinkage=args_shrinkage, algorithm=args_algorithm
+            dwi, phase=args_phase, kernel=extent, patchtype='nonlocal', patchsize=adapt_length, shrinkage=args_shrinkage, algorithm=args_algorithm, n_cores=n_cores
             )
     else:    
         Signal, Sigma, Nparameters = mp.denoise(
