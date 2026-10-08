@@ -937,9 +937,24 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
                             # merge to 4D rpe and average to denoise
                             rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
                             rpelist_transformed = " ".join(rpelist_new)
-                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
+                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' %
                                     (rpelist_transformed, stride, eddy_proc_dir))
                             rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
+                            # population_template pads its output grid with a fixed margin
+                            # (10 voxels/side) meant for inter-subject registration deviation;
+                            # since these are repeat b0 volumes of the same subject/session,
+                            # that margin has no source data and is left as NaN, which topup
+                            # cannot tolerate downstream. Reslice back onto the original
+                            # native grid to discard it.
+                            run.command('mrtransform "%s" -template "%s/rpeb0_0.nii" "%s/b0rpe_denoise_crop.nii"' %
+                                        (rpe_dir, rpeb0s_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_crop.nii"
+                            # the rigid registration's own small rotation/translation can still
+                            # leave a thin NaN sliver at the FOV edges even after cropping back
+                            # to the native grid; zero it out since topup tolerates no NaN at all
+                            run.command('mrcalc "%s" -finite "%s" 0 -if "%s/b0rpe_denoise_clean.nii"' %
+                                        (rpe_dir, rpe_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_clean.nii"
 
                     #take the first rpe b0
                     rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
@@ -1014,10 +1029,25 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
                             # merge to 4D rpe and average to denoise
                             rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
                             rpelist_transformed = " ".join(rpelist_new)
-                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
+                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' %
                                     (rpelist_transformed, stride, eddy_proc_dir))
                             rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
-                            run.command('mrconvert "%s" -strides "%s" b0rpe.nii' % 
+                            # population_template pads its output grid with a fixed margin
+                            # (10 voxels/side) meant for inter-subject registration deviation;
+                            # since these are repeat b0 volumes of the same subject/session,
+                            # that margin has no source data and is left as NaN, which topup
+                            # cannot tolerate downstream. Reslice back onto the original
+                            # native grid to discard it.
+                            run.command('mrtransform "%s" -template "%s/rpeb0_0.nii" "%s/b0rpe_denoise_crop.nii"' %
+                                        (rpe_dir, rpeb0s_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_crop.nii"
+                            # the rigid registration's own small rotation/translation can still
+                            # leave a thin NaN sliver at the FOV edges even after cropping back
+                            # to the native grid; zero it out since topup tolerates no NaN at all
+                            run.command('mrcalc "%s" -finite "%s" 0 -if "%s/b0rpe_denoise_clean.nii"' %
+                                        (rpe_dir, rpe_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_clean.nii"
+                            run.command('mrconvert "%s" -strides "%s" b0rpe.nii' %
                                 (rpe_dir, stride))
 
                     #take the first rpe b0
@@ -1186,10 +1216,25 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
                         # merge to 4D rpe and average to denoise
                         rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
                         rpelist_transformed = " ".join(rpelist_new)
-                        run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' % 
+                        run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' %
                                 (rpelist_transformed, stride, eddy_proc_dir))
                         rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
-                        run.command('mrconvert "%s" -strides "%s" b0rpe.nii' % 
+                        # population_template pads its output grid with a fixed margin
+                        # (10 voxels/side) meant for inter-subject registration deviation;
+                        # since these are repeat b0 volumes of the same subject/session,
+                        # that margin has no source data and is left as NaN, which topup
+                        # cannot tolerate downstream. Reslice back onto the original
+                        # native grid to discard it.
+                        run.command('mrtransform "%s" -template "%s/rpeb0_0.nii" "%s/b0rpe_denoise_crop.nii"' %
+                                    (rpe_dir, rpeb0s_dir, eddy_proc_dir))
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_crop.nii"
+                        # the rigid registration's own small rotation/translation can still
+                        # leave a thin NaN sliver at the FOV edges even after cropping back
+                        # to the native grid; zero it out since topup tolerates no NaN at all
+                        run.command('mrcalc "%s" -finite "%s" 0 -if "%s/b0rpe_denoise_clean.nii"' %
+                                    (rpe_dir, rpe_dir, eddy_proc_dir))
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_clean.nii"
+                        run.command('mrconvert "%s" -strides "%s" b0rpe.nii' %
                                 (rpe_dir, stride))
 
                     #take the first rpe b0
