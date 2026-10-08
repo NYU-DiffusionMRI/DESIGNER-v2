@@ -146,28 +146,6 @@ def run_patch2self():
     print(f"Denoising completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
 
-def get_phase_encoding_dimension(pe_dir, strides):
-    # Define mappings for 'i', 'j', 'k' to their respective anatomical axes
-    axis_map = {
-        'i': 0,  # Left-Right (X-axis)
-        'j': 1,  # Anterior-Posterior (Y-axis)
-        'k': 2   # Superior-Inferior (Z-axis)
-    }
-    
-    # Check for valid phase encoding direction
-    if pe_dir not in axis_map:
-        raise ValueError("Invalid phase encoding direction. Choose from 'i', 'j', or 'k'.")
-    
-    # Map 'i', 'j', or 'k' to the target anatomical axis
-    target_axis = axis_map[pe_dir]
-    
-    # Determine which dimension in strides corresponds to the target axis
-    try:
-        dimension = strides.index(target_axis + 1)  # +1 since strides use 1-based indexing
-    except ValueError:
-        raise ValueError("Strides configuration does not contain the expected axis order.")
-    
-    return dimension
 
 def run_degibbs(pf, pe_dir,orig_stride):
     """
