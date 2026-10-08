@@ -78,6 +78,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-fslbval',metavar=('<bvals>'),help='specify bval path if path is different from the path to the dwi or the file has an unusual extension')
     options.add_argument('-bids',metavar=('<bids1,bids2,...>'),help='specify bids.json path if path is different from the path to the dwi or the file has an unusual extension')
     options.add_argument('-n_cores',type=int,metavar=('<ncores>'),help='specify the number of cores to use in parallel tasks, by default designer will use available cores - 2', default=-3)
+    options.add_argument('-bzero_threshold',type=float,metavar=('<threshold>'),help='b-value (s/mm^2) at or below which a volume is treated as b=0 when extracting b=0 reference volumes for eddy/topup. Useful for scanners that use a small nonzero nominal "b=0" (e.g. 10 or 15) instead of exactly 0. Default matches MRtrix3\'s own default of 10.0.', default=10.0)
 
     mp_options = cmdline.add_argument_group('Options for specifying denoising parameters')
     mp_options.add_argument('-patch2self', action='store_true', help='Perform patch2self')
@@ -138,7 +139,21 @@ def execute(): #pylint: disable=unused-variable
 
     # create a temporary directory to store processing files
     app.make_scratch_dir()
-    
+
+    # if a non-default b=0 threshold was requested, point every MRtrix3
+    # subprocess at a config file that overrides BZeroThreshold (the
+    # standard -config option only applies to the process it's passed to,
+    # not to subprocesses spawned via run.command()). run.command() reads
+    # the subprocess environment from run.shared.env, a dict snapshotted
+    # from os.environ when mrtrix3.run was first imported (well before this
+    # point) - mutating os.environ here would have no effect on it, so the
+    # dict itself must be updated directly.
+    if app.ARGS.bzero_threshold != 10.0:
+        bzero_config_path = os.path.join(app.SCRATCH_DIR, 'designer_mrtrix.conf')
+        with open(bzero_config_path, 'w') as bzero_config_file:
+            bzero_config_file.write(f'BZeroThreshold: {app.ARGS.bzero_threshold}\n')
+        run.shared.env['MRTRIX_CONFIGFILE'] = bzero_config_path
+
     # grab the fsl suffix stored in $FSLOUTPUTTYPLE
     fsl_suffix = fsl.suffix()
 
