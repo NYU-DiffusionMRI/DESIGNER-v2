@@ -1,6 +1,6 @@
 ---
 layout: default
-title: DTI-DKI
+title: DTI-DKI/WDKI
 has_children: false
 parent: TMI
 nav_order: 2
@@ -60,10 +60,14 @@ The fractional anisotropy (FA) represents the degree of tissue dispersion and is
 $FA = \sqrt{\frac{1}{2}}\frac{\sqrt{(\lambda_1-\lambda_2)^2 + (\lambda_2 - \lambda_3)^2 + (\lambda_1 - \lambda_3)^2}}{\sqrt{\lambda_1^2+\lambda_2^2+\lambda_3^2}}$.
 We can create color FA images by scaling the principal diffusion tensor eigenvector by FA and mapping the result to an RGB colormap.
 
-Likewise, the kurtosis tensor parameters MK, AK, and RK correspond the the kurtosis tensor as MD, AD, and RD correspond to eigenvalues of the diffusion tensor. For kurtosis, TMI offers two definitions of the tensor based on published conventions. 
+Likewise, the kurtosis tensor parameters MK, AK, and RK correspond the the kurtosis tensor as MD, AD, and RD correspond to eigenvalues of the diffusion tensor.
 
 ![DTIDKI params]({{ site.baseurl }}/assets/images/simpleDTIDKI.png)
 top: Simple clinical example of a mean diffusivity scalar map derived from a single b-shell acquisition Bottom: example of a mean kurtosis scalar map derived from a multi b-shell acquisition.
+
+### DKI vs WDKI
+
+For kurtosis, TMI offers two definitions of the tensor based on published conventions. WDKI parameters are derived directly from the kurtosis tensor, rather than from the conventional approach of averaging directional kurtosis values. For example, mk_wdki calculates mean kurtosis as the angular average of the dimensionless cumulant tensor $\overline{W({\bf \hat{n}})} =  \tfrac{1}{4 \pi}  \int_{\mathbb{S}^2} d\hat{\mathbf{n}}\, W(\hat{\mathbf{n}})$ while the more standard definition (mk_dki) is the angular average of the directional kurtosis $\overline{K({\bf \hat{n}})} =  \tfrac{1}{4 \pi} \int_{\mathbb{S}^2} d\hat{\mathbf{n}}\, K(\hat{\mathbf{n}})=  \tfrac{1}{4 \pi}  \int_{\mathbb{S}^2} d\hat{\mathbf{n}}\,  \frac{\bar{D}^2 W(\hat{\mathbf{n}})}{ {D(\hat{\mathbf{n}})}^2}$.
 
 ---
 
