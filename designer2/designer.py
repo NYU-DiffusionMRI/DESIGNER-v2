@@ -306,20 +306,6 @@ def execute(): #pylint: disable=unused-variable
     if len(set(tes)) > 1:
         np.savetxt(dir_path / f"{out_name}.echotime", tes, fmt='%s', delimiter=' ', newline=' ')
 
-    # TODO: exporting for easier comparison during gnc experiment; remove once completed and tested
-    # GNC comparison export: the standard sequential (double-interpolation)
-    # eddy result, saved alongside the single-interpolation primary output
-    # (dwi_designer.nii above) so the two can be validated against each other.
-    if app.ARGS.gnc_grad_coeff and app.ARGS.eddy:
-        comparison_mif = 'dwiec_gnc_doubleinterp.mif'
-        if Path(comparison_mif).exists():
-            run.command('mrconvert -force -stride %s -export_grad_fsl "%s" "%s" %s "%s"' %
-                (orig_stride,
-                dir_path / f"{out_name}_gnc_doubleinterp.bvec",
-                dir_path / f"{out_name}_gnc_doubleinterp.bval",
-                comparison_mif,
-                dir_path / f"{out_name}_gnc_doubleinterp.nii"))
-
     #eddy_quad
     if app.ARGS.eddy:
         run_eddy_quad()
