@@ -20,7 +20,7 @@ run_normalization:
 import time
 import shutil
 from pathlib import Path
-from lib.utils import run_fsl_eddy, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all
+from lib.utils import run_fsl_eddy, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all, force_remove
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -93,7 +93,6 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
     app.cleanup('dwidn.nii')
     app.cleanup('dwidn.bvec')
     app.cleanup('dwidn.bval')
-    
     #run.command('dwidenoise -noise fullnoisemap.mif -estimator Exp2 working.mif dwidn.mif')
     run.command('mrconvert -force dwidn.mif working.mif', show=False)
 
@@ -307,7 +306,7 @@ def run_degibbs_flexible(input_file, pf, pe_dir, orig_stride, output_prefix="wor
             show=False
         )
 
-        # also saving out mif file with _rpg prefix name 
+        # also saving out mif file with _rpg prefix name
         run.command(
             f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}_rpg.mif',
             show=False
@@ -548,6 +547,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
 
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     run.command('mrconvert -force -fslgrad working.bvec working.bval -json_import working.json working.nii working.mif', show=False)
+    force_remove('working.nii')
 
     eddyopts_list = ['--cnr_maps', '--repol', '--data_is_shelled']
     if app.ARGS.set_seed:
@@ -1371,6 +1371,8 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
 
     run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)
     run.command('mrconvert -export_grad_fsl dwiec.bvec dwiec.bval dwiec.mif dwiec.nii', show=False)
+    # dwiec.nii/.bvec/.bval are read by tests/e2e_runners.py's get_dwi_path()
+    # ("eddy" -> "dwiec") for per-stage validation; keep them.
     # End timer
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -1497,11 +1499,14 @@ def run_rice_bias_correct(dwi_metadata):
                         show=False)
         else:
             run.command('dwidenoise -noise lowbnoisemap.mif -estimator Exp2 dwi.mif dwitmp.mif', show=False)
-            app.cleanup('dwitmp.mif')
+            force_remove('dwitmp.mif')
         run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
         run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
+        # dwirc.nii/.bvec/.bval are read by tests/e2e_runners.py's get_dwi_path()
+        # ("rician" -> "dwirc") for per-stage validation; keep them.
         if not app.ARGS.degibbs:
             run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
+            force_remove('working.nii')
         run.command('mrconvert -force -fslgrad working.bvec working.bval dwirc.mif working.mif', show=False)
 
 

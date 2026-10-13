@@ -4,6 +4,21 @@ from collections.abc import Sequence
 import numpy as np
 
 
+def force_remove(*paths: str | Path) -> None:
+    """Delete scratch files regardless of -nocleanup.
+
+    Unlike mrtrix3's app.cleanup() (which retains everything when the script
+    was told to keep intermediates), this always runs - for files that are
+    either fully redundant with something already kept, or trivially cheap
+    to reconstruct, so there's nothing to debug by keeping them around.
+    """
+    import os
+    from mrtrix3 import run
+
+    for path in paths:
+        run.function(os.remove, str(path), show=False)
+
+
 def get_bids_total_readout_time(bids_json: str | Path | dict, default: float = 0.1) -> float:
     """Return the BIDS total readout time if available.
 
@@ -166,7 +181,7 @@ def compute_jacobian_weight_for_rpe_all(
 
     # weight = J^2
     run.command(f"mrcalc {jac} {jac} -mult {wgt}")
-    run.function(Path.unlink, jac, show=False)
+    force_remove(jac)
 
 
 def run_fsl_eddy(

@@ -10,6 +10,8 @@ is resampled in a single interpolation pass.
 from pathlib import Path
 from typing import Any
 
+from lib.utils import force_remove
+
 
 def compute_gnc_warp(
     ref_volume_nii: str | Path,
@@ -81,6 +83,7 @@ def apply_warp_to_series(
     split_input = f'{split_prefix}input.nii.gz'
     run.command(f'mrconvert -force {input_path} {split_input}')
     run.command(f'fslsplit {split_input} {split_prefix} -t')
+    force_remove(split_input)
 
     warped_files = []
     for i in range(n_volumes):
@@ -91,12 +94,14 @@ def apply_warp_to_series(
             f'applywarp --rel --interp=spline --datatype=float '
             f'-i {vol_in} -r {ref_volume_nii} -w {rel_warp_path} -o {vol_out}'
         )
+        force_remove(vol_in)
         warped_files.append(vol_out)
 
     if n_volumes == 1:
         run.command(f'mrconvert -force {warped_files[0]} {output_path}')
     else:
         run.command(f'mrcat -force -axis 3 {" ".join(warped_files)} {output_path}')
+    force_remove(*warped_files)
 
 
 def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
@@ -140,10 +145,12 @@ def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
     apply_warp_to_series(
         'working_gnc_in.nii.gz', 'gnc_warp_rel.nii.gz', 'gnc_ref_vol.nii.gz',
         'working_gnc.nii.gz', 'vol_working_')
+    force_remove('working_gnc_in.nii.gz')
     run.command(
         f'mrconvert -force -stride {stride} -fslgrad working.bvec working.bval '
         f'working_gnc.nii.gz working.mif'
     )
+    force_remove('working_gnc.nii.gz')
 
     if not getattr(app.ARGS, 'rpe_pair', None):
         return None
@@ -203,11 +210,13 @@ def finalize_single_interpolation(
     # fslsplit only understands NIfTI, so convert through a NIfTI intermediate first.
     run.command('mrconvert -force working_predistort.mif working_predistort.nii.gz')
     run.command('fslsplit working_predistort.nii.gz vol_predistort_ -t')
+    force_remove('working_predistort.nii.gz')
 
     corrected_files = []
     for i in range(n_volumes):
         idx = f'{i:04d}'
         eddy_field = f'{eddy_out_prefix}.eddy_displacement_fields.{i + 1:03d}.nii.gz'
+        vol_predistort = f'vol_predistort_{idx}.nii.gz'
 
         full_warp_rel = f'vol_{idx}_full_warp_rel.nii.gz'
         run.command(
@@ -229,14 +238,16 @@ def finalize_single_interpolation(
         transformed = f'vol_{idx}_full_transformed.nii.gz'
         run.command(
             f'applywarp --rel --interp=spline --datatype=float '
-            f'-i vol_predistort_{idx}.nii.gz -r gnc_ref_vol.nii.gz '
+            f'-i {vol_predistort} -r gnc_ref_vol.nii.gz '
             f'-w {full_warp_rel} -o {transformed}'
         )
+        force_remove(vol_predistort)
 
         corrected = f'vol_{idx}_full_corrected.nii.gz'
         run.command(
             f'mrcalc {transformed} {eddy_jacobian} -multiply {corrected} -force -quiet'
         )
+        force_remove(full_warp_rel, eddy_warp_rel, eddy_jacobians, eddy_jacobian, transformed)
         corrected_files.append(corrected)
 
     run.command(f'mrcat -force -axis 3 {" ".join(corrected_files)} composite.nii.gz')
@@ -245,4 +256,5 @@ def finalize_single_interpolation(
         f'-fslgrad {eddy_out_prefix}.eddy_rotated_bvecs {eddy_bvals_file} '
         f'composite.nii.gz {mif_output}'
     )
+    force_remove(*corrected_files, 'composite.nii.gz')
     return mif_output
