@@ -44,7 +44,7 @@ In this case the W form of the kurtosis tensor is returned in addition to the K 
 ## Outlier replacement and filtering
 This call to `tmi` will perform  outlier replacement along with nonlocal means smoothing (user may adjust how much smoothing by adjusting `-fit_smoothing <percentile>`) as a filtering step prior to fitting the kurtosis tensor.
 ```
-tmi -DKI -akc_outliers -fit_smoothing 25 dwi.mif parameters
+tmi -WDKI -DKI -akc_outliers -fit_smoothing 25 dwi.mif parameters
 ```
 
 {: .note }
@@ -55,7 +55,7 @@ It is important to note that when performing outlier correction that constrained
 ## constrained fitting
 Constraints can be used to bound the kurtosis tensor estimation, an example of running a kurtosis fit with a positivity constraint on kurtosis looks like:
 ```
-tmi -DKI -fit_constraints 0,1,0 dwi.mif parameters
+tmi -WDKI -DKI -fit_constraints 0,1,0 dwi.mif parameters
 ```
 - The order of values input to the `-fit_constraints` option is: diffusion tensor > 0, kurtosis tensor > 10, and kurtosis tensor < 10.
 
@@ -98,11 +98,11 @@ dwi.mif parameters
 
 `docker run -it` will take you inside a container. You can add `-v` to attach your data to the container for processing. Use `-v host_path:container_path` to mount your folder (host_path) to a specified path inside the container (container_path). 
 
-The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/data`). The host_path contains the input series `dwi.mif`. The following is an example that calls tmi and will extract DKI maps with outlier correction and nonlocal means smoothing:
+The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/data`). The host_path contains the input series `dwi.mif`. The following is an example that calls tmi and will extract WDKI and DKI maps with outlier correction and nonlocal means smoothing:
 ```
 docker run -it -v /path/to/folder/with/dataset:/data \
 nyudiffusionmri/designer2:<tag> tmi \
--DKI -akc_outliers -fit_smoothing 25 /data/dwi.mif /data/parameters
+-WDKI -DKI -akc_outliers -fit_smoothing 25 /data/dwi.mif /data/parameters
 ```
 
 ---
@@ -111,11 +111,11 @@ nyudiffusionmri/designer2:<tag> tmi \
 
 `singularity run` will run a Singularity container. `--bind` allows you to attach your data to the container for processing. Use `--bind host_path:container_path` to mount your folder (host_path) to a specified path inside the container (container_path). 
 
-The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/mnt`). The host_path contains the input series `dwi.mif`. The following is an example that calls tmi and will extract DKI maps with outlier correction and nonlocal means smoothing:
+The below example mounts the host_path (`/path/to/folder/with/dataset`) to the container_path (`/mnt`). The host_path contains the input series `dwi.mif`. The following is an example that calls tmi and will extract WDKI and DKI maps with outlier correction and nonlocal means smoothing:
 ```
 singularity run --bind /path/to/folder/with/dataset:/mnt \
 designer2_<tag>.sif tmi \
--DKI -akc_outliers -fit_smoothing 25 /mnt/dwi.mif /mnt/parameters
+-WDKI -DKI -akc_outliers -fit_smoothing 25 /mnt/dwi.mif /mnt/parameters
 ```
 
 ---
