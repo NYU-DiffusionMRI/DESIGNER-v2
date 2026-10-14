@@ -2,7 +2,7 @@
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
-from lib.gnc import run_gnc_precorrection
+from lib.gnc import resolve_gnc_request, run_gnc_precorrection
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -108,7 +108,8 @@ def usage(cmdline): #pylint: disable=unused-variable
              'correction (spatial unwarping via gradunwarp). Providing this enables '
              'the step. Currently only supported with -eddy combined with -rpe_pair '
              'or -rpe_none (not -rpe_all, -rpe_header, -eddy_groups, -pre_align, or '
-             '-ants_motion_correction).')
+             '-ants_motion_correction). Skipped if the BIDS sidecar(s) report '
+             'NonlinearGradientCorrection=true; errors if the DWI and RPE sidecars disagree.')
     gnc_options.add_argument('-gnc_scanner', metavar=('<vendor>'),
         help='Scanner vendor passed to gradient_unwarp (e.g. siemens, ge).', default='siemens')
 
@@ -128,14 +129,6 @@ def execute(): #pylint: disable=unused-variable
         seed = 42
         np.random.seed(seed)
         random.seed(seed)
-
-    if app.ARGS.gnc_grad_coeff and app.ARGS.eddy:
-        gnc_unsupported = (app.ARGS.rpe_all or app.ARGS.rpe_header or app.ARGS.eddy_groups
-                            or app.ARGS.pre_align or app.ARGS.ants_motion_correction)
-        if gnc_unsupported or not (app.ARGS.rpe_pair or app.ARGS.rpe_none):
-            raise MRtrixError('-gnc_grad_coeff currently only supports -eddy combined '
-                               'with -rpe_pair or -rpe_none (no -rpe_all, -rpe_header, '
-                               '-eddy_groups, -pre_align, or -ants_motion_correction).')
 
     # create a temporary directory to store processing files
     app.make_scratch_dir()
@@ -162,6 +155,7 @@ def execute(): #pylint: disable=unused-variable
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
     
     # if rpe_pair is selected then get metadata for the rpe_data
+    rpe_json = None
     if getattr(app.ARGS, "rpe_pair", None):
         rpe_path = app.ARGS.rpe_pair
         # Strip off .gz if present, then .nii
@@ -180,6 +174,22 @@ def execute(): #pylint: disable=unused-variable
             rpe_path, rpe_bval, rpe_bvec, rpe_json
         )
 
+    # skip a requested gradient nonlinearity correction if the BIDS sidecars of
+    # the inputs it would warp report it was already applied on the scanner
+    gnc_enabled = False
+    if app.ARGS.gnc_grad_coeff:
+        gnc_sidecars = list(dwi_metadata['bidslist'])
+        if app.ARGS.eddy and rpe_json:
+            gnc_sidecars.append(rpe_json)
+        gnc_enabled = resolve_gnc_request(gnc_sidecars)
+
+    if gnc_enabled and app.ARGS.eddy:
+        gnc_unsupported = (app.ARGS.rpe_all or app.ARGS.rpe_header or app.ARGS.eddy_groups
+                            or app.ARGS.pre_align or app.ARGS.ants_motion_correction)
+        if gnc_unsupported or not (app.ARGS.rpe_pair or app.ARGS.rpe_none):
+            raise MRtrixError('-gnc_grad_coeff currently only supports -eddy combined '
+                               'with -rpe_pair or -rpe_none (no -rpe_all, -rpe_header, '
+                               '-eddy_groups, -pre_align, or -ants_motion_correction).')
 
     # ensure inputs are reasonable for subsequent dwi processing
     # assert_inputs(dwi_metadata, app.ARGS.pe_dir, app.ARGS.pf)
@@ -232,7 +242,7 @@ def execute(): #pylint: disable=unused-variable
     # other spatial transform (pre_align/ants_motion_correction/eddy) so its warp
     # can later be composed with eddy's per-volume displacement field
     gnc_rpe_pair = None
-    if app.ARGS.gnc_grad_coeff:
+    if gnc_enabled:
         gnc_rpe_pair = run_gnc_precorrection(dwi_metadata)
 
     # rigid alignment of b0s from separate input series
@@ -245,7 +255,7 @@ def execute(): #pylint: disable=unused-variable
 
     # eddy current, succeptibility, motion correction
     if app.ARGS.eddy:
-        run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=gnc_rpe_pair)
+        run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=gnc_rpe_pair, gnc_enabled=gnc_enabled)
 
     # if app.ARGS.denoise_after_eddy:
     #     run_sigma_denoiser(dwi_metadata)

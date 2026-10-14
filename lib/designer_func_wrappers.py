@@ -527,7 +527,7 @@ def finalize_gnc_single_interpolation(eddy_proc_dir: Path, dwi_metadata: dict) -
     eddy_bvals_file = str(eddy_proc_dir / 'bvals')
     finalize_single_interpolation(eddy_out_prefix, eddy_bvals_file, n_volumes, dwi_metadata, 'dwiec.mif')
 
-def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
+def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
     from lib.designer_input_utils import splitext_
     from lib.utils import get_bids_total_readout_time
@@ -557,8 +557,8 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None):
     # GNC (gradient nonlinearity correction) needs eddy's per-volume displacement
     # fields to compose a single-interpolation GNC+eddy warp afterwards; see
     # run_gnc_precorrection()/finalize_single_interpolation() in lib/gnc.py.
-    # Scope is validated in designer.py's execute() (rpe_pair/rpe_none only).
-    gnc_enabled = bool(getattr(app.ARGS, 'gnc_grad_coeff', None))
+    # gnc_enabled and its scope (rpe_pair/rpe_none only) are resolved in
+    # designer.py's execute().
 
     # Use the GNC-corrected rpe_pair (if GNC ran) throughout this function
     # instead of reading/mutating the global app.ARGS.rpe_pair.
