@@ -67,8 +67,4 @@
         "**/data/novikd01lab/**": true,
         "**/data/fieree01lab/**": true
     },
-    "files.exclude": {
-        "**/data/novikd01lab": true,
-        "**/data/fieree01lab": true
-    }
 }
