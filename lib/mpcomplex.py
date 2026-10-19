@@ -54,6 +54,11 @@ import numpy as np
 from scipy.linalg import svd
 from numpy_groupies.aggregate_numba import aggregate
 
+try:
+    from threadpoolctl import threadpool_limits
+except Exception:
+    threadpool_limits = None
+
 class MP(object):
     def __init__(self, dwi, kernel, step, shrinkage, algorithm, crop, n_cores):
         from skimage.util.shape import view_as_windows
@@ -156,7 +161,12 @@ class MP(object):
         """
         Main function to denoise the data matrix X
         """
+        if threadpool_limits is not None:
+            with threadpool_limits(limits=1):
+                return self._denoise_impl(X)
+        return self._denoise_impl(X)
 
+    def _denoise_impl(self, X):
         M = X.shape[0]
         N = X.shape[1]
         Mp = np.min((M,N))

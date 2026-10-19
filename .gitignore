@@ -61,3 +61,4 @@ rpg_cpp/fftw-3.3.10/fftw.pc.in
 # TMI tmp directories (for e2e tests)
 tmi-tmp-*/
 
+data
