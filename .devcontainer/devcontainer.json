@@ -9,9 +9,12 @@
 			"VARIANT": "3.12"
 		}
 	},
+	// Mount the parent dir at its host path so git worktree pointers (absolute host paths) resolve inside the container.
+	"workspaceMount": "source=${localWorkspaceFolder}/..,target=${localWorkspaceFolder}/..,type=bind",
+	"workspaceFolder": "${localWorkspaceFolder}",
 	"mounts": [
-		"source=${localEnv:DMITRY_LABSPACE},target=/workspaces/${localWorkspaceFolderBasename}/data/novikd01lab,type=bind",
-		"source=${localEnv:ELS_LABSPACE},target=/workspaces/${localWorkspaceFolderBasename}/data/fieree01lab,type=bind"
+		"source=${localEnv:DMITRY_LABSPACE},target=${localWorkspaceFolder}/data/novikd01lab,type=bind",
+		"source=${localEnv:ELS_LABSPACE},target=${localWorkspaceFolder}/data/fieree01lab,type=bind"
 	],
 	"runArgs": [
 		"--gpus",
