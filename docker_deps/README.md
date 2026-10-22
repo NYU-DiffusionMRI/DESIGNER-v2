@@ -4,6 +4,7 @@ The following Docker files are included:
 - `Dockerfile_mrtrix`: MRtrix3 dependency
 - `Dockerfile_fsl`: FSL dependency
 - `Dockerfile_ants`: ANTs dependency
+- `Dockerfile_tortoise`: TORTOISE dependency (CreateNonlinearityDisplacementMap, CreateGradientNonlinearityBMatrix — gradient nonlinearity correction binaries)
 <br>
 
 All Docker images are tagged with dates in the `YYYY-MM-DD` format.
@@ -58,6 +59,20 @@ Notes:
 Notes:
 - The `2025-06-16` image has a bug with `N4BiasFieldCorrection` binary. **Do not use this image.**
 - The `2025-05-14` image is identical to [twom/ants:v2.5.4](https://hub.docker.com/layers/twom/ants/v2.5.4/images/sha256-eb186b9a6959c60e360a4c6d38f36adbfac6709e1cc464a63b4fef4635d5fbfc).
+
+
+## TORTOISE
+
+[Docker Hub Link](https://hub.docker.com/r/nyudiffusionmri/tortoise/tags)
+
+| Docker Tag | Commit Hash for Docker File | Dependency Version |
+| :--------: | :--------------------------: | :-----------------: |
+| 2026-10-21 |     N/A (fill in after commit)     | TORTOISE V4 (`pennlinc/qsiprep-drbuddi:26.10.3`) |
+
+Notes:
+- Only two binaries (`CreateNonlinearityDisplacementMap`, `CreateGradientNonlinearityBMatrix`) are extracted from PennLINC's pre-built `pennlinc/qsiprep-drbuddi` image, not the full ~435 MB TORTOISE install — see `docker_deps/Dockerfile_tortoise`'s header comment for why, and PennLINC's [aslprep](https://github.com/PennLINC/aslprep)/[qsiprep](https://github.com/PennLINC/qsiprep) repos for the reference extraction approach this follows.
+- TORTOISE is GPL-3.0 licensed (license files are copied alongside the binaries into `/usr/local/tortoise/licenses`); keep this in mind for DESIGNER's own license/distribution terms.
+- The `26.10.3` tag pins PennLINC's DR-BUDDI base image, not TORTOISE's own version — update it the same way as the other tables whenever that upstream pin changes (edit the `FROM pennlinc/qsiprep-drbuddi:<tag>` line in `Dockerfile_tortoise`).
 
 
 ## Updating Dependencies
@@ -131,10 +146,12 @@ docker run --rm -it --platform=linux/amd64 designer2:local /bin/bash
 
 # Inside the container, run these commands to verify the installation:
 designer -version
-flirt -version  # verify FSL installation
+flirt -version  # Verify FSL installation
 mrinfo -version
 N4BiasFieldCorrection --help  # Verify ANTs command
 python -c "from lib import rpg; rpg.unring()"  # Verify function availability
+CreateNonlinearityDisplacementMap   # Verify TORTOISE GNC executables installation
+CreateGradientNonlinearityBMatrix
 ```
 <br>
 
