@@ -27,6 +27,13 @@ commands:
           name: Test ANTs N4BiasFieldCorrection command
           command: |
             docker run --rm $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> N4BiasFieldCorrection --help
+      - run:
+          name: Test TORTOISE GNC binaries
+          command: |
+            docker run --rm $DOCKERHUB_USERNAME/designer2:<<parameters.tag>> sh -c '
+              CreateNonlinearityDisplacementMap 2>&1 | grep "path_to_coefficient" &&
+              CreateGradientNonlinearityBMatrix 2>&1 | grep -i "gradient deviation tensor"
+            '
 
 jobs:
   build-and-push:
