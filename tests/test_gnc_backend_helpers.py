@@ -1,4 +1,4 @@
-"""Unit tests for the pure-numpy GNC helpers added for the TORTOISE backend.
+"""Unit tests for the pure-numpy GNC backend helpers.
 
 No scanner data, no FSL/TORTOISE binaries, no scratch dir - just numpy/nibabel.
 """
@@ -7,7 +7,8 @@ import numpy as np
 import nibabel as nib
 import pytest
 
-from lib.gnc import _lps_disp_to_fsl_rel, _sanitize_graddev_matrix, resolve_tortoise_is_ge
+from lib.gnc.backends import _sanitize_graddev_matrix
+from lib.gnc.backends.tortoise import _lps_disp_to_fsl_rel, resolve_is_ge
 
 
 def test_lps_to_fsl_axis_aligned_matches_empirical_case():
@@ -69,5 +70,5 @@ def test_sanitize_graddev_matrix_accepts_flat_and_square_shapes():
     ('siemens', False),
     ('ge', True),
 ])
-def test_resolve_tortoise_is_ge(scanner, expected):
-    assert resolve_tortoise_is_ge(scanner) is expected
+def test_resolve_is_ge(scanner, expected):
+    assert resolve_is_ge(scanner) is expected

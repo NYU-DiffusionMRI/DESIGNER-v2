@@ -556,7 +556,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
 
     # GNC (gradient nonlinearity correction) needs eddy's per-volume displacement
     # fields to compose a single-interpolation GNC+eddy warp afterwards; see
-    # run_gnc_precorrection()/finalize_single_interpolation() in lib/gnc.py.
+    # run_gnc_precorrection()/finalize_single_interpolation() in lib/gnc/pipeline.py.
     # gnc_enabled and its scope (rpe_pair/rpe_none only) are resolved in
     # designer.py's execute().
 
