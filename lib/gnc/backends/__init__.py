@@ -1,15 +1,7 @@
-"""GNC backend dispatch.
-
-Each backend module exposes the same interface:
-    compute_warp(ref_volume_nii, coeff_file, scanner, out_prefix) -> str
-        Path to {out_prefix}_warp_rel.nii.gz (FSL relative-warp convention).
-    derive_graddev(ref_volume_nii, coeff_file, scanner, out_prefix) -> str
-        Path to a raw (unsanitized) L tensor NIfTI, last dimension 9. Called
-        right after compute_warp() with the same arguments; may consume files
-        compute_warp() deliberately left on disk.
-"""
+"""GNC backend dispatch. Each backend module implements GncBackend."""
 
 from pathlib import Path
+from typing import Protocol
 
 import nibabel as nib
 import numpy as np
@@ -17,13 +9,42 @@ import numpy as np
 from lib.gnc.backends import gradunwarp, tortoise
 from lib.utils import force_remove
 
-_BACKENDS = {
+
+class GncBackend(Protocol):
+    """Interface every backend module satisfies (structurally - modules don't
+    inherit from this). Both functions take the same arguments; a backend
+    ignores any it doesn't need."""
+
+    def compute_warp(
+        self,
+        ref_volume_nii: str | Path,
+        coeff_file: str | Path,
+        scanner: str,
+        out_prefix: str,
+    ) -> str:
+        """Return the path to {out_prefix}_warp_rel.nii.gz (FSL relative-warp convention)."""
+        ...
+
+    def derive_graddev(
+        self,
+        ref_volume_nii: str | Path,
+        coeff_file: str | Path,
+        scanner: str,
+        out_prefix: str,
+    ) -> str:
+        """Return the path to a raw (unsanitized) L tensor NIfTI, last
+        dimension 9. Called right after compute_warp() with the same
+        arguments; may consume files compute_warp() deliberately left on disk."""
+        ...
+
+
+_BACKENDS: dict[str, GncBackend] = {
     'gradunwarp': gradunwarp,
     'tortoise': tortoise,
 }
 
 
-def _get_backend(backend: str):
+def _get_backend(backend: str) -> GncBackend:
     from mrtrix3 import MRtrixError
 
     try:
