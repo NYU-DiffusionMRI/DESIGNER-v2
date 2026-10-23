@@ -4,6 +4,7 @@ FROM --platform=linux/amd64 python:3.12.1-bookworm AS base
 COPY --from=nyudiffusionmri/fsl:2025-06-16 /usr/local/fsl /usr/local/fsl
 COPY --from=nyudiffusionmri/mrtrix3:2026-01-13 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
 COPY --from=nyudiffusionmri/ants:2025-06-20 /usr/local/ants /usr/local/ants
+COPY --from=nyudiffusionmri/tortoise:2026-10-21 /usr/local/tortoise /usr/local/tortoise
 
 # Install common dependencies
 RUN apt-get -qq update \
@@ -14,6 +15,7 @@ RUN apt-get -qq update \
     gcc \
     g++ \
     wget \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # FFTW build stage
@@ -47,7 +49,7 @@ RUN ldconfig
 
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
-ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin"
+ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin:/usr/local/tortoise/bin"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/ants/lib:/usr/local/lib"
 ENV PYTHONPATH="/usr/local/mrtrix3_build/lib"
 

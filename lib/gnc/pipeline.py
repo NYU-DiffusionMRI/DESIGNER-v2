@@ -1,112 +1,13 @@
-"""Gradient nonlinearity correction (GNC): spatial unwarping via gradunwarp.
+"""Backend-agnostic GNC pipeline stages: pre-eddy correction and the
+post-eddy single-interpolation recombination."""
 
-Computes a single geometric warp (per scan) from the scanner's gradient
-coefficient file and applies it either as a standalone pre-eddy correction
-(for topup/eddy to operate on geometrically-correct data) or composed with
-eddy's own per-volume displacement fields so the combined GNC+eddy correction
-is resampled in a single interpolation pass.
-"""
-
-import json
-from collections.abc import Sequence
+import shutil
 from pathlib import Path
 from typing import Any
 
+from lib.designer_input_utils import splitext_
+from lib.gnc.backends import compute_gnc_warp, derive_gnc_graddev
 from lib.utils import force_remove
-
-
-def _read_nonlinear_gradient_correction(sidecar: str | Path) -> bool | None:
-    """Return the BIDS NonlinearGradientCorrection value, or None if unavailable."""
-    if not Path(sidecar).is_file():
-        return None
-    with open(sidecar) as f:
-        return json.load(f).get('NonlinearGradientCorrection')
-
-
-def resolve_gnc_request(sidecars: Sequence[str | Path]) -> bool:
-    """
-    Decide whether a requested GNC should run, based on the BIDS
-    NonlinearGradientCorrection field of every input that GNC would warp.
-
-    All sidecars must agree: a sidecar that is missing (or lacks the field)
-    is assumed to match the others, and if none report it the user's request
-    is followed. GNC is skipped if the scanner already applied it.
-
-    Args:
-        sidecars: BIDS .json paths of the main DWI series (and the RPE image,
-            when it is used by eddy)
-
-    Returns:
-        True if GNC should run, False if it should be skipped
-    """
-    import warnings
-    from colorama import Fore
-    from mrtrix3 import MRtrixError
-
-    states = {str(s): _read_nonlinear_gradient_correction(s) for s in sidecars}
-    known = {state for state in states.values() if state is not None}
-
-    if len(known) > 1:
-        details = ', '.join(f'{s}: {state}' for s, state in states.items() if state is not None)
-        raise MRtrixError(
-            'Inputs have inconsistent gradient nonlinearity correction states '
-            f'(NonlinearGradientCorrection - {details}); cannot apply -gnc_grad_coeff.')
-
-    if not known:
-        warnings.warn(Fore.RED + '[WARNING] NonlinearGradientCorrection not found in BIDS sidecar(s); '
-                      'cannot verify whether the scanner already applied gradient nonlinearity '
-                      'correction. Proceeding with -gnc_grad_coeff.')
-        return True
-
-    already_corrected = known.pop()
-    unknown = [s for s, state in states.items() if state is None]
-    if unknown:
-        warnings.warn(Fore.RED + f'[WARNING] NonlinearGradientCorrection not found for {", ".join(unknown)}; '
-                      f'assuming {already_corrected} to match the other input(s).')
-
-    if already_corrected:
-        warnings.warn(Fore.RED + '[WARNING] BIDS sidecar(s) report NonlinearGradientCorrection=true '
-                      '(already corrected on the scanner); ignoring -gnc_grad_coeff.')
-    return not already_corrected
-
-
-def compute_gnc_warp(
-    ref_volume_nii: str | Path,
-    coeff_file: str | Path,
-    scanner: str,
-    out_prefix: str,
-) -> str:
-    """
-    Compute the relative FSL warp for gradient nonlinearity correction.
-
-    Runs gradient_unwarp.py on a single reference volume (the warp is static
-    in scanner space, so one volume is enough) and converts its absolute
-    warp field to FSL's relative-warp convention for use with applywarp.
-
-    Args:
-        ref_volume_nii: Path to the single reference volume to unwarp
-        coeff_file: Path to the scanner gradient coefficient file
-        scanner: Scanner vendor passed to gradient_unwarp.py (e.g. 'siemens')
-        out_prefix: Basename prefix for the intermediate/output warp files
-
-    Returns:
-        Path to the relative warp file (FSL convention, for use with applywarp)
-    """
-    from mrtrix3 import run
-
-    run.command(
-        f'gradient_unwarp.py {ref_volume_nii} {out_prefix}_direct.nii.gz {scanner} '
-        f'-g {coeff_file} -n --interp_order 3'
-    )
-
-    # gradient_unwarp.py always writes fullWarp_abs.nii.gz into the CWD
-    abs_warp = 'fullWarp_abs.nii.gz'
-    rel_warp = f'{out_prefix}_warp_rel.nii.gz'
-    run.command(
-        f'convertwarp --abs --ref={ref_volume_nii} --warp1={abs_warp} '
-        f'--relout --out={rel_warp}'
-    )
-    return rel_warp
 
 
 def apply_warp_to_series(
@@ -184,8 +85,6 @@ def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
         is not set.
     """
     from mrtrix3 import app, run
-    from lib.designer_input_utils import splitext_
-    import shutil
 
     stride = dwi_metadata['stride']
 
@@ -196,8 +95,12 @@ def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
     run.command('mrconvert -force -coord 3 0 -axes 0,1,2 working_gnc_in.nii.gz gnc_ref_vol.nii.gz')
 
     # 'gnc' is a fixed scratch basename so finalize_single_interpolation() can
-    # reuse the same relative warp (gnc_warp_rel.nii.gz) after eddy runs.
-    compute_gnc_warp('gnc_ref_vol.nii.gz', app.ARGS.gnc_grad_coeff, app.ARGS.gnc_scanner, 'gnc')
+    # reuse the same relative warp (gnc_warp_rel.nii.gz) after eddy runs, and
+    # so the final output stage can export the L tensor (gnc_graddev.nii.gz).
+    backend = app.ARGS.gnc_backend
+    coeff, scanner = app.ARGS.gnc_grad_coeff, app.ARGS.gnc_scanner
+    compute_gnc_warp('gnc_ref_vol.nii.gz', coeff, scanner, 'gnc', backend=backend)
+    derive_gnc_graddev('gnc_ref_vol.nii.gz', coeff, scanner, 'gnc', backend)
 
     apply_warp_to_series(
         'working_gnc_in.nii.gz', 'gnc_warp_rel.nii.gz', 'gnc_ref_vol.nii.gz',
