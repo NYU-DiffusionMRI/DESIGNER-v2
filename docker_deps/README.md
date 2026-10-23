@@ -66,10 +66,11 @@ Notes:
 [Docker Hub Link](https://hub.docker.com/r/nyudiffusionmri/tortoise/tags)
 
 | Docker Tag | Commit Hash for Docker File | Dependency Version |
-| :--------: | :--------------------------: | :-----------------: |
-| 2026-10-21 |     N/A (fill in after commit)     | TORTOISE V4 (`pennlinc/qsiprep-drbuddi:26.10.3`) |
+| :--------: | :-------------------------: | :----------------: |
+| 2026-10-21 |           480dbd9           |    TORTOISE V4     |
 
 Notes:
+- The `2026-10-21` image uses TORTOISE V4 binaries from [`pennlinc/qsiprep-drbuddi:26.10.3`](https://hub.docker.com/r/pennlinc/qsiprep-drbuddi/tags).
 - Only two binaries (`CreateNonlinearityDisplacementMap`, `CreateGradientNonlinearityBMatrix`) are extracted from PennLINC's pre-built `pennlinc/qsiprep-drbuddi` image, not the full ~435 MB TORTOISE install — see `docker_deps/Dockerfile_tortoise`'s header comment for why, and PennLINC's [aslprep](https://github.com/PennLINC/aslprep)/[qsiprep](https://github.com/PennLINC/qsiprep) repos for the reference extraction approach this follows.
 - TORTOISE is GPL-3.0 licensed (license files are copied alongside the binaries into `/usr/local/tortoise/licenses`); keep this in mind for DESIGNER's own license/distribution terms.
 - The `26.10.3` tag pins PennLINC's DR-BUDDI base image, not TORTOISE's own version — update it the same way as the other tables whenever that upstream pin changes (edit the `FROM pennlinc/qsiprep-drbuddi:<tag>` line in `Dockerfile_tortoise`).
