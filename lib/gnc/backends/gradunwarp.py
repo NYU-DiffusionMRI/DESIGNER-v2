@@ -11,8 +11,17 @@ def compute_warp(
     scanner: str,
     out_prefix: str,
 ) -> str:
-    """Runs gradient_unwarp.py on the reference volume and converts its
-    absolute warp field to FSL's relative-warp convention."""
+    """
+    Run gradient_unwarp.py on the reference volume and convert its absolute
+    warp field to FSL's relative-warp convention.
+
+    Arguments as in GncBackend.compute_warp. gradient_unwarp.py's own
+    outputs ({out_prefix}_direct.nii.gz and fullWarp_abs.nii.gz in the CWD)
+    are removed; nothing is left behind for derive_graddev().
+
+    Returns:
+        Path to {out_prefix}_warp_rel.nii.gz
+    """
     from mrtrix3 import run
 
     run.command(
@@ -38,12 +47,21 @@ def derive_graddev(
     scanner: str,
     out_prefix: str,
 ) -> str:
-    """gradunwarp has no native L tensor; derive one with FSL's
-    calc_grad_perc_dev from gradunwarp's absolute warp, computed on the
-    reference grid padded by one voxel and cropped back afterwards.
-    calc_grad_perc_dev zero-pads outside the grid, so differentiating
-    absolute coordinates on the unpadded grid corrupts the whole outermost
-    voxel layer (values ~50-150 instead of ~1)."""
+    """
+    Derive the L tensor from gradunwarp's absolute warp via FSL's
+    calc_grad_perc_dev (gradunwarp has no native L tensor).
+
+    The warp is recomputed on the reference grid padded by one voxel and
+    cropped back afterwards: calc_grad_perc_dev zero-pads outside the grid,
+    so differentiating absolute coordinates on the unpadded grid corrupts
+    the whole outermost voxel layer (values ~50-150 instead of ~1).
+
+    Arguments as in GncBackend.derive_graddev. All intermediates
+    ({out_prefix}_graddev_* and fullWarp_abs.nii.gz) are removed.
+
+    Returns:
+        Path to {out_prefix}_graddev_raw.nii.gz, same grid as ref_volume_nii
+    """
     from mrtrix3 import run
 
     padded_ref = f'{out_prefix}_graddev_padref.nii.gz'
