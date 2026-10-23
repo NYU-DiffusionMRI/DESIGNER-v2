@@ -105,13 +105,24 @@ def usage(cmdline): #pylint: disable=unused-variable
     gnc_options = cmdline.add_argument_group('Options for gradient nonlinearity correction')
     gnc_options.add_argument('-gnc_grad_coeff', metavar=('<coeff file>'),
         help='Path to scanner gradient coefficient file for gradient nonlinearity '
-             'correction (spatial unwarping via gradunwarp). Providing this enables '
-             'the step. Currently only supported with -eddy combined with -rpe_pair '
-             'or -rpe_none (not -rpe_all, -rpe_header, -eddy_groups, -pre_align, or '
+             'correction (spatial unwarping, backend chosen via -gnc_backend). Providing '
+             'this enables the step and also produces a per-voxel gradient-deviation '
+             '(L) tensor field, written alongside the main output as '
+             '<output>_graddev.nii, for use with designer2/tmi.py\'s -gnc option. '
+             'Currently only supported with -eddy combined with -rpe_pair or -rpe_none '
+             '(not -rpe_all, -rpe_header, -eddy_groups, -pre_align, or '
              '-ants_motion_correction). Skipped if the BIDS sidecar(s) report '
              'NonlinearGradientCorrection=true; errors if the DWI and RPE sidecars disagree.')
-    gnc_options.add_argument('-gnc_scanner', metavar=('<vendor>'),
-        help='Scanner vendor passed to gradient_unwarp (e.g. siemens, ge).', default='siemens')
+    gnc_options.add_argument('-gnc_backend', choices=['gradunwarp', 'tortoise'], default='gradunwarp',
+        help='Backend used to compute the gradient nonlinearity correction warp and L '
+             'tensor. "gradunwarp" (default) uses gradient_unwarp.py plus FSL\'s '
+             'calc_grad_perc_dev; "tortoise" uses TORTOISE\'s '
+             'CreateGradientNonlinearityBMatrix. Both produce an equivalent corrected '
+             'warp and L tensor.')
+    gnc_options.add_argument('-gnc_scanner', choices=['siemens', 'ge'], default='siemens',
+        help='Scanner vendor. Passed through to gradient_unwarp for -gnc_backend '
+             'gradunwarp; mapped to TORTOISE\'s GE/non-GE --isGE flag for -gnc_backend '
+             'tortoise.')
 
     etc_options = cmdline.add_argument_group('Other options')
     etc_options.add_argument('-set_seed', action='store_true', help='set random seed and make eddy deterministic', default=False)
@@ -157,6 +168,10 @@ def execute(): #pylint: disable=unused-variable
     # if rpe_pair is selected then get metadata for the rpe_data
     rpe_json = None
     if getattr(app.ARGS, "rpe_pair", None):
+        # resolve to absolute now - run_gnc_precorrection() re-reads
+        # app.ARGS.rpe_pair later, after app.goto_scratch_dir() has already
+        # changed the cwd.
+        app.ARGS.rpe_pair = str(Path(app.ARGS.rpe_pair).resolve())
         rpe_path = app.ARGS.rpe_pair
         # Strip off .gz if present, then .nii
         if rpe_path.endswith(".nii.gz"):
@@ -178,6 +193,9 @@ def execute(): #pylint: disable=unused-variable
     # the inputs it would warp report it was already applied on the scanner
     gnc_enabled = False
     if app.ARGS.gnc_grad_coeff:
+        # resolve to absolute now - run_gnc_precorrection() reads this later,
+        # after app.goto_scratch_dir() has already changed the cwd.
+        app.ARGS.gnc_grad_coeff = str(Path(app.ARGS.gnc_grad_coeff).resolve())
         gnc_sidecars = list(dwi_metadata['bidslist'])
         if app.ARGS.eddy and rpe_json:
             gnc_sidecars.append(rpe_json)

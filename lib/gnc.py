@@ -1,10 +1,20 @@
-"""Gradient nonlinearity correction (GNC): spatial unwarping via gradunwarp.
+"""Gradient nonlinearity correction (GNC): spatial unwarping, with a choice of
+backend ('gradunwarp' or 'tortoise').
 
 Computes a single geometric warp (per scan) from the scanner's gradient
 coefficient file and applies it either as a standalone pre-eddy correction
 (for topup/eddy to operate on geometrically-correct data) or composed with
 eddy's own per-volume displacement fields so the combined GNC+eddy correction
 is resampled in a single interpolation pass.
+
+Both backends also produce a per-voxel gradient-deviation ("L") tensor field
+(see derive_gnc_graddev), consumed by designer2/tmi.py's -gnc option to
+correct the b-matrix itself for gradient nonlinearity, not just image
+geometry. Each backend only has to satisfy two contracts so the rest of this
+module (and eddy composition in finalize_single_interpolation) never needs to
+know which one ran: compute_gnc_warp() returns an FSL relative-warp file, and
+derive_gnc_graddev() returns a NIfTI with last dimension 9 (a flattened 3x3
+matrix per voxel, L ~= Identity at undistorted voxels).
 """
 
 import json
@@ -75,38 +85,267 @@ def compute_gnc_warp(
     coeff_file: str | Path,
     scanner: str,
     out_prefix: str,
+    backend: str = 'gradunwarp',
 ) -> str:
     """
     Compute the relative FSL warp for gradient nonlinearity correction.
 
-    Runs gradient_unwarp.py on a single reference volume (the warp is static
-    in scanner space, so one volume is enough) and converts its absolute
-    warp field to FSL's relative-warp convention for use with applywarp.
+    Dispatches to the requested backend; both produce a warp in FSL's
+    relative-warp convention (for use with applywarp), so nothing downstream
+    (apply_warp_to_series, finalize_single_interpolation) needs to know which
+    backend ran. Must be followed by a derive_gnc_graddev() call with the
+    same ref_volume_nii/out_prefix/backend before any other GNC intermediates
+    are produced - the tortoise backend deliberately leaves a byproduct file
+    behind for that call to consume (the same kind of fixed-scratch-name
+    coupling run_gnc_precorrection's 'gnc' basename already relies on).
 
     Args:
-        ref_volume_nii: Path to the single reference volume to unwarp
+        ref_volume_nii: Path to the single reference volume to unwarp (the
+            warp is static in scanner space, so one volume is enough)
         coeff_file: Path to the scanner gradient coefficient file
-        scanner: Scanner vendor passed to gradient_unwarp.py (e.g. 'siemens')
+        scanner: Scanner vendor ('siemens' or 'ge')
         out_prefix: Basename prefix for the intermediate/output warp files
+        backend: 'gradunwarp' (default) or 'tortoise'
 
     Returns:
         Path to the relative warp file (FSL convention, for use with applywarp)
     """
+    from mrtrix3 import MRtrixError
+
+    if backend == 'gradunwarp':
+        return _compute_gnc_warp_gradunwarp(ref_volume_nii, coeff_file, scanner, out_prefix)
+    if backend == 'tortoise':
+        return _compute_gnc_warp_tortoise(ref_volume_nii, coeff_file, scanner, out_prefix)
+    raise MRtrixError(f"Unknown GNC backend '{backend}'")
+
+
+def _compute_gnc_warp_gradunwarp(
+    ref_volume_nii: str | Path,
+    coeff_file: str | Path,
+    scanner: str,
+    out_prefix: str,
+) -> str:
+    """Runs gradient_unwarp.py on the reference volume and converts its
+    absolute warp field to FSL's relative-warp convention."""
     from mrtrix3 import run
 
     run.command(
         f'gradient_unwarp.py {ref_volume_nii} {out_prefix}_direct.nii.gz {scanner} '
         f'-g {coeff_file} -n --interp_order 3'
     )
+    force_remove(f'{out_prefix}_direct.nii.gz')
 
-    # gradient_unwarp.py always writes fullWarp_abs.nii.gz into the CWD
+    # gradient_unwarp.py always writes fullWarp_abs.nii.gz into the CWD.
     abs_warp = 'fullWarp_abs.nii.gz'
     rel_warp = f'{out_prefix}_warp_rel.nii.gz'
     run.command(
         f'convertwarp --abs --ref={ref_volume_nii} --warp1={abs_warp} '
         f'--relout --out={rel_warp}'
     )
+    force_remove(abs_warp)
     return rel_warp
+
+
+def resolve_tortoise_is_ge(scanner: str) -> bool:
+    """Map -gnc_scanner to TORTOISE's GE/non-GE distinction (--isGE flag).
+
+    A plain equality check is safe here because -gnc_scanner is constrained
+    to {'siemens', 'ge'} by argparse (designer2/designer.py), matching
+    gradunwarp's own hard vendor constraint - no third value can reach here.
+    """
+    return scanner == 'ge'
+
+
+def _compute_gnc_warp_tortoise(
+    ref_volume_nii: str | Path,
+    coeff_file: str | Path,
+    scanner: str,
+    out_prefix: str,
+) -> str:
+    """Runs TORTOISE's CreateGradientNonlinearityBMatrix on the reference
+    volume - a single call that is a strict superset of
+    CreateNonlinearityDisplacementMap, writing both an ITK displacement field
+    and the per-voxel L tensor - then converts the displacement field to
+    FSL's relative-warp convention (see _itk_field_to_fsl_rel_warp). The L tensor is deliberately left on disk
+    for derive_gnc_graddev() to pick up right after this returns."""
+    from mrtrix3 import run
+    from lib.designer_input_utils import splitext_
+
+    isge_flag = ' --isGE' if resolve_tortoise_is_ge(scanner) else ''
+    run.command(f'CreateGradientNonlinearityBMatrix -f {ref_volume_nii} -g {coeff_file}{isge_flag}')
+
+    # Output names derive from ref_volume_nii's own basename, not out_prefix.
+    ref_stem, _ = splitext_(str(ref_volume_nii))
+    itk_field = f'{ref_stem}_gradwarp_field.nii'
+
+    rel_warp = f'{out_prefix}_warp_rel.nii.gz'
+    _itk_field_to_fsl_rel_warp(itk_field, ref_volume_nii, rel_warp)
+    force_remove(itk_field)
+    return rel_warp
+
+
+def _lps_disp_to_fsl_rel(disp_lps, affine):
+    """
+    Convert per-voxel displacements (mm, components in the ITK LPS world
+    frame, as TORTOISE writes them) into an FSL relative warp on the same grid
+    (mm along the image's storage axes, x negated when det(affine) > 0, per
+    FSL's internal radiological convention). Exact for oblique affines.
+
+    disp_lps: (..., 3) array. affine: 4x4 voxel-to-RAS-world matrix.
+    """
+    import numpy as np
+
+    M = np.asarray(affine, dtype=float)[:3, :3]
+    d_ras = disp_lps * np.array([-1.0, -1.0, 1.0])
+    d_vox = d_ras @ np.linalg.inv(M).T
+    fsl = d_vox * np.linalg.norm(M, axis=0)
+    if np.linalg.det(M) > 0:
+        fsl[..., 0] *= -1
+    return fsl
+
+
+def _itk_field_to_fsl_rel_warp(
+    itk_field_path: str | Path,
+    ref_volume_nii: str | Path,
+    out_rel_warp_path: str | Path,
+) -> None:
+    """
+    TORTOISE's _gradwarp_field.nii is a pull displacement field (not absolute
+    coordinates): corrected(r) = distorted(r + d(r)), d in mm in LPS
+    (mk_displacement_siemens/_nonsiemens in TORTOISEV4's
+    src/tools/gradnonlin/mk_displacementMaps.h). Re-express it as an FSL
+    relative warp and canonicalize it through convertwarp --rel.
+    """
+    import numpy as np
+    import nibabel as nib
+    from mrtrix3 import MRtrixError, run
+
+    ref_img = nib.load(str(ref_volume_nii))
+    field_img = nib.load(str(itk_field_path))
+    if field_img.shape[:3] != ref_img.shape[:3]:
+        raise MRtrixError(f'TORTOISE displacement field grid {field_img.shape[:3]} does not '
+                          f'match reference volume grid {ref_img.shape[:3]}')
+    disp = np.asarray(field_img.dataobj, dtype=np.float64).reshape(*ref_img.shape[:3], 3)
+    rel = _lps_disp_to_fsl_rel(disp, ref_img.affine).astype(np.float32)
+
+    tmp_path = f'{Path(str(out_rel_warp_path)).name.removesuffix(".nii.gz")}_from_itk_tmp.nii.gz'
+    nib.save(nib.Nifti1Image(rel, ref_img.affine, ref_img.header), tmp_path)
+    run.command(
+        f'convertwarp --rel --ref={ref_volume_nii} --warp1={tmp_path} '
+        f'--relout --out={out_rel_warp_path}'
+    )
+    force_remove(tmp_path)
+
+
+def derive_gnc_graddev(
+    ref_volume_nii: str | Path,
+    coeff_file: str | Path,
+    scanner: str,
+    out_prefix: str,
+    backend: str,
+) -> str:
+    """
+    Produce {out_prefix}_graddev.nii.gz: the per-voxel gradient-deviation
+    tensor L (L ~= Identity at undistorted voxels) consumed by
+    designer2/tmi.py's -gnc option. Must be called immediately after
+    compute_gnc_warp() with the same arguments.
+
+    Args:
+        ref_volume_nii: Same reference volume passed to compute_gnc_warp()
+        coeff_file: Same coefficient file passed to compute_gnc_warp()
+        scanner: Same scanner vendor passed to compute_gnc_warp()
+        out_prefix: Same basename prefix passed to compute_gnc_warp()
+        backend: 'gradunwarp' or 'tortoise' - same as compute_gnc_warp()
+
+    Returns:
+        Path to the sanitized graddev tensor field
+    """
+    from mrtrix3 import MRtrixError
+    from lib.designer_input_utils import splitext_
+
+    if backend == 'tortoise':
+        # Byproduct of _compute_gnc_warp_tortoise()'s single
+        # CreateGradientNonlinearityBMatrix call, left on disk for this.
+        ref_stem, _ = splitext_(str(ref_volume_nii))
+        raw = f'{ref_stem}_graddev_c.nii'
+    elif backend == 'gradunwarp':
+        raw = _derive_graddev_gradunwarp(ref_volume_nii, coeff_file, scanner, out_prefix)
+    else:
+        raise MRtrixError(f"Unknown GNC backend '{backend}'")
+
+    out_path = f'{out_prefix}_graddev.nii.gz'
+    _sanitize_graddev_nan(raw, out_path)
+    force_remove(raw)
+    return out_path
+
+
+def _derive_graddev_gradunwarp(
+    ref_volume_nii: str | Path,
+    coeff_file: str | Path,
+    scanner: str,
+    out_prefix: str,
+) -> str:
+    """gradunwarp has no native L tensor; derive one with FSL's
+    calc_grad_perc_dev from gradunwarp's absolute warp, computed on the
+    reference grid padded by one voxel and cropped back afterwards.
+    calc_grad_perc_dev zero-pads outside the grid, so differentiating
+    absolute coordinates on the unpadded grid corrupts the whole outermost
+    voxel layer (values ~50-150 instead of ~1)."""
+    from mrtrix3 import run
+
+    padded_ref = f'{out_prefix}_graddev_padref.nii.gz'
+    run.command(f'mrgrid {ref_volume_nii} pad -uniform 1 {padded_ref} -force -quiet')
+    run.command(
+        f'gradient_unwarp.py {padded_ref} {out_prefix}_graddev_paddirect.nii.gz {scanner} '
+        f'-g {coeff_file} -n --interp_order 3'
+    )
+
+    abs_warp = 'fullWarp_abs.nii.gz'
+    perc_prefix = f'{out_prefix}_graddev_perc'
+    run.command(f'calc_grad_perc_dev --fullwarp={abs_warp} --out={perc_prefix}')
+
+    merged = f'{out_prefix}_graddev_merged.nii.gz'
+    run.command(
+        f'fslmerge -t {merged} {perc_prefix}_x.nii.gz {perc_prefix}_y.nii.gz {perc_prefix}_z.nii.gz'
+    )
+
+    # calc_grad_perc_dev reports 100 * d(warp_i)/d(x_j) with no identity
+    # subtraction (so the diagonal reads ~100, not ~1, at undistorted
+    # voxels); dividing by 100 reproduces TORTOISE's native L convention
+    # (within 1e-3 on every voxel of real data).
+    padded_raw = f'{out_prefix}_graddev_padraw.nii.gz'
+    run.command(f'mrcalc {merged} 100 -div {padded_raw} -force -quiet')
+    raw = f'{out_prefix}_graddev_raw.nii.gz'
+    run.command(f'mrgrid {padded_raw} crop -uniform 1 {raw} -force -quiet')
+    force_remove(
+        padded_ref, f'{out_prefix}_graddev_paddirect.nii.gz', abs_warp, merged, padded_raw,
+        f'{perc_prefix}_x.nii.gz', f'{perc_prefix}_y.nii.gz', f'{perc_prefix}_z.nii.gz',
+    )
+    return raw
+
+
+def _sanitize_graddev_matrix(mat):
+    """Replace any 3x3 gradient-deviation block containing a NaN with the
+    identity matrix as a whole block (not entrywise). Works around a
+    confirmed TORTOISE bug: CreateGradientNonlinearityBMatrix emits NaN for
+    the entire 3x3 block exactly at the isocenter voxel, where the true
+    value is Identity. Accepts (...,9) or (...,3,3); returns the same shape.
+    """
+    import numpy as np
+
+    flat = mat.reshape(*mat.shape[:-1], 3, 3) if mat.shape[-1] == 9 else mat
+    bad = np.isnan(flat).any(axis=(-2, -1))
+    flat = np.where(bad[..., None, None], np.eye(3, dtype=flat.dtype), flat)
+    return flat.reshape(mat.shape)
+
+
+def _sanitize_graddev_nan(raw_path: str | Path, out_path: str | Path) -> None:
+    import numpy as np
+    import nibabel as nib
+
+    img = nib.load(str(raw_path))
+    data = _sanitize_graddev_matrix(np.asarray(img.dataobj)).astype(np.float32)
+    nib.save(nib.Nifti1Image(data, img.affine), str(out_path))
 
 
 def apply_warp_to_series(
@@ -196,8 +435,12 @@ def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
     run.command('mrconvert -force -coord 3 0 -axes 0,1,2 working_gnc_in.nii.gz gnc_ref_vol.nii.gz')
 
     # 'gnc' is a fixed scratch basename so finalize_single_interpolation() can
-    # reuse the same relative warp (gnc_warp_rel.nii.gz) after eddy runs.
-    compute_gnc_warp('gnc_ref_vol.nii.gz', app.ARGS.gnc_grad_coeff, app.ARGS.gnc_scanner, 'gnc')
+    # reuse the same relative warp (gnc_warp_rel.nii.gz) after eddy runs, and
+    # so the final output stage can export the L tensor (gnc_graddev.nii.gz).
+    backend = app.ARGS.gnc_backend
+    coeff, scanner = app.ARGS.gnc_grad_coeff, app.ARGS.gnc_scanner
+    compute_gnc_warp('gnc_ref_vol.nii.gz', coeff, scanner, 'gnc', backend=backend)
+    derive_gnc_graddev('gnc_ref_vol.nii.gz', coeff, scanner, 'gnc', backend)
 
     apply_warp_to_series(
         'working_gnc_in.nii.gz', 'gnc_warp_rel.nii.gz', 'gnc_ref_vol.nii.gz',
