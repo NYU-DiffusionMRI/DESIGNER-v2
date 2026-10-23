@@ -15,6 +15,12 @@ def resolve_is_ge(scanner: str) -> bool:
     A plain equality check is safe here because -gnc_scanner is constrained
     to {'siemens', 'ge'} by argparse (designer2/designer.py), matching
     gradunwarp's own hard vendor constraint - no third value can reach here.
+
+    Args:
+        scanner: Scanner vendor ('siemens' or 'ge')
+
+    Returns:
+        True if TORTOISE should be passed --isGE
     """
     return scanner == 'ge'
 
@@ -25,13 +31,23 @@ def compute_warp(
     scanner: str,
     out_prefix: str,
 ) -> str:
-    """Runs TORTOISE's CreateGradientNonlinearityBMatrix on the reference
-    volume - a single call that is a strict superset of
-    CreateNonlinearityDisplacementMap, writing both an ITK displacement field
-    and the per-voxel L tensor - then converts the displacement field to
-    FSL's relative-warp convention (see _itk_field_to_fsl_rel_warp). The L
-    tensor is deliberately left on disk for derive_graddev() to pick up right
-    after this returns."""
+    """
+    Run TORTOISE's CreateGradientNonlinearityBMatrix on the reference volume
+    and convert its displacement field to FSL's relative-warp convention.
+
+    One call is a strict superset of CreateNonlinearityDisplacementMap: it
+    writes both an ITK displacement field ({ref_stem}_gradwarp_field.nii,
+    removed after conversion; see _itk_field_to_fsl_rel_warp) and the
+    per-voxel L tensor ({ref_stem}_graddev_c.nii), where ref_stem is
+    ref_volume_nii without its extension - not out_prefix. The L tensor is
+    deliberately left on disk for derive_graddev() to pick up right after
+    this returns.
+
+    Arguments as in GncBackend.compute_warp.
+
+    Returns:
+        Path to {out_prefix}_warp_rel.nii.gz
+    """
     from mrtrix3 import run
 
     isge_flag = ' --isGE' if resolve_is_ge(scanner) else ''
@@ -53,8 +69,17 @@ def derive_graddev(
     scanner: str,
     out_prefix: str,
 ) -> str:
-    """Byproduct of compute_warp()'s single CreateGradientNonlinearityBMatrix
-    call, left on disk for this."""
+    """
+    Return the L tensor that compute_warp()'s CreateGradientNonlinearityBMatrix
+    call already wrote; nothing is computed here.
+
+    Arguments as in GncBackend.derive_graddev; only ref_volume_nii is used
+    (coeff_file, scanner and out_prefix are accepted for interface parity).
+
+    Returns:
+        Path to {ref_stem}_graddev_c.nii (NaN at the isocenter voxel - a
+        known TORTOISE bug, fixed by the caller's sanitization)
+    """
     ref_stem, _ = splitext_(str(ref_volume_nii))
     return f'{ref_stem}_graddev_c.nii'
 
@@ -66,7 +91,12 @@ def _lps_disp_to_fsl_rel(disp_lps, affine):
     (mm along the image's storage axes, x negated when det(affine) > 0, per
     FSL's internal radiological convention). Exact for oblique affines.
 
-    disp_lps: (..., 3) array. affine: 4x4 voxel-to-RAS-world matrix.
+    Args:
+        disp_lps: (..., 3) displacements in mm, LPS world components
+        affine: 4x4 voxel-to-RAS-world matrix of the grid
+
+    Returns:
+        (..., 3) FSL relative-warp displacements in mm
     """
     M = np.asarray(affine, dtype=float)[:3, :3]
     d_ras = disp_lps * np.array([-1.0, -1.0, 1.0])
@@ -88,6 +118,14 @@ def _itk_field_to_fsl_rel_warp(
     (mk_displacement_siemens/_nonsiemens in TORTOISEV4's
     src/tools/gradnonlin/mk_displacementMaps.h). Re-express it as an FSL
     relative warp and canonicalize it through convertwarp --rel.
+
+    Args:
+        itk_field_path: TORTOISE's displacement field, shape (X, Y, Z, 1, 3)
+        ref_volume_nii: Reference volume the field was computed on
+        out_rel_warp_path: Where to write the FSL relative warp
+
+    Raises:
+        MRtrixError: If the field's grid does not match ref_volume_nii's
     """
     from mrtrix3 import MRtrixError, run
 

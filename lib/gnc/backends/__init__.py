@@ -22,7 +22,18 @@ class GncBackend(Protocol):
         scanner: str,
         out_prefix: str,
     ) -> str:
-        """Return the path to {out_prefix}_warp_rel.nii.gz (FSL relative-warp convention)."""
+        """
+        Compute the GNC geometric warp on the reference volume's grid.
+
+        Args:
+            ref_volume_nii: Single 3D reference volume (NIfTI) defining the grid
+            coeff_file: Scanner gradient coefficient file
+            scanner: Scanner vendor ('siemens' or 'ge')
+            out_prefix: Basename prefix for output/intermediate files (in CWD)
+
+        Returns:
+            Path to {out_prefix}_warp_rel.nii.gz (FSL relative-warp convention)
+        """
         ...
 
     def derive_graddev(
@@ -32,9 +43,23 @@ class GncBackend(Protocol):
         scanner: str,
         out_prefix: str,
     ) -> str:
-        """Return the path to a raw (unsanitized) L tensor NIfTI, last
-        dimension 9. Called right after compute_warp() with the same
-        arguments; may consume files compute_warp() deliberately left on disk."""
+        """
+        Produce the raw per-voxel gradient-deviation tensor L.
+
+        Called right after compute_warp() with the same arguments; may
+        consume files compute_warp() deliberately left on disk.
+
+        Args:
+            ref_volume_nii: Same reference volume passed to compute_warp()
+            coeff_file: Same coefficient file passed to compute_warp()
+            scanner: Same scanner vendor passed to compute_warp()
+            out_prefix: Same basename prefix passed to compute_warp()
+
+        Returns:
+            Path to a raw (unsanitized, may contain NaN) L tensor NIfTI with
+            last dimension 9 (row-major 3x3, ~Identity at undistorted voxels).
+            The caller sanitizes it and then deletes it.
+        """
         ...
 
 
@@ -45,6 +70,18 @@ _BACKENDS: dict[str, GncBackend] = {
 
 
 def _get_backend(backend: str) -> GncBackend:
+    """
+    Look up a backend module by its -gnc_backend name.
+
+    Args:
+        backend: Backend name, a key of _BACKENDS ('gradunwarp' or 'tortoise')
+
+    Returns:
+        The backend module
+
+    Raises:
+        MRtrixError: If backend is not a known name
+    """
     from mrtrix3 import MRtrixError
 
     try:
@@ -131,6 +168,13 @@ def _sanitize_graddev_matrix(mat):
 
 
 def _sanitize_graddev_nan(raw_path: str | Path, out_path: str | Path) -> None:
+    """
+    Apply _sanitize_graddev_matrix() to a graddev NIfTI on disk.
+
+    Args:
+        raw_path: Raw L tensor NIfTI from a backend's derive_graddev()
+        out_path: Where to write the sanitized tensor (float32, same affine)
+    """
     img = nib.load(str(raw_path))
     data = _sanitize_graddev_matrix(np.asarray(img.dataobj)).astype(np.float32)
     nib.save(nib.Nifti1Image(data, img.affine), str(out_path))
