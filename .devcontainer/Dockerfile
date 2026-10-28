@@ -16,6 +16,7 @@ RUN apt-get -qq update \
     g++ \
     wget \
     libgomp1 \
+    tmux \
     && rm -rf /var/lib/apt/lists/*
 
 # FFTW build stage
