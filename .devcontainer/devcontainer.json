@@ -20,8 +20,15 @@
 		"--gpus",
 		"all"
   	],
+	// VS Code and terminal windows will run as this user
+	"remoteUser": "vscode",
+	// Dynamically sync UIDs to fix local Git/file permissions
+	"updateRemoteUserUID": true,
 	"features": {
-		"ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+		"ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"username": "vscode"
+      }
     },
 	"customizations": {
 		// Configure properties specific to VS Code.
@@ -47,5 +54,5 @@
 		}
 	},
 	// Make sure to open a terminal after the command below has been run. Otherwise, PyPi packages will not be installed, and the "designer" command will be linked to the FSL's "designer" command.
-	"postCreateCommand": "pip install -e . && pip install -r tests/requirements_test.txt -c requirements.txt"
+	"postCreateCommand": "sudo pip install -e . && sudo pip install -r tests/requirements_test.txt -c requirements.txt"
 }
