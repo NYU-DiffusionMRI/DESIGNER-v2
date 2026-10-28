@@ -78,3 +78,6 @@ COPY --from=test-context . /app/tests
 COPY requirements.txt .
 
 RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.txt
+
+# Also build lib.rpg in-place in case e.g. PYTHONPATH=/app shadows the site-packages install.
+RUN python setup.py build_ext --inplace
