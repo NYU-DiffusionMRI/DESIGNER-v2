@@ -1,3 +1,8 @@
+import glob
+import os
+import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional
 from collections.abc import Sequence
@@ -184,12 +189,65 @@ def compute_jacobian_weight_for_rpe_all(
     force_remove(jac)
 
 
+def _query_cuda_version() -> Optional[float]:
+    """Return the CUDA version reported by nvidia-smi, or None if no GPU is usable."""
+    try:
+        output = subprocess.run(['nvidia-smi'], check=True, text=True, capture_output=True).stdout
+    except Exception:
+        return None
+    match = re.search(r'CUDA Version: (\S+)', output)
+    return float(match.group(1)) if match else None
+
+
+def resolve_eddy_executable(device: str = 'auto') -> str:
+    """Map an -eddy_device choice ('auto', 'cpu', 'cuda') to an eddy executable.
+
+    'auto' defers to FSL's own ``eddy`` wrapper (FSL >= 6.0.6), which picks
+    eddy_cuda when a GPU is available and eddy_cpu otherwise.
+    """
+    from mrtrix3 import MRtrixError
+
+    if device == 'auto':
+        return 'eddy'
+
+    if device == 'cpu':
+        # eddy_openmp is the pre-6.0.6 name of the CPU build
+        for exe in ('eddy_cpu', 'eddy_openmp'):
+            if shutil.which(exe):
+                return exe
+        raise MRtrixError('-eddy_device cpu: neither eddy_cpu nor eddy_openmp was found in PATH')
+
+    if device == 'cuda':
+        cuda_ver = _query_cuda_version()
+        if cuda_ver is None:
+            raise MRtrixError('-eddy_device cuda: no CUDA-capable GPU detected (nvidia-smi failed). '
+                              'If running in a container, pass the GPU through (e.g. --gpus all / --nv).')
+        # A user-provided soft-link takes precedence (matches dwifslpreproc behaviour)
+        if shutil.which('eddy_cuda'):
+            return 'eddy_cuda'
+        fsl_bin = os.path.join(os.environ.get('FSLDIR', ''), 'bin')
+        candidates = {}
+        for exe in glob.glob(os.path.join(fsl_bin, 'eddy_cuda*')):
+            try:
+                candidates[float(os.path.basename(exe)[len('eddy_cuda'):])] = exe
+            except ValueError:
+                continue
+        compatible = [ver for ver in candidates if ver <= cuda_ver]
+        if not compatible:
+            raise MRtrixError(f'-eddy_device cuda: no eddy_cuda build compatible with CUDA {cuda_ver} '
+                              f'found in {fsl_bin} (available: {sorted(candidates) or "none"})')
+        return candidates[max(compatible)]
+
+    raise MRtrixError(f'Unknown -eddy_device "{device}" (expected auto, cpu or cuda)')
+
+
 def run_fsl_eddy(
     mif_input: str | Path,
     mif_output: str | Path,
     brain_mask: str | Path,
     scratch_dir: Path,
     *,
+    eddy_exe: str = 'eddy',
     eddy_opts: str = '',
     topup_prefix: Optional[str] = None,
     pe_dir: Optional[str] = None,
@@ -226,7 +284,7 @@ def run_fsl_eddy(
     eddy_bvals_file = scratch_dir / 'bvals'
 
     cmd = (
-        f"eddy --imain={nifti_input} --mask={eddy_brain_mask} --acqp={eddy_acqp_file} "
+        f"{eddy_exe} --imain={nifti_input} --mask={eddy_brain_mask} --acqp={eddy_acqp_file} "
         f"--index={eddy_indices_file} --bvecs={eddy_bvecs_file} --bvals={eddy_bvals_file} "
         f"--out={eddy_out_wo_ext} {eddy_opts} --verbose"
     )
