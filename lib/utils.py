@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import re
 import shutil
@@ -17,7 +18,6 @@ def force_remove(*paths: str | Path) -> None:
     either fully redundant with something already kept, or trivially cheap
     to reconstruct, so there's nothing to debug by keeping them around.
     """
-    import os
     from mrtrix3 import run
 
     for path in paths:
@@ -30,8 +30,6 @@ def get_bids_total_readout_time(bids_json: str | Path | dict, default: float = 0
     Prefers ``TotalReadoutTime`` and falls back to the standard BIDS
     ``EffectiveEchoSpacing * (ReconMatrixPE - 1)`` derivation when needed.
     """
-    import json
-
     if isinstance(bids_json, (str, Path)):
         with open(bids_json) as f:
             keyval = json.load(f)
