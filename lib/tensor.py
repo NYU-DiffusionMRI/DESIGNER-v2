@@ -216,6 +216,10 @@ class TensorFitting(object):
         l2 = vectorize(values[:, 1], mask)
         l3 = vectorize(values[:, 2], mask)
         v1 = vectorize(vectors[:, :, 0].T, mask)
+        
+        # Ensure spatial dimensions are preserved for single-slice data
+        if v1.ndim == 3:
+            v1= np.expand_dims(v1, axis=2)
 
         md = (l1 + l2 + l3) / 3
         rd = (l2 + l3) / 2
@@ -487,30 +491,84 @@ class TensorFitting(object):
         dt = dt[1:, :]
         return dt, s0, b
 
-    def compute_outliers(self, dt, dir):
+    #==================================black voxel===============================    
+    def compute_outliers(self, dt, dir, akc_lowerlim, akc_upperlim):
         akc = self.kurtosis_coeff(dt, dir)
-        return np.any((akc < -1) | (akc > 10), axis=0)
+        return np.any((akc < akc_lowerlim) | (akc > akc_upperlim), axis=0)
 
-    def outlierdetection(self, dt, mask, dir):
+    def akc_dirs(self, dt, dir):
+        akc = self.kurtosis_coeff(dt, dir)
+        # print(np.shape(akc))
+        # print(np.sum(np.any((akc < akc_lim) | (akc > 10), axis=0)))
+        return akc
+
+    def outlierdetection(self, dt, mask, dir, akc_lowerlim, akc_upperlim):
 
         nvxls = dt.shape[1]
         akc_mask = np.zeros((nvxls))
-        nblocks = 200
+        # nblocks = 200
+        nblocks = 4
+
+        N=np.shape(dir)[0]
 
         try:
-            N = 10000
+            N=np.shape(dir)[0]
+            # N = 10000
             akc_mask = Parallel(n_jobs=self.n_cores, prefer='threads') \
                 (delayed(self.compute_outliers)
-                 (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :]) for i in range(1, nblocks + 1)
+                 (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :], akc_lowerlim, akc_upperlim) for i in range(1, nblocks + 1)
                  )
         except:
             N = 1000
             akc_mask = Parallel(n_jobs=8) \
                 (delayed(self.compute_outliers)
-                 (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :]) for i in range(1, nblocks + 1)
+                 (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :], akc_lowerlim, akc_upperlim) for i in range(1, nblocks + 1)
                  )
 
-        return np.sum(akc_mask, axis=0)
+        try:
+            N=np.shape(dir)[0]
+            # N=10000
+            akc_d = Parallel(n_jobs=self.n_cores, prefer='threads')\
+                (delayed(self.akc_dirs)
+                (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
+                )
+        except:
+            N = 1000
+            akc_d = Parallel(n_jobs=8)\
+                (delayed(self.akc_dirs)
+                (dt, dir[int(N/nblocks*(i-1)):int(N/nblocks*i),:]) for i in range(1, nblocks + 1)
+                )
+        # print(np.shape(akc_d))
+        akc_d=np.asarray(akc_d)
+        akc_d = np.reshape(akc_d,(-1,np.sum(mask)))
+
+        return np.sum(akc_mask, axis=0),akc_d
+    #==================================black voxel===============================    
+
+    # def compute_outliers(self, dt, dir):
+    #     akc = self.kurtosis_coeff(dt, dir)
+    #     return np.any((akc < -1) | (akc > 10), axis=0)
+
+    # def outlierdetection(self, dt, mask, dir):
+
+    #     nvxls = dt.shape[1]
+    #     akc_mask = np.zeros((nvxls))
+    #     nblocks = 200
+
+    #     try:
+    #         N = 10000
+    #         akc_mask = Parallel(n_jobs=self.n_cores, prefer='threads') \
+    #             (delayed(self.compute_outliers)
+    #              (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :]) for i in range(1, nblocks + 1)
+    #              )
+    #     except:
+    #         N = 1000
+    #         akc_mask = Parallel(n_jobs=8) \
+    #             (delayed(self.compute_outliers)
+    #              (dt, dir[int(N / nblocks * (i - 1)):int(N / nblocks * i), :]) for i in range(1, nblocks + 1)
+    #              )
+
+    #     return np.sum(akc_mask, axis=0)
     
     
     def identify_outliers(self, dt, percentiles):
