@@ -9,17 +9,17 @@
 			"VARIANT": "3.12"
 		}
 	},
-	// Mount the parent dir at its host path so git worktree pointers (absolute host paths) resolve inside the container.
-	"workspaceMount": "source=${localWorkspaceFolder}/..,target=${localWorkspaceFolder}/..,type=bind",
-	"workspaceFolder": "${localWorkspaceFolder}",
-	"mounts": [
-		"source=${localEnv:DMITRY_LABSPACE},target=${localWorkspaceFolder}/data/novikd01lab,type=bind",
-		"source=${localEnv:ELS_LABSPACE},target=${localWorkspaceFolder}/data/fieree01lab,type=bind"
-	],
-	"runArgs": [
-		"--gpus",
-		"all"
-  	],
+	// // Mount the parent dir at its host path so git worktree pointers (absolute host paths) resolve inside the container.
+	// "workspaceMount": "source=${localWorkspaceFolder}/..,target=${localWorkspaceFolder}/..,type=bind",
+	// "workspaceFolder": "${localWorkspaceFolder}",
+	// "mounts": [
+	// 	"source=${localEnv:DMITRY_LABSPACE},target=${localWorkspaceFolder}/data/novikd01lab,type=bind",
+	// 	"source=${localEnv:ELS_LABSPACE},target=${localWorkspaceFolder}/data/fieree01lab,type=bind"
+	// ],
+	// "runArgs": [
+	// 	"--gpus",
+	// 	"all"
+  	// ],
 	// VS Code and terminal windows will run as this user
 	"remoteUser": "vscode",
 	// Dynamically sync UIDs to fix local Git/file permissions

@@ -369,7 +369,7 @@ def convert_input_data(dwi_metadata):
         temp=stride.split(',')
         stride_3dim = ','.join(temp[:-1])
         dwi_metadata['designer_stride_3dim']=stride_3dim
-        
+
     if len(dwi_n_list) == 1:
         if not isdicom:
             if os.path.exists(bvallist[0]):
