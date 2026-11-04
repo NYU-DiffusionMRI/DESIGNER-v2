@@ -95,7 +95,7 @@ def compute_gnc_warp(
     coeff_file: str | Path,
     scanner: str,
     out_prefix: str,
-    backend: str = 'gradunwarp',
+    backend: str,
 ) -> str:
     """
     Compute the relative FSL warp for gradient nonlinearity correction.
@@ -115,7 +115,7 @@ def compute_gnc_warp(
         coeff_file: Path to the scanner gradient coefficient file
         scanner: Scanner vendor ('siemens' or 'ge')
         out_prefix: Basename prefix for the intermediate/output warp files
-        backend: 'gradunwarp' (default) or 'tortoise'
+        backend: 'tortoise' or 'gradunwarp'
 
     Returns:
         Path to the relative warp file (FSL convention, for use with applywarp)
