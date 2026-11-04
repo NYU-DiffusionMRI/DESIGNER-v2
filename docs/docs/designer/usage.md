@@ -188,6 +188,26 @@ Sotiropoulos, Saad Joabdi and Jesper L.R. Andersson. (2019). Automated quality c
 
 ---
 
+## Options relating to gradient nonlinearity correction
+
+### `-gnc_grad_coeff <coeff_file>`
+- Path to the scanner gradient coefficient file for gradient nonlinearity correction (spatial unwarping; backend chosen via `-gnc_backend`).
+- Providing this enables the gradient nonlinearity correction step and also produces a per-voxel gradient-deviation (L) tensor field, written to the scratch directory as `gnc_graddev.nii.gz` (use `-nocleanup` to keep the scratch directory), for use with `designer2/tmi.py`'s `-gnc` option.
+- Currently only supported with `-eddy` combined with `-rpe_pair` or `-rpe_none` (not `-rpe_all`, `-rpe_header`, `-eddy_groups`, `-pre_align`, or `-ants_motion_correction`).
+- Skipped if the BIDS sidecar(s) report `NonlinearGradientCorrection=true`; errors if the DWI and RPE sidecars disagree.
+
+### `-gnc_backend <backend>`
+- Backend used to compute the gradient nonlinearity correction warp and L tensor.
+- Options are `tortoise` and `gradunwarp`; default `tortoise`.
+- `tortoise` uses TORTOISE's `CreateGradientNonlinearityBMatrix`; `gradunwarp` uses `gradient_unwarp.py` plus FSL's `calc_grad_perc_dev`. Both produce a corrected warp and L tensor.
+
+### `-gnc_scanner <scanner>`
+- Scanner vendor for gradient nonlinearity correction.
+- Options are `siemens` and `ge`; default `siemens` (`ge` is not tested).
+- Passed through to `gradient_unwarp` for `-gnc_backend gradunwarp`; mapped to TORTOISE's GE/non-GE `--isGE` flag for `-gnc_backend tortoise`.
+
+---
+
 ## Options relating to Gibbs artifact correction
 
 ### `-degibbs`
