@@ -62,7 +62,7 @@ def apply_warp_to_series(
     force_remove(*warped_files)
 
 
-def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
+def run_gnc_precorrection(dwi_metadata: dict[str, Any], coeff_file: str | Path) -> str | None:
     """
     Apply GNC to the pre-eddy working data (and rpe_pair, if present).
 
@@ -79,6 +79,8 @@ def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
 
     Args:
         dwi_metadata: DESIGNER's input metadata dict (used for 'stride')
+        coeff_file: Resolved, header-stripped scanner gradient coefficient
+            file (see designer2/designer.py's handling of -gnc_grad_coeff)
 
     Returns:
         Path to the GNC-corrected rpe_pair image, or None if app.ARGS.rpe_pair
@@ -98,9 +100,9 @@ def run_gnc_precorrection(dwi_metadata: dict[str, Any]) -> str | None:
     # reuse the same relative warp (gnc_warp_rel.nii.gz) after eddy runs, and
     # so the final output stage can export the L tensor (gnc_graddev.nii.gz).
     backend = app.ARGS.gnc_backend
-    coeff, scanner = app.ARGS.gnc_grad_coeff, app.ARGS.gnc_scanner
-    compute_gnc_warp('gnc_ref_vol.nii.gz', coeff, scanner, 'gnc', backend=backend)
-    derive_gnc_graddev('gnc_ref_vol.nii.gz', coeff, scanner, 'gnc', backend)
+    scanner = app.ARGS.gnc_scanner
+    compute_gnc_warp('gnc_ref_vol.nii.gz', coeff_file, scanner, 'gnc', backend=backend)
+    derive_gnc_graddev('gnc_ref_vol.nii.gz', coeff_file, scanner, 'gnc', backend)
 
     apply_warp_to_series(
         'working_gnc_in.nii.gz', 'gnc_warp_rel.nii.gz', 'gnc_ref_vol.nii.gz',

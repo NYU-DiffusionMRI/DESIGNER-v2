@@ -3,12 +3,15 @@
 No scanner data, no FSL/TORTOISE binaries, no scratch dir - just numpy/nibabel.
 """
 
+from pathlib import Path
+
 import numpy as np
 import nibabel as nib
 import pytest
 
 from lib.gnc.backends import _sanitize_graddev_matrix
 from lib.gnc.backends.tortoise import _lps_disp_to_fsl_rel, resolve_is_ge
+from lib.gnc.coeff import strip_coeff_header
 
 
 def test_lps_to_fsl_axis_aligned_matches_empirical_case():
@@ -72,3 +75,25 @@ def test_sanitize_graddev_matrix_accepts_flat_and_square_shapes():
 ])
 def test_resolve_is_ge(scanner, expected):
     assert resolve_is_ge(scanner) is expected
+
+
+def test_strip_coeff_header_removes_hash_prefixed_lines(tmp_path):
+    body = '  1 A( 3, 0)                -0.452                                     z\n'
+    raw = tmp_path / 'coeff.grad'
+    raw.write_text('# header line one\n# header line two\n' + body)
+
+    out_path = strip_coeff_header(raw, tmp_path)
+
+    assert out_path != str(raw)
+    assert Path(out_path).read_text() == body
+
+
+def test_strip_coeff_header_passes_through_header_free_file(tmp_path):
+    body = '  1 A( 3, 0)                -0.452                                     z\n'
+    pre_stripped = tmp_path / 'coeff_cut.grad'
+    pre_stripped.write_text(body)
+
+    out_path = strip_coeff_header(pre_stripped, tmp_path)
+
+    assert out_path == str(pre_stripped)
+    assert list(tmp_path.iterdir()) == [pre_stripped]

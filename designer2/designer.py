@@ -2,7 +2,7 @@
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
-from lib.gnc import resolve_gnc_request, run_gnc_precorrection
+from lib.gnc import resolve_gnc_request, run_gnc_precorrection, strip_coeff_header
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -192,10 +192,17 @@ def execute(): #pylint: disable=unused-variable
     # skip a requested gradient nonlinearity correction if the BIDS sidecars of
     # the inputs it would warp report it was already applied on the scanner
     gnc_enabled = False
+    gnc_grad_coeff = None
     if app.ARGS.gnc_grad_coeff:
-        # resolve to absolute now - run_gnc_precorrection() reads this later,
-        # after app.goto_scratch_dir() has already changed the cwd.
-        app.ARGS.gnc_grad_coeff = str(Path(app.ARGS.gnc_grad_coeff).resolve())
+        # resolve to absolute and strip any scanner header now, before
+        # app.goto_scratch_dir() changes the cwd - run_gnc_precorrection() is
+        # only called later, well after that cwd change. Kept in a local
+        # rather than written back to app.ARGS.gnc_grad_coeff, since that
+        # should keep reflecting what the user actually passed in.
+        gnc_grad_coeff = str(Path(app.ARGS.gnc_grad_coeff).resolve())
+        # accept either the raw scanner export (with its '#' header comments)
+        # or an already-stripped file - the GNC backends only understand the latter
+        gnc_grad_coeff = strip_coeff_header(gnc_grad_coeff, app.SCRATCH_DIR)
         gnc_sidecars = list(dwi_metadata['bidslist'])
         if app.ARGS.eddy and rpe_json:
             gnc_sidecars.append(rpe_json)
@@ -261,7 +268,8 @@ def execute(): #pylint: disable=unused-variable
     # can later be composed with eddy's per-volume displacement field
     gnc_rpe_pair = None
     if gnc_enabled:
-        gnc_rpe_pair = run_gnc_precorrection(dwi_metadata)
+        assert gnc_grad_coeff is not None  # gnc_enabled can only be set inside the -gnc_grad_coeff branch above
+        gnc_rpe_pair = run_gnc_precorrection(dwi_metadata, gnc_grad_coeff)
 
     # rigid alignment of b0s from separate input series
     if app.ARGS.pre_align:
