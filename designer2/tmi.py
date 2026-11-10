@@ -121,7 +121,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     dki_options.add_argument('-fit_smoothing',metavar=('<percentile>'),help='NLM smoothing on wlls fit')
     dki_options.add_argument('-polyreg',action='store_true',help='polynomial regression based DKI estimation')
     dki_options.add_argument('-maxb', metavar=('<bmax>'),help='maximum b-value for DKI fitting, default=3.')
-    dki_options.add_argument('-maxdtib', metavar=('<bmax>'),help='maximum b-value for DTI fitting, default=1.5.')
+    dki_options.add_argument('-maxb_dti', metavar=('<bmax>'),help='maximum b-value for DTI fitting, default=1.5.')
 
 
     smi_options = cmdline.add_argument_group('tensor options for the TMI script')
@@ -357,14 +357,14 @@ def execute(): #pylint: disable=unused-variable
         if app.ARGS.DTI:
             from lib.mpunits import vectorize
             logger.info("Starting DTI fit...")
-            if app.ARGS.maxdtib:
-                maxdtib=float(app.ARGS.maxdtib)
+            if app.ARGS.maxb_dti:
+                maxb_dti=float(app.ARGS.maxb_dti)
             else:
-                maxdtib=1.5
-            logger.info("Setting b max for DTI...", extra={"max b": maxdtib})
+                maxb_dti=1.5
+            logger.info("Setting b max for DTI...", extra={"max b": maxb_dti})
             
 
-            dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= maxdtib))
+            dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= maxb_dti))
             dwi_dti = dwi[:,:,:,dtishell]
             bval_dti = bval[dtishell]
             bvec_dti = bvec[:,dtishell]
