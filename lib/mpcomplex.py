@@ -332,6 +332,8 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         if (maxphi - minphi) > 2 * np.pi:
             print('rescaling phase from -pi to pi')
             phi = (img_phi - minphi) / (maxphi - minphi) * 2 * np.pi - np.pi
+        else:
+            phi = img_phi
         
         kernel_phase = [15, 15, 1]
         step_phase = [kernel_phase[0]//2-1, kernel_phase[1]//2-1, 1]
