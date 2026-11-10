@@ -1486,7 +1486,7 @@ def run_rice_bias_correct(dwi_metadata):
 
     if app.ARGS.denoise and not app.ARGS.b1correct: # edited by omnia
         run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
-        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc.mif') # updated rician bias correction
         run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
 
     elif app.ARGS.denoise and app.ARGS.b1correct: # added by omnia
@@ -1498,7 +1498,7 @@ def run_rice_bias_correct(dwi_metadata):
             # normalize sigma by B1 field
             run.command('mrcalc -force lowbnoisemap.mif biasfield.mif -div lowbnoisemap_b1corr.mif ')
             # rician correction
-            run.command('mrcalc working.mif 2 -pow lowbnoisemap_b1corr.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+            run.command('mrcalc working.mif 2 -pow lowbnoisemap_b1corr.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc.mif') # updated rician bias correction
             run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
         else:
             # handle multiple DWI series individually, then concatenate
@@ -1510,8 +1510,8 @@ def run_rice_bias_correct(dwi_metadata):
                 run.command('mrcalc -force lowbnoisemap.mif biasfield%s.mif -div lowbnoisemap_b1corr%s.mif ' %
                     (str(idx), str(idx)))
 
-                run.command('mrcalc dwiprerc%s.mif 2 -pow lowbnoisemap_b1corr%s.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc%s.mif' %
-                    (str(idx), str(idx), str(idx)))
+                run.command('mrcalc dwiprerc%s.mif 2 -pow lowbnoisemap_b1corr%s.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc%s.mif' %
+                    (str(idx), str(idx), str(idx))) # updated rician bias correction
 
                 miflist.append('dwirc' + str(idx) + '.mif')
             
@@ -1528,7 +1528,7 @@ def run_rice_bias_correct(dwi_metadata):
         else:
             run.command('dwidenoise -noise lowbnoisemap.mif -estimator Exp2 dwi.mif dwitmp.mif', show=False)
             force_remove('dwitmp.mif')
-        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc.mif') # updated rician bias correction
         run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
         # dwirc.nii/.bvec/.bval are read by tests/e2e_runners.py's get_dwi_path()
         # ("rician" -> "dwirc") for per-stage validation; keep them.
