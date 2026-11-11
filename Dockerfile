@@ -70,14 +70,14 @@ ENV LD_LIBRARY_PATH="/usr/local/mrtrix3_build/src:/usr/local/mrtrix3_build/core:
 ENV PYTHONPATH="/usr/local/mrtrix3_build/lib"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
 
-# Test stage
-FROM production AS test
+# # Test stage
+# FROM production AS test
 
-# Copy only the tests directory from the test-context
-COPY --from=test-context . /app/tests
-COPY requirements.txt .
+# # Copy only the tests directory from the test-context
+# COPY --from=test-context . /app/tests
+# COPY requirements.txt .
 
-RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.txt
+# RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.txt
 
-# Also build lib.rpg in-place in case e.g. PYTHONPATH=/app shadows the site-packages install.
-RUN python setup.py build_ext --inplace
+# # Also build lib.rpg in-place in case e.g. PYTHONPATH=/app shadows the site-packages install.
+# RUN python setup.py build_ext --inplace

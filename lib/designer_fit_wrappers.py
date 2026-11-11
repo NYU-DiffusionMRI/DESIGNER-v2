@@ -379,14 +379,6 @@ def akc_out(outlier_inds, akc_mask_tmp, akc_dirs, rk, md, fa, n_cores=-3):
 
     return new_akc_mask
 
-    new_akc_mask[
-        outlier_inds[0],
-        outlier_inds[1],
-        outlier_inds[2],
-    ] = np.asarray(values, dtype=int)
-
-    return new_akc_mask
-
 # =============================================================================
 # Slope-based b0 restoration
 # =============================================================================
