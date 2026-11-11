@@ -19,6 +19,7 @@ L ~= Identity at undistorted voxels).
 """
 
 from lib.gnc.backends import compute_gnc_warp, derive_gnc_graddev
+from lib.gnc.coeff import strip_coeff_header
 from lib.gnc.pipeline import apply_warp_to_series, finalize_single_interpolation, run_gnc_precorrection
 from lib.gnc.request import resolve_gnc_request
 
@@ -29,4 +30,5 @@ __all__ = [
     'finalize_single_interpolation',
     'resolve_gnc_request',
     'run_gnc_precorrection',
+    'strip_coeff_header',
 ]
