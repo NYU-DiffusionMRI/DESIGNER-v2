@@ -124,6 +124,7 @@ def _neighbor_selection(
     kernel,
     outlier_locations,
     dwi_norm,
+    bval,
     fa,
     md,
     md_mask,
@@ -152,14 +153,22 @@ def _neighbor_selection(
     outlier_patch = outlier_locations[xmin:xmax, ymin:ymax, zmin:zmax]
     psize = outlier_patch.size
 
-    non_b0 = np.ones(dwi_norm.shape[-1], dtype=bool)
-    # dwi_norm itself does not include b-values here, so this gets refined by
-    # the caller when needed. The full signal remains usable for similarity.
-    patch = dwi_norm[xmin:xmax, ymin:ymax, zmin:zmax, :].reshape(psize, -1)
-    ref = dwi_norm[x, y, z, :][None, :]
+    # Exclude b=0 volumes from neighbor signal similarity.
+    non_b0 = np.asarray(bval) >= 0.01
 
+    if not np.any(non_b0):
+        raise ValueError("No diffusion-weighted volumes available for neighbor selection.")
+
+    # Extract only b > 0 volumes.
+    patch = dwi_norm[
+        xmin:xmax, ymin:ymax, zmin:zmax, :
+    ][..., non_b0].reshape(psize, -1)
+
+    ref = dwi_norm[x, y, z, non_b0][None, :]
+
+    # Calculate signal similarity using only diffusion-weighted volumes.
     dwi_diff = patch - ref
-    dwi_distance = np.sum(dwi_diff * dwi_diff, axis=1) / max(patch.shape[1], 1)
+    dwi_distance = np.sum(dwi_diff * dwi_diff, axis=1) / patch.shape[1]
 
     fapatch = fa[xmin:xmax, ymin:ymax, zmin:zmax].ravel()
     mdpatch = md[xmin:xmax, ymin:ymax, zmin:zmax].ravel()
@@ -436,6 +445,7 @@ def parallel_outlier_slope(
         kernel,
         outlier_locations,
         dwi_norm,
+        bval,
         fa,
         md,
         md_mask,
