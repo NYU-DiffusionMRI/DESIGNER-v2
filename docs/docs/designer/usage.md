@@ -192,6 +192,7 @@ Sotiropoulos, Saad Joabdi and Jesper L.R. Andersson. (2019). Automated quality c
 
 ### `-gnc_grad_coeff <coeff_file>`
 - Path to the scanner gradient coefficient file for gradient nonlinearity correction (spatial unwarping; backend chosen via `-gnc_backend`).
+- Accepts either the original scanner-exported coefficient file (with a `#`-prefixed header) or one with the header already stripped; the header is stripped automatically if present before it's passed to the backend.
 - Providing this enables the gradient nonlinearity correction step and also produces a per-voxel gradient-deviation (L) tensor field, written to the scratch directory as `gnc_graddev.nii.gz` (use `-nocleanup` to keep the scratch directory), for use with `designer2/tmi.py`'s `-gnc` option.
 - Currently only supported with `-eddy` combined with `-rpe_pair` or `-rpe_none` (not `-rpe_all`, `-rpe_header`, `-eddy_groups`, `-pre_align`, or `-ants_motion_correction`).
 - Skipped if the BIDS sidecar(s) report `NonlinearGradientCorrection=true`; errors if the DWI and RPE sidecars disagree.
