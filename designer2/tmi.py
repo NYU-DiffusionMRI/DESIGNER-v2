@@ -63,6 +63,12 @@ def setup_logging(output_dir):
 
     return logger
 
+def shell_counts(b):
+    # {b-value (ms/um^2, rounded to 3 decimals): number of volumes}, JSON-serializable
+    import numpy as np
+    shells, counts = np.unique(np.round(b, 3), return_counts=True)
+    return dict(zip(shells.tolist(), counts.tolist()))
+
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
 
@@ -350,23 +356,25 @@ def execute(): #pylint: disable=unused-variable
             bvec = bvec_orig[:,lte_idx]
             logger.info("Filtered DWI, bval, and bvec for LTE volumes.", extra={"dwi_shape": dwi.shape})
 
-
+    # moved outside DTI loop, to work with multi-TE max b as well
+    if app.ARGS.maxb_dti:
+        maxb_dti=float(app.ARGS.maxb_dti)
+    else:
+        maxb_dti=1.5
+        
     if len(set(dwi_metadata['echo_time_per_volume'])) == 1:
         logger.info("Single echo time detected.")
 
         if app.ARGS.DTI:
             from lib.mpunits import vectorize
             logger.info("Starting DTI fit...")
-            if app.ARGS.maxb_dti:
-                maxb_dti=float(app.ARGS.maxb_dti)
-            else:
-                maxb_dti=1.5
             logger.info("Setting b max for DTI...", extra={"max b": maxb_dti})
             
 
             dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= maxb_dti))
             dwi_dti = dwi[:,:,:,dtishell]
             bval_dti = bval[dtishell]
+            logger.info("DTI shells selected [shell: number of volumes].", extra={"dti_shells": shell_counts(bval_dti)})
             bvec_dti = bvec[:,dtishell]
             grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
             dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
@@ -398,7 +406,7 @@ def execute(): #pylint: disable=unused-variable
             dwi_dki = dwi[:,:,:,bval < maxb]
             bvec_dki = bvec[:,bval < maxb]
             bval_dki = bval[bval < maxb]
-
+            logger.info("DKI shells selected.", extra={"dki_shells": shell_counts(bval_dki)})
             bvec_dki_temp=bvec_dki[:,bval_dki > 0.1]
             ndir=np.shape(np.unique(bvec_dki_temp,axis=1))[1]
 
@@ -566,9 +574,11 @@ def execute(): #pylint: disable=unused-variable
                     continue
                 
                 logger.info(f"Starting DTI fit for TE={te}...")
-                dtishell = (bval_te <= 0.15) | ((bval_te > .5) & (bval_te <= 1.5))
+                logger.info(f"Setting b max for DTI for TE={te}...", extra={"max b": maxb_dti})
+                dtishell = (bval_te <= 0.15) | ((bval_te > .5) & (bval_te <= maxb_dti))
                 dwi_dti = dwi[:,:,:,dtishell]
                 bval_dti = bval_te[dtishell]
+                logger.info(f"DTI shells selected for TE={te}.", extra={"dti_shells": shell_counts(bval_dti)})
                 bvec_dti = bvec_te[:,dtishell]
                 grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
                 dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
@@ -593,7 +603,8 @@ def execute(): #pylint: disable=unused-variable
                 dwi_dki = dwi[:,:,:,bval_te < maxb]
                 bvec_dki = bvec_te[:,bval_te < maxb]
                 bval_dki = bval_te[bval_te < maxb]
-
+                logger.info(f"DKI shells selected for TE={te}.", extra={"dki_shells": shell_counts(bval_dki)})
+                
                 bvec_dki_temp=bvec_dki[:,bval_dki > 0.1]
                 ndir=np.shape(np.unique(bvec_dki_temp,axis=1))[1]
 
@@ -827,6 +838,7 @@ def execute(): #pylint: disable=unused-variable
                 
 
                 logger.info("SMI model initialized for multi-TE/beta data.")
+                logger.info("SMI shells selected.", extra={"smi_shells": shell_counts(bval_orig)})
                 
                 params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for multi-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})
@@ -871,6 +883,7 @@ def execute(): #pylint: disable=unused-variable
                 #             beta=dwi_metadata['bshape_per_volume'])
                 
                 logger.info("SMI model initialized for single-TE/beta data.")
+                logger.info("SMI shells selected.", extra={"smi_shells": shell_counts(bval)})
 
                 params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for single-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})

@@ -1532,10 +1532,9 @@ def run_rice_bias_correct(dwi_metadata):
         run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
         # dwirc.nii/.bvec/.bval are read by tests/e2e_runners.py's get_dwi_path()
         # ("rician" -> "dwirc") for per-stage validation; keep them.
-    if not app.ARGS.degibbs:
-        run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
-        force_remove('working.nii')
-    run.command('mrconvert -force -fslgrad working.bvec working.bval dwirc.mif working.mif', show=False)
+        
+    # dwirc.mif inherits working.mif's header (incl. gradient table) from mrcalc
+    run.command('mrconvert -force dwirc.mif working.mif', show=False)
 
 
 def run_normalization(dwi_metadata):
