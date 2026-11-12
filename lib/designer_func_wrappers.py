@@ -20,7 +20,7 @@ run_normalization:
 import time
 import shutil
 from pathlib import Path
-from lib.utils import run_fsl_eddy, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all, force_remove
+from lib.utils import run_fsl_eddy, resolve_eddy_executable, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all, force_remove
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -553,6 +553,8 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
     if app.ARGS.set_seed:
         eddyopts_list.append('--initrand')
     eddyopts = ' '.join(eddyopts_list)
+    eddy_exe = resolve_eddy_executable(app.ARGS.eddy_device)
+    print(f'... Using eddy executable: {eddy_exe} (-eddy_device {app.ARGS.eddy_device})')
 
     # GNC (gradient nonlinearity correction) needs eddy's per-volume displacement
     # fields to compose a single-interpolation GNC+eddy warp afterwards; see
@@ -752,7 +754,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 )
 
                 pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
-                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
                 
             elif app.ARGS.rpe_none:
                 # Create brain mask from mean b0 for eddy
@@ -760,7 +762,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
                 
                 pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
-                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', f'{eddy_proc_dir}/b0_brain_mask.nii.gz', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg)
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', f'{eddy_proc_dir}/b0_brain_mask.nii.gz', eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg)
                 
             elif app.ARGS.rpe_all:
                 ### this needs to be changed for realistic compatiblity to eddy_groups
@@ -793,7 +795,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 )
                 
                 pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
-                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
                 
                 run.function(os.remove,'tmp.mif')
 
@@ -824,7 +826,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 )
                 
                 pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
-                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
 
             run.command('dwiextract -bzero "%s" - | mrmath - mean "%s" -axis 3' %
                     ('dwi_post_eddy_' + str(i) + '.mif', 
@@ -1098,7 +1100,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
 
             if gnc_enabled:
                 finalize_gnc_single_interpolation(eddy_proc_dir, dwi_metadata)
@@ -1111,7 +1113,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
 
             if gnc_enabled:
                 finalize_gnc_single_interpolation(eddy_proc_dir, dwi_metadata)
@@ -1290,7 +1292,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
 
             # Call eddy (PE info now in dwipe_rpe.mif header)
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=readout_time_arg)
+            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=readout_time_arg)
             
             # Volume recombination with distortion-based weighting
             # Eddy outputs 2N volumes (N forward + N reverse PE), which we combine
@@ -1364,7 +1366,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'))
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'))
 
         elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")

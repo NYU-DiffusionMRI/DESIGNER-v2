@@ -120,6 +120,13 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 >
 > If performing EPI susceptibility distortion correction: Andersson, J. L.; Skare, S. & Ashburner, J. How to correct susceptibility distortions in spin-echo echo-planar images: application to diffusion tensor imaging. NeuroImage, 2003, 20, 870-888.
 
+### `-eddy_device <auto|cpu|cuda>`
+- Select which FSL eddy build to run. Default: `auto`.
+- `auto`: call FSL's `eddy` wrapper, which uses `eddy_cuda` when a compatible GPU is detected and falls back to `eddy_cpu` otherwise.
+- `cpu`: always use `eddy_cpu` (or `eddy_openmp` on older FSL releases).
+- `cuda`: always use `eddy_cuda`; Designer exits with an error if no GPU is detected or no compatible `eddy_cuda*` build exists. An `eddy_cuda` soft-link in your `PATH` takes precedence over the builds in `$FSLDIR/bin`. In containers, pass the GPU through (e.g. `docker run --gpus all` or `singularity exec --nv`).
+- Use in conjunction with `-eddy`.
+
 ### `-eddy_groups <index1,index2,...>`
 - Specify how input series should be grouped when running eddy, for use with variable TE or b-shape data. 
 - Inputs should be a comma separated list of integers beginning with 1, i.g. 1,1,1,2,2,2 for 6 series where the first 3 series and second 3 series have different echo times.
