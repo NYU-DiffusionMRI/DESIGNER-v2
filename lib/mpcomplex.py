@@ -300,7 +300,7 @@ class MP(object):
         npars = np.empty(num_patches, dtype=np.int32)
 
         
-        results = Parallel(n_jobs=self.n_cores, prefer='processes')\
+        results = Parallel(n_jobs=self.n_cores, prefer='threads')\
            (delayed(self.denoise)(self.dwi[self.temp[i,:],:]) for i in range(num_patches))
 
         signal, sigma, npars = zip(*results)

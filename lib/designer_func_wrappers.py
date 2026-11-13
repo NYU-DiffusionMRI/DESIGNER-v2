@@ -85,9 +85,39 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
 
     run.command('mrconvert -fslgrad dwidn.bvec dwidn.bval -json_import working.json dwidn.nii dwidn.mif', show=False)
 
-    stride=dwi_metadata['stride_3dim']
-    run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
-    run.command('mrconvert -force -strides %s Npars_fixed_strides.nii Npars.nii' % (stride), show=False)
+    # Sigma and Nparameters are 3D maps, so their stride specification
+    # must use 3D axis indices rather than the original 4D axis indices.
+    stride_3dim = [int(s) for s in dwi_metadata['stride_3dim'].split(",")]
+
+    # Renumber the original axes consecutively while preserving their order
+    # and direction (positive/negative stride).
+    original_axes = sorted(set(abs(s) for s in stride_3dim))
+    axis_map = {old: new for new, old in enumerate(original_axes, start=1)}
+
+    sigma_strides = ",".join(
+        str(axis_map[abs(s)] if s > 0 else -axis_map[abs(s)])
+        for s in stride_3dim
+    )
+
+    print(f"Original 3D stride metadata: {dwi_metadata['stride_3dim']}")
+    print(f"Stride for 3D denoising maps: {sigma_strides}")
+
+    run.command(
+        f'mrconvert -force -strides {sigma_strides} '
+        'sigma_fixed_strides.nii sigma.nii',
+        show=False
+    )
+    run.command(
+        f'mrconvert -force -strides {sigma_strides} '
+        'Npars_fixed_strides.nii Npars.nii',
+        show=False
+    )
+
+    # stride=dwi_metadata['stride_3dim']
+    # run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
+    # run.command('mrconvert -force -strides %s Npars_fixed_strides.nii Npars.nii' % (stride), show=False)
+
+
     run.command('mrconvert -strides -1,+2,+3,+4 sigma.nii noisemap.mif', show=False)
     app.cleanup('dwidn.nii')
     app.cleanup('dwidn.nii')

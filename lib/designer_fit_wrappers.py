@@ -91,31 +91,41 @@ def _fixed_patch_bounds(x, y, z, kernel, outlier_locations):
 
 def _get_low_b_shells(bval):
     """
-    Identify the b=0 shell and the highest shell below b=1.6.
+    Identify the b=0 shell and the highest nominal shell below b=1.6.
 
-    Assumes b-values are expressed in units compatible with the original
-    implementation, e.g. b=1 corresponding to b=1000 s/mm².
+    Nominal shells are defined at increments of 0.1
+    (e.g., 0.9, 1.0, 1.1, 1.2).
+
+    Values within ±0.1 of a nominal shell are grouped together.
+    Assumes b=1 corresponds to 1000 s/mm².
     """
     bval = np.asarray(bval)
-    bval_rounded = np.round(bval, 2)
 
-    low_bvals = np.sort(np.unique(bval_rounded[bval_rounded < 1.6]))
-    if len(low_bvals) < 2:
-        raise ValueError(
-            "At least two shells below b=1.6 are required for b0 restoration."
-        )
+    # Identify b=0 shell.
+    b_low_shell = bval <= 0.1
 
-    b_high = low_bvals[-1]
-    b_low = low_bvals[0]
+    # Find highest nominal nonzero shell below 1.6.
+    low_bvals = bval[(bval > 0.1) & (bval < 1.6)]
+
+    if low_bvals.size == 0:
+        raise ValueError("No nonzero shells below b=1.6.")
+
+    # Assign values to nominal shells (increments of 0.1).
+    nominal_shells = np.round(low_bvals / 0.1) * 0.1
+
+    # Highest nominal shell.
+    b_high = np.max(nominal_shells)
+
+    # Select measurements within ±0.1 of that nominal shell.
+    b_high_shell = np.abs(bval - b_high) <= 0.1
 
     return (
-        bval_rounded,
+        bval,
         b_high,
-        b_low,
-        bval_rounded == b_high,
-        bval_rounded == b_low,
+        0.0,
+        b_high_shell,
+        b_low_shell,
     )
-
 
 def _neighbor_selection(
     x,
@@ -445,7 +455,7 @@ def parallel_outlier_slope(
         smoothlevel=smoothlevel,
     )
 
-    b_high_signal = _safe_log(np.mean(dwi[x, y, z, b_high_shell]))
+    b_high_signal = np.mean(_safe_log(dwi[x, y, z, b_high_shell]))
     b_low_signal = _safe_log(dwi[x, y, z, b_low_shell])
 
     original_slope = np.abs(
