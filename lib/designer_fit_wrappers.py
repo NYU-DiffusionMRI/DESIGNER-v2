@@ -76,6 +76,16 @@ def refit_or_smooth(outlier_locations, dwi, mask=None, smoothlevel=None, n_cores
 
     return dwi_new
 
+
+def replace_outlier_tensors(dki, dwi, dt, mask, outliers, L=None):
+    """Refit the AKC outlier voxels and replace their tensor coefficients in place."""
+    if not np.any(outliers):
+        return
+    dwi_new = refit_or_smooth(outliers, dwi, n_cores=dki.n_cores)
+    replacement, _, _ = dki.dki_fit(dwi_new, outliers, L=L)
+    dt[:, outliers[mask]] = replacement
+
+
 def save_params(paramDict, niiex, model, outdir, format='nifti'):
     
     params = paramDict.keys()

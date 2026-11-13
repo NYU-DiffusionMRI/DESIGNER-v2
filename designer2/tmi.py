@@ -5,7 +5,7 @@ import json
 from logging import StreamHandler, FileHandler
 
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
-from lib.designer_fit_wrappers import refit_or_smooth, save_params
+from lib.designer_fit_wrappers import refit_or_smooth, replace_outlier_tensors, save_params
 from lib.io import load_mrtrix
 from mrtrix3 import run, path
 
@@ -466,19 +466,13 @@ def execute(): #pylint: disable=unused-variable
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
 
-            dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-            dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
-
-            x,y,z = np.where(akc_mask == 1)
-            DT = vectorize(dt_dki, mask)
-            DT[x,y,z,:] = dt_new.T
+            replace_outlier_tensors(dki, dwi_dki, dt_dki, mask, akc_mask, L=L_field)
 
             dt_ = {}
-            dt_['dt'] = DT
+            dt_['dt'] = vectorize(dt_dki, mask)
             save_params(dt_, mif, model='dki_akc', outdir=outdir)
             logger.info("DKT with AKC saved.")
 
-            dt_dki = vectorize(DT, mask)
             akc_mask = dki.outlierdetection(dt_dki, mask, dir)
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -489,7 +483,7 @@ def execute(): #pylint: disable=unused-variable
             logger.info("Starting tensor based smoothing...")
             if app.ARGS.DTI:
                 dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
+                dt_dti,_,_ = dti.dti_fit(dwi_new, mask, L=L_field)
 
                 DT = vectorize(dt_dti, mask)
                 dt_ = {}
@@ -500,7 +494,7 @@ def execute(): #pylint: disable=unused-variable
                 logger.info("DTI fit after smoothing completed.", extra={"dt_dti_shape": dt_dti.shape})
             if (app.ARGS.DKI or app.ARGS.WDKI):
                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+                dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
 
                 DT = vectorize(dt_dki, mask)
                 dt_ = {}
@@ -654,13 +648,7 @@ def execute(): #pylint: disable=unused-variable
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"Outlier detection completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
 
-                dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-                dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
-
-                x,y,z = np.where(akc_mask == 1)
-                DT = vectorize(dt_dki, mask)
-                DT[x,y,z,:] = dt_new.T
-                dt_dki = vectorize(DT, mask)
+                replace_outlier_tensors(dki, dwi_dki, dt_dki, mask, akc_mask, L=L_field)
                 akc_mask = dki.outlierdetection(dt_dki, mask, dir)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"AKC outlier post-processing completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -671,11 +659,11 @@ def execute(): #pylint: disable=unused-variable
                 logger.info(f"Starting tensor based smoothing for TE={te}...")
                 if app.ARGS.DTI:
                     dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
+                    dt_dti,_,_ = dti.dti_fit(dwi_new, mask, L=L_field)
                     logger.info(f"DTI fit after smoothing completed for TE={te}.", extra={"dt_dti_shape": dt_dti.shape})
                 if (app.ARGS.DKI or app.ARGS.WDKI):
                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+                    dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
                     logger.info(f"DKI fit after smoothing completed for TE={te}.", extra={"dt_dki_shape": dt_dki.shape})
 
             if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
