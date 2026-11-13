@@ -83,7 +83,30 @@ Outlier replacement is performed by computing replacing each voxel detected as a
 
 This can be extended to a sliding median filter, or an adaptive filtering method. This outlier replacing smoothing window is called `fit _smoothing` in tmi, and it runs a windowed adaptive nonlocal means filter on the dwi. For each voxel we take a cubic patch in 4d and take the mean over the `n` most similar voxels in *xyz* and *q-space*. `n` is decided by the percentile argument to tmi, where with `n=10 (default)` we are smoothing over the 10% most similar voxels, and so on. When you also include a map of outliers using the `-akc_outliers` flag, voxels that are considered outliers and ignored from a given patch. This has the effect of *smooshing* non outlier signal into black voxel areas. Obviously this method depends heavily on the patch size which is fixed right now.
 
+---
 
+## Gradient nonlinearity correction
 
+Gradient nonlinearity can change both the diffusion weighting and the gradient direction across the image. For DTI and DKI with linear tensor encoding (LTE), `tmi -gnc` uses a gradient coil tensor field `L` to compute the effective b-matrix at each voxel as `L B Lᵀ`, where `B` is the nominal b-matrix for a DWI volume.
 
+This example fits both models using the gradients in `dwi.mif` and the coil tensor field in `L.nii.gz`. TMI writes the maps to `parameters_gnc`.
 
+```bash
+tmi -DTI -DKI -gnc L.nii.gz dwi.mif parameters_gnc
+```
+
+Supply the full 3 × 3 matrix `L` at each voxel on the DWI grid, with components expressed in the same coordinate frame as the gradients. The identity matrix represents an ideal gradient coil. TMI accepts a NIfTI or MIF field with shape `(X, Y, Z, 3, 3)` or `(X, Y, Z, 9)`. For nine-component images, store the entries in row order as `Lxx, Lxy, Lxz, Lyx, Lyy, Lyz, Lzx, Lzy, Lzz`.
+
+**Using an external b-matrix.** If you have a nominal b-matrix for each volume, add `-bmat` to override the gradient table during fitting. To use the external b-matrix alone, omit `-gnc L.nii.gz`.
+
+```bash
+tmi -DTI -DKI -bmat dwi.bmat -gnc L.nii.gz dwi.mif parameters_bmat_gnc
+```
+
+Use a whitespace-delimited text file with six rows and one column per DWI volume, in the same order as the input volumes. The rows are `Bxx, Bxy, Bxz, Byy, Byz, Bzz` in s/mm², expressed in the image voxel coordinate frame. Use the unscaled off-diagonal elements and six zeros for a b = 0 volume. TMI also accepts the transposed layout. For NIfTI input, keep the accompanying `.bval` and `.bvec` files available for import. For MIF input, keep the embedded gradient table.
+
+**Outlier replacement and smoothing.** You can use `-gnc` with `-akc_outliers`, `-fit_smoothing`, or both. When `-akc_outliers` replaces the signal at a flagged voxel, TMI refits its kurtosis tensor using that voxel's corrected b-matrix for each volume. With `-fit_smoothing`, TMI also uses the corrected b-matrices when fitting the diffusion and kurtosis tensors to the smoothed signal. This applies to both single- and multi-echo fits.
+
+```bash
+tmi -DTI -DKI -gnc L.nii.gz -akc_outliers -fit_smoothing 10 dwi.mif parameters_gnc_smoothed
+```

@@ -338,7 +338,8 @@ class TensorFitting(object):
             C = None
 
         # --- vectorize data ---
-        dwi_ = vectorize(dwi, mask)  # (Ndwi, Nvox)
+        # Keep the voxel axis even when only one outlier needs refitting.
+        dwi_ = vectorize(dwi, mask).reshape(dwi.shape[-1], -1)
         nvox = dwi_.shape[1]
         inputs = tqdm(range(0, nvox))
 

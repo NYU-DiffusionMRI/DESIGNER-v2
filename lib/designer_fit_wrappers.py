@@ -335,7 +335,14 @@ def refit_or_smooth(
     dwi_new[outinds[0], outinds[1], outinds[2], :] = np.asarray(values)
     return dwi_new
 
-
+def replace_outlier_tensors(dki, dwi, dt, mask, outliers, L=None):
+    """Refit the AKC outlier voxels and replace their tensor coefficients in place."""
+    if not np.any(outliers):
+        return
+    dwi_new = refit_or_smooth(outliers, dwi, n_cores=dki.n_cores)
+    replacement, _, _ = dki.dki_fit(dwi_new, outliers, L=L)
+    dt[:, outliers[mask]] = replacement
+  
 # =============================================================================
 # AKC outlier mask processing
 # =============================================================================
@@ -586,8 +593,8 @@ def db0restore_slope(
     restored_slope_map[outinds[0], outinds[1], outinds[2]] = restored_slopes
 
     return dwi_new, original_slope_map, restored_slope_map
-
-
+  
+  
 # ============================================================================
 # Output utilities
 # =============================================================================

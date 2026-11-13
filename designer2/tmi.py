@@ -11,6 +11,7 @@ from lib.designer_fit_wrappers import (
     save_params,
     db0restore_slope,
     akc_out,
+    replace_outlier_tensors,
 )
 from lib.io import load_mrtrix
 from mrtrix3 import run, path
@@ -843,18 +844,16 @@ def execute(): #pylint: disable=unused-variable
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
 
             if app.ARGS.db0restore:
-                dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
+#                 dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
+                replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
             else:
-                dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-            dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
-
-            x,y,z = np.where(akc_mask == 1)
+#                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
+                replace_outlier_tensors(dki, dwi_dki, dt_dki, mask, akc_mask, L=L_field)
+            
             DT = vectorize(dt_dki, mask)
             # Ensure spatial dimensions are preserved for single-slice data
             if DT.ndim == 3:
                 DT = np.expand_dims(DT, axis=2)
-            DT[x,y,z,:] = dt_new.T
-
             dt_ = {}
             # Convert tensor coefficients to MRtrix convention
             DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
@@ -862,7 +861,7 @@ def execute(): #pylint: disable=unused-variable
             save_params(dt_, mif, model='dki_akc', outdir=outdir)
             logger.info("DKT with AKC saved.")
 
-            dt_dki = vectorize(DT, mask)
+#             dt_dki = vectorize(DT, mask)
             akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
             akc_mask = vectorize(akc_mask, mask).astype(bool)
             logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -897,7 +896,7 @@ def execute(): #pylint: disable=unused-variable
             logger.info("Starting tensor based smoothing...")
             if app.ARGS.DTI:
                 dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
+                dt_dti,_,_ = dti.dti_fit(dwi_new, mask, L=L_field)
 
                 DT = vectorize(dt_dti, mask)
                 # Ensure spatial dimensions are preserved for single-slice data
@@ -916,7 +915,7 @@ def execute(): #pylint: disable=unused-variable
                     dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 else:
                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+                dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
 
                 DT = vectorize(dt_dki, mask)
                 # Ensure spatial dimensions are preserved for single-slice data
@@ -1330,19 +1329,24 @@ def execute(): #pylint: disable=unused-variable
 
                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
                 if app.ARGS.db0restore:
-                    dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
+#                     dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
+                    replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
+          
                 else:
-                    dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
+#                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
+                    replace_outlier_tensors(dki, dwi_dki, dt_dki, mask, akc_mask, L=L_field)
                 
-                dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
-
-                x,y,z = np.where(akc_mask == 1)
                 DT = vectorize(dt_dki, mask)
                 # Ensure spatial dimensions are preserved for single-slice data
                 if DT.ndim == 3:
                     DT = np.expand_dims(DT, axis=2)
-                DT[x,y,z,:] = dt_new.T
-                dt_dki = vectorize(DT, mask)
+                dt_ = {}
+                # Convert tensor coefficients to MRtrix convention
+                DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+                dt_['dt'] = DT
+                save_params(dt_, mif, model='dki_akc', outdir=outdir)
+                logger.info(f"DKT with AKC saved for TE={te}.")
+                
                 akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
                 logger.info(f"AKC outlier post-processing completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
@@ -1378,15 +1382,38 @@ def execute(): #pylint: disable=unused-variable
                 logger.info(f"Starting tensor based smoothing for TE={te}...")
                 if app.ARGS.DTI:
                     dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
+                    dt_dti,_,_ = dti.dti_fit(dwi_new, mask, L=L_field)
                     logger.info(f"DTI fit after smoothing completed for TE={te}.", extra={"dt_dti_shape": dt_dti.shape})
+                    
+                    DT = vectorize(dt_dti, mask)
+                    # Ensure spatial dimensions are preserved for single-slice data
+                    if DT.ndim == 3:
+                        DT = np.expand_dims(DT, axis=2)
+                    dt_ = {}
+                    # Convert tensor coefficients to MRtrix convention
+                    DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+                    dt_['dt'] = DT
+                    save_params(dt_, mif, model='dti_fitsmooth', outdir=outdir)
+                    logger.info(f"DT with fit smooth saved for TE={te}.")
+                
                 if (app.ARGS.DKI or app.ARGS.WDKI):
                     if app.ARGS.db0restore:
                         dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                     else:
                         dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+                    dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
                     logger.info(f"DKI fit after smoothing completed for TE={te}.", extra={"dt_dki_shape": dt_dki.shape})
+                    
+                    DT = vectorize(dt_dki, mask)
+                    # Ensure spatial dimensions are preserved for single-slice data
+                    if DT.ndim == 3:
+                        DT = np.expand_dims(DT, axis=2)
+                    dt_ = {}
+                    # Convert tensor coefficients to MRtrix convention
+                    DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+                    dt_['dt'] = DT
+                    save_params(dt_, mif, model='dki_fitsmooth', outdir=outdir)
+                    logger.info(f"DKT with fit smooth saved for TE={te}.")
 
             if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
                 rdwi = tensor.vectorize(dwi, mask)
