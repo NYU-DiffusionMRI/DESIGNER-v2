@@ -92,6 +92,11 @@ def usage(cmdline): #pylint: disable=unused-variable
 
     rpe_options = cmdline.add_argument_group('Options for eddy and to specify the acquisition phase-encoding design')
     rpe_options.add_argument('-eddy', action='store_true', help='run fsl eddy (note that if you choose this command you must also choose a phase encoding option')
+    rpe_options.add_argument('-eddy_device', choices=['auto', 'cpu', 'cuda'], default='auto',
+        help='device used to run fsl eddy. "auto" (default) calls FSL\'s eddy wrapper, which uses '
+             'eddy_cuda when a compatible GPU is detected and falls back to eddy_cpu otherwise. '
+             '"cpu" forces eddy_cpu. "cuda" forces eddy_cuda and fails if no usable CUDA build/GPU is found '
+             '(an "eddy_cuda" soft-link in PATH takes precedence over the binaries in $FSLDIR/bin).')
     rpe_options.add_argument('-eddy_groups',metavar=('<index1,index2,...'),help='specify how input series should be grouped when running eddy, for use with variable TE or b-shape data. (Comma separated list of integers beginning with 1, i.e. 1,1,1,2,2,2 for 6 series where the first 3 series and second 3 series have different echo times).', default=None)
     rpe_options.add_argument('-eddy_fakeb',metavar=('<factor1,factor2,...'),help='specify how b-values of the input series should be scaled, for use with variable TE or b-shape data.', default=None)
     rpe_options.add_argument('-rpe_none', action='store_true', help='Specify that no reversed phase-encoding image data is being provided; eddy will perform eddy current and motion correction only')
