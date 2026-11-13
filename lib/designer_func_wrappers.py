@@ -116,6 +116,8 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
     # stride=dwi_metadata['stride_3dim']
     # run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
     # run.command('mrconvert -force -strides %s Npars_fixed_strides.nii Npars.nii' % (stride), show=False)
+
+
     run.command('mrconvert -strides -1,+2,+3,+4 sigma.nii noisemap.mif', show=False)
     app.cleanup('dwidn.nii')
     app.cleanup('dwidn.nii')
