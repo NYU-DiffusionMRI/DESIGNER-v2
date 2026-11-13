@@ -105,4 +105,8 @@ tmi -DTI -DKI -bmat dwi.bmat -gnc L.nii.gz dwi.mif parameters_bmat_gnc
 
 Use a whitespace-delimited text file with six rows and one column per DWI volume, in the same order as the input volumes. The rows are `Bxx, Bxy, Bxz, Byy, Byz, Bzz` in s/mm², expressed in the image voxel coordinate frame. Use the unscaled off-diagonal elements and six zeros for a b = 0 volume. TMI also accepts the transposed layout. For NIfTI input, keep the accompanying `.bval` and `.bvec` files available for import. For MIF input, keep the embedded gradient table.
 
-The initial DTI and DKI fits use the voxelwise correction. The optional refits triggered by `-akc_outliers` and `-fit_smoothing` use the nominal gradients.
+**Outlier replacement and smoothing.** You can use `-gnc` with `-akc_outliers`, `-fit_smoothing`, or both. When `-akc_outliers` replaces the signal at a flagged voxel, TMI refits its kurtosis tensor using that voxel's corrected b-matrix for each volume. With `-fit_smoothing`, TMI also uses the corrected b-matrices when fitting the diffusion and kurtosis tensors to the smoothed signal. This applies to both single- and multi-echo fits.
+
+```bash
+tmi -DTI -DKI -gnc L.nii.gz -akc_outliers -fit_smoothing 10 dwi.mif parameters_gnc_smoothed
+```
