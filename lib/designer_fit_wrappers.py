@@ -336,12 +336,52 @@ def refit_or_smooth(
     return dwi_new
 
 def replace_outlier_tensors(dki, dwi, dt, mask, outliers, L=None):
-    """Refit the AKC outlier voxels and replace their tensor coefficients in place."""
+
+    mask = np.asarray(mask, dtype=bool)
+    outliers = np.asarray(outliers, dtype=bool)
+
+    print("\n--- replace_outlier_tensors ---")
+    print("DWI shape:", dwi.shape)
+    print("Mask shape:", mask.shape)
+    print("Outliers shape:", outliers.shape)
+    print("DT shape:", dt.shape)
+    print("Number of outliers:", np.sum(outliers))
+
     if not np.any(outliers):
-        return
-    dwi_new = refit_or_smooth(outliers, dwi, n_cores=dki.n_cores)
-    replacement, _, _ = dki.dki_fit(dwi_new, outliers, L=L)
-    dt[:, outliers[mask]] = replacement
+        print("No outliers detected!")
+        return dwi, dt
+
+    # Correct outlier DWI signals
+    dwi_new = refit_or_smooth(
+        outliers, dwi, n_cores=dki.n_cores
+    )
+
+    print("DWI changed:", np.any(dwi_new != dwi))
+
+    # Fit corrected DWI at outlier locations
+    replacement, _, _ = dki.dki_fit(
+        dwi_new, outliers, L=L
+    )
+
+    outlier_idx = outliers[mask]
+
+    print("Replacement shape:", replacement.shape)
+    print("Outlier index shape:", outlier_idx.shape)
+    print("Number of replacement voxels:", np.sum(outlier_idx))
+
+    # Compare coefficients before replacement
+    dt_before = dt[:, outlier_idx].copy()
+
+    print("Replacement differs from original:",
+          np.any(~np.isclose(replacement, dt_before, equal_nan=True)))
+
+    # Replace coefficients
+    dt[:, outlier_idx] = replacement
+
+    print("DT changed:",
+          np.any(~np.isclose(dt[:, outlier_idx], dt_before, equal_nan=True)))
+
+    return dwi_new, dt
   
 # =============================================================================
 # AKC outlier mask processing
@@ -376,23 +416,45 @@ def akc_out(outlier_inds, akc_mask_tmp, akc_dirs, rk, md, fa, n_cores=-3):
 
     new_akc_mask = akc_mask_tmp.copy()
 
+    spatial_shape = new_akc_mask.shape
+
+    if rk.shape != spatial_shape:
+        raise ValueError(
+            f"RK shape {rk.shape} does not match "
+            f"AKC mask shape {spatial_shape}")
+
+    if md.shape != spatial_shape:
+        raise ValueError(
+            f"MD shape {md.shape} does not match "
+            f"AKC mask shape {spatial_shape}")
+
+    if fa.shape != spatial_shape:
+        raise ValueError(
+            f"FA shape {fa.shape} does not match "
+            f"AKC mask shape {spatial_shape}")
+
     if outlier_inds.shape[1] == 0:
         return new_akc_mask
 
-    x, y, z = outlier_inds
+    if outlier_inds.shape[0] != len(spatial_shape):
+        raise ValueError(
+            f"Expected {len(spatial_shape)} coordinate dimensions, "
+            f"got {outlier_inds.shape[0]}"
+        )
 
-    # Apply the same criteria as the original implementation
+    coords = tuple(outlier_inds)
+
     additional_outliers = (
-        (rk[x, y, z] < 0.5) &
-        (md[x, y, z] < 2)
+        (rk[coords] < 0.5) &
+        (md[coords] < 2)
     )
 
-    # Mark additional outliers
-    new_akc_mask[
-        x[additional_outliers],
-        y[additional_outliers],
-        z[additional_outliers]
-    ] = 1
+    selected_coords = tuple(
+        coord[additional_outliers]
+        for coord in coords
+    )
+
+    new_akc_mask[selected_coords] = 1
 
     return new_akc_mask
 

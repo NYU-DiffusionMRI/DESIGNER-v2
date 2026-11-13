@@ -68,6 +68,55 @@ def _apply_db0restore(
 
     raise ValueError(f"Unknown db0 restoration method: {method!r}")
 
+def _ensure_spatial_map_3d(data, spatial_shape, name="map"):
+    """
+    Ensure a spatial map has the same 3D shape as the DWI spatial dimensions.
+
+    Preserves singleton spatial dimensions, e.g. converts (128, 128)
+    to (128, 128, 1) when the DWI shape is (128, 128, 1, N).
+    """
+    data = np.asarray(data)
+
+    if data.shape == spatial_shape:
+        return data
+
+    singleton_axes = [axis for axis, size in enumerate(spatial_shape)
+        if size == 1]
+
+    expected_shape = tuple(size for size in spatial_shape if size != 1)
+
+    if (data.ndim == len(spatial_shape) - len(singleton_axes)
+        and data.shape == expected_shape):
+        for axis in singleton_axes:
+            data = np.expand_dims(data, axis=axis)
+
+    if data.shape != spatial_shape:
+        raise ValueError(
+            f"{name} shape {data.shape} does not match "
+            f"DWI spatial shape {spatial_shape}")
+
+    return data
+
+def ensure_spatial_3d(arr, spatial_shape, name):
+    arr = np.asarray(arr)
+
+    if arr.shape == spatial_shape:
+        return arr
+
+    # Restore the singleton Z dimension for single-slice data.
+    if (
+        arr.ndim == 2
+        and len(spatial_shape) == 3
+        and spatial_shape[2] == 1
+        and arr.shape == spatial_shape[:2] ):
+        arr = arr[:, :, np.newaxis]
+
+    if arr.shape != spatial_shape:
+        raise ValueError(
+            f"{name} shape {arr.shape} does not match "
+            f"expected spatial shape {spatial_shape}" )
+    return arr
+
 # Set up logging in JSON format
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -184,7 +233,8 @@ def usage(cmdline): #pylint: disable=unused-variable
 
 
 #=======================================tmi d-b0restore======================================
-    dki_options.add_argument('-akc_lowerlim', metavar=('<akc_lowerlim>'),help='akc lower threshold, default=-1')
+    dki_options.add_argument('-akc_lowerlim', metavar=('<akc_lowerlim>'),help='akc lower threshold, default=0')
+    dki_options.add_argument('-akc_lowerlim_conservative', metavar=('<onservative_akc_lowerlim>'),help='akc lower threshold after first iteration, default=-2')
     dki_options.add_argument('-akc_upperlim', metavar=('<akc_upperlim>'),help='akc upper threshold, default=10')
     dki_options.add_argument('-db0restore', action='store_true',help='d-b0restore dki outlier correction')
     dki_options.add_argument('-kernel', metavar=('<kernel_size>'),help='kernel/patch size for d-b0restore correction (patch for neighboring voxels), default=5')
@@ -385,6 +435,35 @@ def execute(): #pylint: disable=unused-variable
         logger.info("No mask provided. Using default mask with all ones.", extra={"mask_shape": mask.shape})
     mask = mask.astype(bool)
 
+    # Ensure mask has exactly the same 3D spatial dimensions as DWI.
+    spatial_shape = dwi.shape[:-1]
+
+    if mask.shape != spatial_shape:
+        missing_dims = len(spatial_shape) - mask.ndim
+
+        if missing_dims > 0:
+            singleton_axes = [
+                axis for axis, size in enumerate(spatial_shape)
+                if size == 1
+            ]
+
+            if len(singleton_axes) == missing_dims:
+                for axis in singleton_axes:
+                    mask = np.expand_dims(mask, axis=axis)
+
+    if mask.shape != spatial_shape:
+        raise ValueError(
+            f"Mask shape {mask.shape} does not match "
+            f"DWI spatial shape {spatial_shape}"
+        )
+
+    mask = mask.astype(bool)
+
+    logger.info("Spatial dimensions validated.",
+        extra={
+            "dwi_shape": dwi.shape,
+            "mask_shape": mask.shape})
+
     if app.ARGS.fit_constraints:
         constraints = app.ARGS.fit_constraints
         if type(constraints) == str:
@@ -552,6 +631,7 @@ def execute(): #pylint: disable=unused-variable
 
             outlier_mask = {}
             akc_mask_tmp = vectorize(akc_mask, mask)
+            akc_mask_tmp = ensure_spatial_3d(akc_mask_tmp, mask.shape, "AKC mask")
             outlier_mask['akc'] = akc_mask_tmp
             save_params(outlier_mask, mif, model='dki', outdir=outdir)
 
@@ -561,15 +641,17 @@ def execute(): #pylint: disable=unused-variable
             akc_dirs=np.zeros((x,y,z,np.shape(akc_d)[0]))
             # print(np.shape(akc_d))
             for i in range(np.shape(akc_d)[0]):
-                akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
 
 
         # ====================================================================================
             params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
-            rk = params_dki['rk']
-            md = params_dki['md']
-            fa = params_dki['fa']
-            mk = params_dki['mk']
+            spatial_shape = dwi.shape[:3]
+            rk = _ensure_spatial_map_3d(params_dki['rk'], spatial_shape, "RK")
+            md = _ensure_spatial_map_3d(params_dki['md'], spatial_shape, "MD")
+            fa = _ensure_spatial_map_3d(params_dki['fa'], spatial_shape, "FA")
+            mk = _ensure_spatial_map_3d(params_dki['mk'], spatial_shape, "MK")
 
             rk_ = {}
             rk_['rk_0'] = rk
@@ -594,6 +676,7 @@ def execute(): #pylint: disable=unused-variable
             outlier_mask = {}
             akc_mask[akc_mask!=0]=1
             akc_mask=vectorize(akc_mask, mask)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
             akc_mask[akc_mask_new==1]=1
             outlier_mask['outlier_mask'] = akc_mask
             save_params(outlier_mask, mif, model='dki', outdir=outdir)
@@ -640,19 +723,24 @@ def execute(): #pylint: disable=unused-variable
 
             # Detect Outlier after first iteration of b0-restore
             print("============Detect Outlier now with conservative outlier detection (AKC < -2)============")
-            akc_lowerlim=-2
+            if app.ARGS.akc_lowerlim_conservative:
+                akc_lowerlim=int(app.ARGS.akc_lowerlim_conservative)
+            else:
+                akc_lowerlim=-2
             #akc-based outlier detection
             akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
             akc_mask_copy = akc_mask.copy()
             akc_mask = vectorize(akc_mask, mask)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
             akc_mask_tmp = akc_mask
             
             #extract new rk, md, fa, mk
             params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
-            rk = params_dki['rk']
-            md = params_dki['md']
-            fa = params_dki['fa']
-            mk = params_dki['mk']
+            spatial_shape = dwi.shape[:3]
+            rk = _ensure_spatial_map_3d(params_dki['rk'], spatial_shape, "RK")
+            md = _ensure_spatial_map_3d(params_dki['md'], spatial_shape, "MD")
+            fa = _ensure_spatial_map_3d(params_dki['fa'], spatial_shape, "FA")
+            mk = _ensure_spatial_map_3d(params_dki['mk'], spatial_shape, "MK")
 
             # rk_ = {}
             # rk_['rk_1'] = rk
@@ -674,7 +762,8 @@ def execute(): #pylint: disable=unused-variable
             dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
             akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
             for i in range(np.shape(akc_d)[0]):
-                akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
             akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
             akc_mask[akc_mask!=0]=1
             akc_mask[akc_mask_new==1]=1
@@ -721,6 +810,10 @@ def execute(): #pylint: disable=unused-variable
                 dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
                 x,y,z = np.where(akc_mask == 1)
                 # DT = vectorize(dt_dki, mask)
+                if DT.shape[:3] != mask.shape:
+                    raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                    f"spatial shape {mask.shape}")
+
                 DT[x,y,z,:] = dt_new.T
                 dt_dki = vectorize(DT, mask)
 
@@ -732,15 +825,18 @@ def execute(): #pylint: disable=unused-variable
                 dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
                 akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
                 for i in range(np.shape(akc_d)[0]):
-                    akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                    akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                    # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                 akc_mask_tmp = akc_mask
 
                 params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
-                rk = params_dki['rk']
-                md = params_dki['md']
-                fa = params_dki['fa']
-                mk = params_dki['mk']
+                spatial_shape = dwi.shape[:3]
+                rk = _ensure_spatial_map_3d(params_dki['rk'], spatial_shape, "RK")
+                md = _ensure_spatial_map_3d(params_dki['md'], spatial_shape, "MD")
+                fa = _ensure_spatial_map_3d(params_dki['fa'], spatial_shape, "FA")
+                mk = _ensure_spatial_map_3d(params_dki['mk'], spatial_shape, "MK")
 
                 # rk_ = {}
                 # rk_['rk_{}'.format(count+1)] = rk
@@ -805,7 +901,14 @@ def execute(): #pylint: disable=unused-variable
             outlier_mask = {}
             akc_mask_copy[akc_mask_copy!=0]=1
             akc_mask_copy=vectorize(akc_mask_copy, mask)
-            akc_mask_copy[akc_mask_new==1]=1
+            
+            # Preserve the singleton Z dimension
+            akc_mask_copy = ensure_spatial_3d(akc_mask_copy, mask.shape, "AKC mask copy")
+            akc_mask_new = ensure_spatial_3d(akc_mask_new, mask.shape, "New AKC mask")
+
+            # Combine masks
+            akc_mask_copy[akc_mask_new == 1] = 1
+
             outlier_mask['outliermask_final'] = akc_mask_copy
             save_params(outlier_mask, mif, model='dki', outdir=outdir)
 
@@ -841,19 +944,21 @@ def execute(): #pylint: disable=unused-variable
                 akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_upperlim)
                 
             akc_mask = vectorize(akc_mask, mask).astype(bool)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
 
-            if app.ARGS.db0restore:
-#                 dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
-                replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
-            else:
-#                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-                replace_outlier_tensors(dki, dwi_dki, dt_dki, mask, akc_mask, L=L_field)
+            if not app.ARGS.db0restore:
+                dwi_new = dwi_dki.copy()
+            dwi_new,dt_dki = replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
             
             DT = vectorize(dt_dki, mask)
             # Ensure spatial dimensions are preserved for single-slice data
             if DT.ndim == 3:
                 DT = np.expand_dims(DT, axis=2)
+
+            if DT.shape[:3] != mask.shape:
+                raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                f"spatial shape {mask.shape}")
             dt_ = {}
             # Convert tensor coefficients to MRtrix convention
             DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
@@ -864,6 +969,7 @@ def execute(): #pylint: disable=unused-variable
 #             dt_dki = vectorize(DT, mask)
             akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
             akc_mask = vectorize(akc_mask, mask).astype(bool)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
             logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
         else:
             akc_mask = np.zeros_like(mask)
@@ -891,6 +997,7 @@ def execute(): #pylint: disable=unused-variable
                     akc_upperlim=int(app.ARGS.akc_upperlim)
                 akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_upperlim)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
 
         if app.ARGS.fit_smoothing:
             logger.info("Starting tensor based smoothing...")
@@ -911,7 +1018,7 @@ def execute(): #pylint: disable=unused-variable
 
                 logger.info("DTI fit after smoothing completed.", extra={"dt_dti_shape": dt_dti.shape})
             if (app.ARGS.DKI or app.ARGS.WDKI):
-                if app.ARGS.db0restore:
+                if app.ARGS.db0restore or app.ARGS.akc_outliers:
                     dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 else:
                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
@@ -921,6 +1028,10 @@ def execute(): #pylint: disable=unused-variable
                 # Ensure spatial dimensions are preserved for single-slice data
                 if DT.ndim == 3:
                     DT = np.expand_dims(DT, axis=2)
+
+                if DT.shape[:3] != mask.shape:
+                    raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                    f"spatial shape {mask.shape}")
                 dt_ = {}
                 # Convert tensor coefficients to MRtrix convention
                 DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
@@ -1096,6 +1207,8 @@ def execute(): #pylint: disable=unused-variable
 
                     outlier_mask = {}
                     akc_mask_tmp = vectorize(akc_mask, mask)
+                    akc_mask_tmp = ensure_spatial_3d(akc_mask_tmp, mask.shape, "AKC mask")
+
                     outlier_mask['akc'] = akc_mask_tmp
                     save_params(outlier_mask, mif, model='dki', outdir=outdir)
 
@@ -1105,7 +1218,8 @@ def execute(): #pylint: disable=unused-variable
                     akc_dirs=np.zeros((x,y,z,np.shape(akc_d)[0]))
                     # print(np.shape(akc_d))
                     for i in range(np.shape(akc_d)[0]):
-                        akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                        akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                        # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
 
 
                 # ====================================================================================
@@ -1124,6 +1238,7 @@ def execute(): #pylint: disable=unused-variable
                     outlier_mask = {}
                     akc_mask[akc_mask!=0]=1
                     akc_mask=vectorize(akc_mask, mask)
+                    akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                     akc_mask[akc_mask_new==1]=1
                     outlier_mask['outlier_mask'] = akc_mask
                     save_params(outlier_mask, mif, model='dki', outdir=outdir)
@@ -1163,6 +1278,11 @@ def execute(): #pylint: disable=unused-variable
                     # Ensure spatial dimensions are preserved for single-slice data
                     if DT.ndim == 3:
                         DT = np.expand_dims(DT, axis=2)
+
+                    if DT.shape[:3] != mask.shape:
+                        raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                        f"spatial shape {mask.shape}")
+
                     DT[x,y,z,:] = dt_new.T
                     dt_dki = vectorize(DT, mask)
 
@@ -1172,6 +1292,7 @@ def execute(): #pylint: disable=unused-variable
                     akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                     akc_mask_copy = akc_mask.copy()
                     akc_mask = vectorize(akc_mask, mask)
+                    akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                     akc_mask_tmp = akc_mask
                     
                     #extract new rk, md, fa
@@ -1187,7 +1308,8 @@ def execute(): #pylint: disable=unused-variable
                     dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
                     akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
                     for i in range(np.shape(akc_d)[0]):
-                        akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                        akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                        # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
                     akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
                     akc_mask[akc_mask!=0]=1
                     akc_mask[akc_mask_new==1]=1
@@ -1225,6 +1347,9 @@ def execute(): #pylint: disable=unused-variable
                         dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
                         x,y,z = np.where(akc_mask == 1)
                         # DT = vectorize(dt_dki, mask)
+                        if DT.shape[:3] != mask.shape:
+                            raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                            f"spatial shape {mask.shape}")
                         DT[x,y,z,:] = dt_new.T
                         dt_dki = vectorize(DT, mask)
                         print('detecting outliers')
@@ -1235,8 +1360,10 @@ def execute(): #pylint: disable=unused-variable
                         dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
                         akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
                         for i in range(np.shape(akc_d)[0]):
-                            akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                            akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                            # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
                         akc_mask = vectorize(akc_mask, mask).astype(bool)
+                        akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                         akc_mask_tmp = akc_mask
                         params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
                         rk = params_dki['rk']
@@ -1287,7 +1414,14 @@ def execute(): #pylint: disable=unused-variable
                     outlier_mask = {}
                     akc_mask_copy[akc_mask_copy!=0]=1
                     akc_mask_copy=vectorize(akc_mask_copy, mask)
-                    akc_mask_copy[akc_mask_new==1]=1
+                    
+                    # Preserve the singleton Z dimension
+                    akc_mask_copy = ensure_spatial_3d(akc_mask_copy, mask.shape, "AKC mask copy")
+                    akc_mask_new = ensure_spatial_3d(akc_mask_new, mask.shape, "New AKC mask")
+
+                    # Combine masks
+                    akc_mask_copy[akc_mask_new == 1] = 1
+
                     outlier_mask['outliermask_final'] = akc_mask_copy
                     save_params(outlier_mask, mif, model='dki', outdir=outdir)
 
@@ -1325,21 +1459,22 @@ def execute(): #pylint: disable=unused-variable
                     akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                     
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                 logger.info(f"Outlier detection completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
 
                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-                if app.ARGS.db0restore:
-#                     dwi_new = refit_or_smooth(akc_mask, dwi_new, n_cores=int(app.ARGS.n_cores))
-                    replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
-          
-                else:
-#                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-                    replace_outlier_tensors(dki, dwi_dki, dt_dki, mask, akc_mask, L=L_field)
+                if not app.ARGS.db0restore:
+                    dwi_new = dwi_dki.copy()
+                dwi_new,dt_dki = replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
                 
                 DT = vectorize(dt_dki, mask)
                 # Ensure spatial dimensions are preserved for single-slice data
                 if DT.ndim == 3:
                     DT = np.expand_dims(DT, axis=2)
+
+                if DT.shape[:3] != mask.shape:
+                    raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                    f"spatial shape {mask.shape}")
                 dt_ = {}
                 # Convert tensor coefficients to MRtrix convention
                 DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
@@ -1349,6 +1484,7 @@ def execute(): #pylint: disable=unused-variable
                 
                 akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                 logger.info(f"AKC outlier post-processing completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
             else:
                 akc_mask = np.zeros_like(mask)
@@ -1375,6 +1511,7 @@ def execute(): #pylint: disable=unused-variable
                         akc_upperlim=int(app.ARGS.akc_upperlim)
                     akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_upperlim)
                     akc_mask = vectorize(akc_mask, mask).astype(bool)
+                    akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
 
 
 
@@ -1397,7 +1534,7 @@ def execute(): #pylint: disable=unused-variable
                     logger.info(f"DT with fit smooth saved for TE={te}.")
                 
                 if (app.ARGS.DKI or app.ARGS.WDKI):
-                    if app.ARGS.db0restore:
+                    if app.ARGS.db0restore or app.ARGS.akc_outliers:
                         dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                     else:
                         dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
@@ -1408,6 +1545,10 @@ def execute(): #pylint: disable=unused-variable
                     # Ensure spatial dimensions are preserved for single-slice data
                     if DT.ndim == 3:
                         DT = np.expand_dims(DT, axis=2)
+
+                    if DT.shape[:3] != mask.shape:
+                        raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                        f"spatial shape {mask.shape}")
                     dt_ = {}
                     # Convert tensor coefficients to MRtrix convention
                     DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
