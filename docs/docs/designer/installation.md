@@ -40,7 +40,7 @@ We can then run DESIGNER by running: `singularity run designer2_<tag>.sif design
 
 ## Installing DESIGNER v2 (if you know what you are doing ;))
 
-If running DESIGNER v2 using Docker is not your preferred method, you can try to install DESIGNER v2 as a [Python package](https://pypi.org/project/designer2/). This method requires installation of fsl and mrtrix3 on your local machine.
+If running DESIGNER v2 using Docker is not your preferred method, you can try to install DESIGNER v2 as a [Python package](https://pypi.org/project/designer2/). This method requires installation of fsl, mrtrix3, and Tortoise `CreateGradientNonlinearityBMatrix` binary (if you are using gradient nonlinearity correction) on your local machine.
 
 ### PIP install
 

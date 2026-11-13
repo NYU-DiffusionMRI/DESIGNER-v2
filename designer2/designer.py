@@ -112,17 +112,17 @@ def usage(cmdline): #pylint: disable=unused-variable
         help='Path to scanner gradient coefficient file for gradient nonlinearity '
              'correction (spatial unwarping, backend chosen via -gnc_backend). Providing '
              'this enables the step and also produces a per-voxel gradient-deviation '
-             '(L) tensor field, written alongside the main output as '
-             '<output>_graddev.nii, for use with designer2/tmi.py\'s -gnc option. '
+             '(L) tensor field, written to the scratch directory as gnc_graddev.nii.gz '
+             '(use -nocleanup to keep it), for use with designer2/tmi.py\'s -gnc option. '
              'Currently only supported with -eddy combined with -rpe_pair or -rpe_none '
              '(not -rpe_all, -rpe_header, -eddy_groups, -pre_align, or '
              '-ants_motion_correction). Skipped if the BIDS sidecar(s) report '
              'NonlinearGradientCorrection=true; errors if the DWI and RPE sidecars disagree.')
-    gnc_options.add_argument('-gnc_backend', choices=['gradunwarp', 'tortoise'], default='gradunwarp',
+    gnc_options.add_argument('-gnc_backend', choices=['gradunwarp', 'tortoise'], default='tortoise',
         help='Backend used to compute the gradient nonlinearity correction warp and L '
-             'tensor. "gradunwarp" (default) uses gradient_unwarp.py plus FSL\'s '
-             'calc_grad_perc_dev; "tortoise" uses TORTOISE\'s '
-             'CreateGradientNonlinearityBMatrix. Both produce an equivalent corrected '
+             'tensor. "tortoise" (default) uses TORTOISE\'s '
+             'CreateGradientNonlinearityBMatrix; "gradunwarp" uses gradient_unwarp.py '
+             'plus FSL\'s calc_grad_perc_dev. Both produce an equivalent corrected '
              'warp and L tensor.')
     gnc_options.add_argument('-gnc_scanner', choices=['siemens', 'ge'], default='siemens',
         help='Scanner vendor. Passed through to gradient_unwarp for -gnc_backend '
