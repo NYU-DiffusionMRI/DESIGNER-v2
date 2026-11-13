@@ -949,8 +949,8 @@ def execute(): #pylint: disable=unused-variable
 
             if not app.ARGS.db0restore:
                 dwi_new = dwi_dki.copy()
-            dwi_new,dt_dki = replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
             
+            dwi_new,dt_dki = replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)            
             DT = vectorize(dt_dki, mask)
             # Ensure spatial dimensions are preserved for single-slice data
             if DT.ndim == 3:
@@ -1002,8 +1002,9 @@ def execute(): #pylint: disable=unused-variable
         if app.ARGS.fit_smoothing:
             logger.info("Starting tensor based smoothing...")
             if app.ARGS.DTI:
-                dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dti,_,_ = dti.dti_fit(dwi_new, mask, L=L_field)
+                dwi_new_dti = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+            
+                dt_dti,_,_ = dti.dti_fit(dwi_new_dti, mask, L=L_field)
 
                 DT = vectorize(dt_dti, mask)
                 # Ensure spatial dimensions are preserved for single-slice data
@@ -1022,14 +1023,6 @@ def execute(): #pylint: disable=unused-variable
                     dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 else:
                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    
-                print("\n--- DKI FIT DEBUG ---")
-                print("dwi_dki:", dwi_dki.shape)
-                print("dwi_new:", dwi_new.shape)
-                print("dki.grad:", np.asarray(dki.grad).shape)
-                print("dki.bval:", np.asarray(dki.grad.b).shape
-                    if hasattr(dki.grad, "b") else "no b attribute")
-                print("mask:", mask.shape)
                 dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
 
                 DT = vectorize(dt_dki, mask)
@@ -1526,8 +1519,8 @@ def execute(): #pylint: disable=unused-variable
             if app.ARGS.fit_smoothing:
                 logger.info(f"Starting tensor based smoothing for TE={te}...")
                 if app.ARGS.DTI:
-                    dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dti,_,_ = dti.dti_fit(dwi_new, mask, L=L_field)
+                    dwi_new_dti = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    dt_dti,_,_ = dti.dti_fit(dwi_new_dti, mask, L=L_field)
                     logger.info(f"DTI fit after smoothing completed for TE={te}.", extra={"dt_dti_shape": dt_dti.shape})
                     
                     DT = vectorize(dt_dti, mask)

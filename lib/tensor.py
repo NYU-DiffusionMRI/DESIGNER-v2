@@ -347,12 +347,6 @@ class TensorFitting(object):
         if L is None:
             ndwis = dwi.shape[-1]
             bs = np.ones((ndwis, 1))
-
-            print("ndwis:", ndwis)
-            print("dcnt:", dcnt.shape)
-            print("grad_base:", grad_base.shape)
-            print("dind:", dind.shape)
-            
             bD = np.tile(dcnt, (ndwis, 1)) * grad_base[:, dind[:, 0]] * grad_base[:, dind[:, 1]]
             bW = np.tile(wcnt, (ndwis, 1)) * grad_base[:, wind[:, 0]] * grad_base[:, wind[:, 1]] * grad_base[:, wind[:, 2]] * grad_base[:, wind[:, 3]]
             b = np.concatenate((
