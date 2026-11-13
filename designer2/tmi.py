@@ -710,7 +710,7 @@ def execute(): #pylint: disable=unused-variable
             dwi_new = restore_result
 
 
-            dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+            dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
             dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
 
             x,y,z = np.where(akc_mask == 1)
@@ -807,7 +807,7 @@ def execute(): #pylint: disable=unused-variable
                 )
 
                 # detect new outliers
-                dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+                dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
                 x,y,z = np.where(akc_mask == 1)
                 # DT = vectorize(dt_dki, mask)
                 if DT.shape[:3] != mask.shape:
@@ -1022,6 +1022,14 @@ def execute(): #pylint: disable=unused-variable
                     dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
                 else:
                     dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    
+                print("\n--- DKI FIT DEBUG ---")
+                print("dwi_dki:", dwi_dki.shape)
+                print("dwi_new:", dwi_new.shape)
+                print("dki.grad:", np.asarray(dki.grad).shape)
+                print("dki.bval:", np.asarray(dki.grad.b).shape
+                    if hasattr(dki.grad, "b") else "no b attribute")
+                print("mask:", mask.shape)
                 dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
 
                 DT = vectorize(dt_dki, mask)
@@ -1270,7 +1278,7 @@ def execute(): #pylint: disable=unused-variable
                         app.ARGS.n_cores
                     )
         
-                    dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+                    dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
                     dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
 
                     x,y,z = np.where(akc_mask == 1)
@@ -1344,7 +1352,7 @@ def execute(): #pylint: disable=unused-variable
                         )
 
                         # detect new outliers
-                        dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask)
+                        dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
                         x,y,z = np.where(akc_mask == 1)
                         # DT = vectorize(dt_dki, mask)
                         if DT.shape[:3] != mask.shape:
