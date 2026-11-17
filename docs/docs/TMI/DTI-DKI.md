@@ -106,7 +106,7 @@ tmi -DTI -DKI -gnc preproc_graddev.nii dwi.mif parameters_gnc
 
 An untagged NIfTI defaults to the TORTOISE convention. For native fields, use the original NIfTI so its affine still describes the component axes. TMI accepts nine row-ordered components or two trailing dimensions of size three. The native file must contain the full dimensionless Jacobian `J`, with identity for an ideal coil. DESIGNER's gradunwarp backend already merges the three FSL `calc_grad_perc_dev` outputs in x, y, z order and divides by 100. A displacement warp or a deviation-only field requires conversion before use.
 
-TMI transposes the native Jacobian and changes its basis using `L = R Jᵀ Rᵀ`. The columns of `R` are the unit directions of the field's voxel axes in scanner coordinates. For gradunwarp/FSL, the first column changes sign on a positive-determinant grid to account for FSL's x-axis convention. This acts on the nine components at each voxel and requires no spatial interpolation.
+TMI transposes the native Jacobian and changes its basis using `L = R Jᵀ Rᵀ`. The columns of `R` are the unit directions of the field's voxel axes in scanner coordinates. For gradunwarp/FSL, the first column changes sign on a positive-determinant grid to account for FSL's x-axis convention. This acts on the nine components at each voxel and requires no spatial interpolation. The TORTOISE graddev tensor is already sampled at voxel centers. DESIGNER handles the separate Siemens displacement-field sampling correction during image unwarping.
 
 **Using an external b-matrix.** If you have a nominal b-matrix for each volume, add `-bmat` to override the gradient table during fitting. To use the external b-matrix alone, omit `-gnc`.
 

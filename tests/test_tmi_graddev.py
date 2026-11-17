@@ -1,5 +1,7 @@
 """Component and spatial conventions for native and scanner-frame GNC fields."""
 
+import subprocess
+
 import nibabel as nib
 import numpy as np
 import pytest
@@ -59,3 +61,41 @@ def test_graddev_grid_must_match(tmp_path, monkeypatch):
     nib.save(nib.Nifti1Image(field, shifted), "shifted.nii")
     with pytest.raises(MRtrixError, match="same spatial grid"):
         load_gnc_field("shifted.nii", dwi)
+
+
+def test_native_graddev_recovers_fiber_direction(tmp_path, monkeypatch):
+    """A known 3-degree coil rotation must recover a fiber along scanner y."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LOKY_MAX_CPU_COUNT", "1")
+    c, s = np.cos(np.deg2rad(3.)), np.sin(np.deg2rad(3.))
+    rotation = np.array([[1., 0., 0.], [0., c, -s], [0., s, c]])
+    dirs = np.random.default_rng(123).normal(size=(36, 3))
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+    bvecs = np.vstack([np.zeros((2, 3)), dirs, dirs])
+    bvals = np.repeat([0., 1000., 2000.], [2, 36, 36])
+    np.savetxt("dwi.bvec", bvecs.T)
+    np.savetxt("dwi.bval", bvals[None])
+
+    affine = np.diag([-2., 2., 2., 1.])
+    nominal = bvecs * [-1., 1., 1.]  # FSL bvecs on this LAS grid to scanner RAS
+    actual = nominal @ rotation.T
+    eigenvalues = np.array([0.4, 1.5, 0.5])
+    signal = 100 * np.exp(-bvals / 1000 * (actual**2 @ eigenvalues))
+    shape = (3, 3, 3)
+    nib.save(nib.Nifti1Image(np.broadcast_to(signal, shape + signal.shape), affine), "dwi.nii")
+    # Reflection of x leaves a rotation about x unchanged. Native rows are coils.
+    native = np.broadcast_to(rotation.T.ravel(), shape + (9,))
+    nib.save(nib.Nifti1Image(native, affine), "preproc_graddev.nii")
+
+    cases = [("nominal", [], 3.), ("native", ["-gnc", "preproc_graddev.nii"], 0.),
+             ("legacy", ["-gnc", "preproc_graddev.nii", "-gnc_format", "scanner"], 6.)]
+    for output, options, expected_angle in cases:
+        subprocess.run(["tmi", "-DTI", "-DKI", "-fit_constraints", "0,0,0", "-n_cores", "1",
+                        *options, "dwi.nii", output], check=True)
+        for model in ("dti", "dki"):
+            # FE stores abs(FA * principal eigenvector). Its y component gives
+            # the unsigned angle to the true fiber after normalization.
+            fe = nib.load(f"{output}/fe_{model}.nii").get_fdata()
+            cos_angle = fe[..., 1] / np.linalg.norm(fe, axis=-1)
+            np.testing.assert_allclose(np.degrees(np.arccos(np.clip(cos_angle, 0., 1.))),
+                                       expected_angle, atol=1e-3)

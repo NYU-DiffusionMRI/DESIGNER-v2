@@ -207,7 +207,7 @@ Sotiropoulos, Saad Joabdi and Jesper L.R. Andersson. (2019). Automated quality c
 ### `-gnc_backend <backend>`
 - Backend used to compute the gradient nonlinearity correction warp and L tensor.
 - Options are `tortoise` and `gradunwarp`; default `tortoise`.
-- `tortoise` uses TORTOISE's `CreateGradientNonlinearityBMatrix`; `gradunwarp` uses `gradient_unwarp.py` plus FSL's `calc_grad_perc_dev`. Both produce a corrected warp and L tensor.
+- `tortoise` uses TORTOISE's `CreateGradientNonlinearityBMatrix`; `gradunwarp` uses `gradient_unwarp.py` plus FSL's `calc_grad_perc_dev`. For Siemens `.grad` coefficients, DESIGNER resamples the TORTOISE displacement field at voxel centers before unwarping the DWI. The native graddev tensor is already sampled at those centers. Pass it directly to `tmi -gnc`.
 
 ### `-gnc_scanner <scanner>`
 - Scanner vendor for gradient nonlinearity correction.
