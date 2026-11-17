@@ -47,6 +47,14 @@ By default, if none of the below options are used, TMI will not estimate paramet
 - Parameters extracted from the W tensor are labelled as `*_wdki.nii` (e.g. ad_wdki.nii, fa_wdki.nii, mk_wdki.nii).
 - Note that the estimated tensors (D and W) are identical but how we combine the tensor elements to make kurtosis scalar maps differs (DTI maps with _wdki are identical to those with _dki since there is no conflict with DTI-derived metrics).
 
+### `-gnc <field>`
+
+Use a voxelwise gradient field on the DWI grid for DTI/DKI fitting. Pass an original TORTOISE graddev NIfTI or a backend-tagged DESIGNER graddev NIfTI directly. See the [TORTOISE and gradunwarp examples]({{ site.baseurl }}{% link docs/TMI/DTI-DKI.md %}#gradient-nonlinearity-correction).
+
+### `-gnc_format <convention>`
+
+TMI reads the DESIGNER backend tag when present. Untagged NIfTI fields default to `tortoise`. Use `gradunwarp` for an untagged full Jacobian in FSL axes, or `scanner` for an already converted coil tensor (the default for MIF fields).
+
 ### `-fit_constraints <0,0,0>`
 - For use with `-DKI` or `-WDKI`
 - A comma separated list of either 0 or 1. Each index corresponds to a hard bound on the kurtosis tensor. Index 1 corresponds to diffusion tensor > 0, index 2 corresponds to kurtosis tensor > 0, index 3 corresponds to kurtosis tensor < 10. An input of `1,1,1` will perform a fully constrained DKI fit, and `0,0,0` will perform an unconstrained fit.
