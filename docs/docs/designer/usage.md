@@ -120,6 +120,13 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 >
 > If performing EPI susceptibility distortion correction: Andersson, J. L.; Skare, S. & Ashburner, J. How to correct susceptibility distortions in spin-echo echo-planar images: application to diffusion tensor imaging. NeuroImage, 2003, 20, 870-888.
 
+### `-eddy_device <auto|cpu|cuda>`
+- Select which FSL eddy build to run. Default: `auto`.
+- `auto`: call FSL's `eddy` wrapper, which uses `eddy_cuda` when a compatible GPU is detected and falls back to `eddy_cpu` otherwise.
+- `cpu`: always use `eddy_cpu` (or `eddy_openmp` on older FSL releases).
+- `cuda`: always use `eddy_cuda`; Designer exits with an error if no GPU is detected or no compatible `eddy_cuda*` build exists. An `eddy_cuda` soft-link in your `PATH` takes precedence over the builds in `$FSLDIR/bin`. In containers, pass the GPU through (e.g. `docker run --gpus all` or `singularity exec --nv`).
+- Use in conjunction with `-eddy`.
+
 ### `-eddy_groups <index1,index2,...>`
 - Specify how input series should be grouped when running eddy, for use with variable TE or b-shape data. 
 - Inputs should be a comma separated list of integers beginning with 1, i.g. 1,1,1,2,2,2 for 6 series where the first 3 series and second 3 series have different echo times.
@@ -185,6 +192,27 @@ Olesen, J. L., Ianus, A., Østergaard, L., Shemesh, N., & Jespersen, S. N. (2023
 {: .ref }
 > Matteo Bastiani, Michiel Cottaar, Sean P. Fitzgibbon, Sana Suri, Fidel Alfaro-Almagro, Stamatios N.
 Sotiropoulos, Saad Joabdi and Jesper L.R. Andersson. (2019). Automated quality control for within and between studies diffusion MRI data using a non-parametric framework for movement and distortion correction. Neurolmage 184:801-812.
+
+---
+
+## Options relating to gradient nonlinearity correction
+
+### `-gnc_grad_coeff <coeff_file>`
+- Path to the scanner gradient coefficient file for gradient nonlinearity correction (spatial unwarping; backend chosen via `-gnc_backend`).
+- Accepts either the original scanner-exported coefficient file (with a `#`-prefixed header) or one with the header already stripped; the header is stripped automatically if present before it's passed to the backend.
+- Providing this enables the gradient nonlinearity correction step and also produces a per-voxel gradient-deviation (L) tensor field, written to the scratch directory as `gnc_graddev.nii.gz` (use `-nocleanup` to keep the scratch directory), for use with `designer2/tmi.py`'s `-gnc` option.
+- Currently only supported with `-eddy` combined with `-rpe_pair` or `-rpe_none` (not `-rpe_all`, `-rpe_header`, `-eddy_groups`, `-pre_align`, or `-ants_motion_correction`).
+- Skipped if the BIDS sidecar(s) report `NonlinearGradientCorrection=true`; errors if the DWI and RPE sidecars disagree.
+
+### `-gnc_backend <backend>`
+- Backend used to compute the gradient nonlinearity correction warp and L tensor.
+- Options are `tortoise` and `gradunwarp`; default `tortoise`.
+- `tortoise` uses TORTOISE's `CreateGradientNonlinearityBMatrix`; `gradunwarp` uses `gradient_unwarp.py` plus FSL's `calc_grad_perc_dev`. Both produce a corrected warp and L tensor.
+
+### `-gnc_scanner <scanner>`
+- Scanner vendor for gradient nonlinearity correction.
+- Options are `siemens` and `ge`; default `siemens` (`ge` is not tested).
+- Passed through to `gradient_unwarp` for `-gnc_backend gradunwarp`; mapped to TORTOISE's GE/non-GE `--isGE` flag for `-gnc_backend tortoise`.
 
 ---
 

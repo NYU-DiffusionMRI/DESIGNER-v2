@@ -18,7 +18,7 @@ nav_order: 3
 ---
 ## Running DESIGNER v2 using Docker (most convenient)
 
-We provide convenient docker images to quickly get started with Designer without the need to install and its dependencies. <b>Official versions will be tagged</b> (nyudiffusionmri/designer2:\<tag\>; latest tag is v2.0.15), while we also maintain images following our main development branch (nyudiffusionmri/designer2:main). See [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/tags?page=1&ordering=last_updated) for an overview of all releases.
+We provide convenient docker images to quickly get started with Designer without the need to install and its dependencies. <b>Official versions will be tagged</b> (nyudiffusionmri/designer2:\<tag\>; latest tag is v2.0.16), while we also maintain images following our main development branch (nyudiffusionmri/designer2:main). See [Docker Hub](https://hub.docker.com/repository/docker/nyudiffusionmri/designer2/tags?page=1&ordering=last_updated) for an overview of all releases.
 
 To get started, install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine. If you are using an Apple Silicon device, navigate to the Docker app's general settings and enable the "Use Rosetta for x86/amd64 emulation on Apple Silicon" option for compatibility. We recommend setting the memory limit to at least 15GB for optimal performance.
 
@@ -40,7 +40,7 @@ We can then run DESIGNER by running: `singularity run designer2_<tag>.sif design
 
 ## Installing DESIGNER v2 (if you know what you are doing ;))
 
-If running DESIGNER v2 using Docker is not your preferred method, you can try to install DESIGNER v2 as a [Python package](https://pypi.org/project/designer2/). This method requires installation of fsl and mrtrix3 on your local machine.
+If running DESIGNER v2 using Docker is not your preferred method, you can try to install DESIGNER v2 as a [Python package](https://pypi.org/project/designer2/). This method requires installation of fsl, mrtrix3, and Tortoise `CreateGradientNonlinearityBMatrix` binary (if you are using gradient nonlinearity correction) on your local machine.
 
 ### PIP install
 

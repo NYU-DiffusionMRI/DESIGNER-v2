@@ -58,7 +58,7 @@ def save_meso_eddy_benchmark(save_path: Path, *, without_bids: bool = False):
         benchmark_runner = prepare_meso_eddy_e2e_runner(scratch_dir, data_dir, without_bids=without_bids)
         benchmark_runner.run()
 
-        stages: List[DWIStage] = ["topup", "designer"]
+        stages: List[DWIStage] = ["eddy", "designer"]
         fa_models: List[DiffusionModelType] = ["dti", "dki", "wdki"]
         
         stats_computer = StatsComputer(benchmark_runner, roi_dir=data_dir)

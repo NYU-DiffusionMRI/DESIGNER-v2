@@ -54,6 +54,11 @@ import numpy as np
 from scipy.linalg import svd
 from numpy_groupies.aggregate_numba import aggregate
 
+try:
+    from threadpoolctl import threadpool_limits
+except Exception:
+    threadpool_limits = None
+
 class MP(object):
     def __init__(self, dwi, kernel, step, shrinkage, algorithm, crop, n_cores):
         from skimage.util.shape import view_as_windows
@@ -156,7 +161,12 @@ class MP(object):
         """
         Main function to denoise the data matrix X
         """
+        if threadpool_limits is not None:
+            with threadpool_limits(limits=1):
+                return self._denoise_impl(X)
+        return self._denoise_impl(X)
 
+    def _denoise_impl(self, X):
         M = X.shape[0]
         N = X.shape[1]
         Mp = np.min((M,N))
@@ -322,24 +332,32 @@ def denoise(img, kernel=None, step=None, shrinkage=None, algorithm=None, crop=0,
         if (maxphi - minphi) > 2 * np.pi:
             print('rescaling phase from -pi to pi')
             phi = (img_phi - minphi) / (maxphi - minphi) * 2 * np.pi - np.pi
+        else:
+            phi = img_phi
         
         kernel_phase = [15, 15, 1]
         step_phase = [kernel_phase[0]//2-1, kernel_phase[1]//2-1, 1]
-        
+        crop_phase = min(phi.shape[-1] // 2, np.prod(kernel_phase) // 2)
+
         print('phase denoising')
         img = mag*np.exp(1j*phi)
-        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', phi.shape[-1]//2, n_cores)
+        mp_phase = MP(img, kernel_phase, step_phase, 'threshold', 'cordero-grande', crop_phase, n_cores)
         img_dn1, sigma1, npars1 = mp_phase.process()
         phi_dn = np.angle(img_dn1)
         
-        # out = ants.from_numpy(abs(npars1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
-        # ants.image_write(out, 'phase_npars.nii')        
+        out = ants.from_numpy(abs(npars1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
+        ants.image_write(out, 'phase_npars.nii')   
+
+        out = ants.from_numpy(abs(sigma1), origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
+        ants.image_write(out, 'phase_sigma.nii')   
+
+        out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
+        ants.image_write(out, 'phase_dn.nii')
+             
         # img_phase = np.angle(img * np.exp(-1j*phi_dn))
         # out = ants.from_numpy(img_phase, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
         # ants.image_write(out, 'phase_dn.nii')
-        out = ants.from_numpy(phi_dn, origin=nii.origin, spacing=nii.spacing, direction=nii.direction)
-        ants.image_write(out, 'phase_dn.nii')
-
+       
         print('magnitude denoising')
         img_np = np.real(img*np.exp(-1j*phi_dn))
         mp = MP(img_np, kernel, step, shrinkage, algorithm, crop, n_cores)
@@ -443,7 +461,7 @@ def main():
    
     (Signal, Sigma, Npars) = denoise(img_mag, kernel=extent, step=[2,2,2],  shrinkage=args.shrinkage, algorithm=args.algorithm, crop=0, phase=img_phi)
     
-    Signal_ants = ants.from_numpy(abs(Signal), origin=img_mag_ants.origin, spacing=img_mag_ants.spacing, direction=img_mag_ants.direction)
+    Signal_ants = ants.from_numpy(Signal, origin=img_mag_ants.origin, spacing=img_mag_ants.spacing, direction=img_mag_ants.direction)
     ants.image_write(Signal_ants, args.output)
 
     if args.noisemap:

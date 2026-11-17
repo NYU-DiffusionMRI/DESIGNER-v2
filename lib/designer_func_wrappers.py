@@ -19,6 +19,8 @@ run_normalization:
 
 import time
 import shutil
+from pathlib import Path
+from lib.utils import run_fsl_eddy, resolve_eddy_executable, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all, force_remove
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -63,7 +65,7 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
             adapt_length = None
 
         Signal, Sigma, Nparameters = mp.denoise(
-            dwi, phase=args_phase, kernel=extent, patchtype='nonlocal', patchsize=adapt_length, shrinkage=args_shrinkage, algorithm=args_algorithm
+            dwi, phase=args_phase, kernel=extent, patchtype='nonlocal', patchsize=adapt_length, shrinkage=args_shrinkage, algorithm=args_algorithm, n_cores=n_cores
             )
     else:    
         Signal, Sigma, Nparameters = mp.denoise(
@@ -81,17 +83,46 @@ def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metada
         Nparameters, origin=nii.origin[:-1], spacing=nii.spacing[:-1], direction=nii.direction[:-1,:])
     image_write(out, 'Npars_fixed_strides.nii')
 
-    run.command('mrconvert -fslgrad dwidn.bvec dwidn.bval dwidn.nii dwidn.mif', show=False)
+    run.command('mrconvert -fslgrad dwidn.bvec dwidn.bval -json_import working.json dwidn.nii dwidn.mif', show=False)
 
-    stride=dwi_metadata['stride_3dim']
-    run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
-    run.command('mrconvert -force -strides %s Npars_fixed_strides.nii Npars.nii' % (stride), show=False)
+    # Sigma and Nparameters are 3D maps, so their stride specification
+    # must use 3D axis indices rather than the original 4D axis indices.
+    stride_3dim = [int(s) for s in dwi_metadata['stride_3dim'].split(",")]
+
+    # Renumber the original axes consecutively while preserving their order
+    # and direction (positive/negative stride).
+    original_axes = sorted(set(abs(s) for s in stride_3dim))
+    axis_map = {old: new for new, old in enumerate(original_axes, start=1)}
+
+    sigma_strides = ",".join(
+        str(axis_map[abs(s)] if s > 0 else -axis_map[abs(s)])
+        for s in stride_3dim
+    )
+
+    print(f"Original 3D stride metadata: {dwi_metadata['stride_3dim']}")
+    print(f"Stride for 3D denoising maps: {sigma_strides}")
+
+    run.command(
+        f'mrconvert -force -strides {sigma_strides} '
+        'sigma_fixed_strides.nii sigma.nii',
+        show=False
+    )
+    run.command(
+        f'mrconvert -force -strides {sigma_strides} '
+        'Npars_fixed_strides.nii Npars.nii',
+        show=False
+    )
+
+    # stride=dwi_metadata['stride_3dim']
+    # run.command('mrconvert -force -strides %s sigma_fixed_strides.nii sigma.nii' % (stride), show=False)
+    # run.command('mrconvert -force -strides %s Npars_fixed_strides.nii Npars.nii' % (stride), show=False)
+
+
     run.command('mrconvert -strides -1,+2,+3,+4 sigma.nii noisemap.mif', show=False)
     app.cleanup('dwidn.nii')
     app.cleanup('dwidn.nii')
     app.cleanup('dwidn.bvec')
     app.cleanup('dwidn.bval')
-    
     #run.command('dwidenoise -noise fullnoisemap.mif -estimator Exp2 working.mif dwidn.mif')
     run.command('mrconvert -force dwidn.mif working.mif', show=False)
 
@@ -144,28 +175,6 @@ def run_patch2self():
     print(f"Denoising completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
 
-def get_phase_encoding_dimension(pe_dir, strides):
-    # Define mappings for 'i', 'j', 'k' to their respective anatomical axes
-    axis_map = {
-        'i': 0,  # Left-Right (X-axis)
-        'j': 1,  # Anterior-Posterior (Y-axis)
-        'k': 2   # Superior-Inferior (Z-axis)
-    }
-    
-    # Check for valid phase encoding direction
-    if pe_dir not in axis_map:
-        raise ValueError("Invalid phase encoding direction. Choose from 'i', 'j', or 'k'.")
-    
-    # Map 'i', 'j', or 'k' to the target anatomical axis
-    target_axis = axis_map[pe_dir]
-    
-    # Determine which dimension in strides corresponds to the target axis
-    try:
-        dimension = strides.index(target_axis + 1)  # +1 since strides use 1-based indexing
-    except ValueError:
-        raise ValueError("Strides configuration does not contain the expected axis order.")
-    
-    return dimension
 
 def run_degibbs(pf, pe_dir,orig_stride):
     """
@@ -243,6 +252,104 @@ def run_degibbs(pf, pe_dir,orig_stride):
 
     print(f"RPG gibbs correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
+
+def run_degibbs_flexible(input_file, pf, pe_dir, orig_stride, output_prefix="working"):
+    """
+    wrapper for rpg degibbs flexible for running other files besides main dMRI image
+    """
+
+    import lib.rpg as rpg
+    from mrtrix3 import run, app
+    from ants import image_read, image_write, from_numpy
+    import os, time, shutil
+    import numpy as np
+
+    # make optional if file name is the b0_pair_topup.nii -- dont need this
+    if ".mif" in input_file:
+        # if the file is a mif file then export the gradient information and convert to nifti
+        run.command(
+            f'mrconvert -force -export_grad_fsl {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {input_file} {output_prefix}.nii',
+            show=False
+        )
+    else:
+        # if the topup image is the b0 pair then don't make the bvec/bvals
+        if f'{input_file}' != f'{output_prefix}.nii':
+            run.command(
+                f'mrconvert -force {input_file} {output_prefix}.nii',
+                show=False
+            )
+        
+    nii = image_read(f'{output_prefix}.nii')
+    dwi = nii.numpy()
+
+    terminal_width = shutil.get_terminal_size().columns
+    separator = "=" * terminal_width
+
+    print("\n" + separator)
+    print(f'...RPG degibbsing {output_prefix}...')
+    start_time = time.time()
+
+    n_cores = app.ARGS.n_cores
+
+    strides_orig = [x for x in orig_stride.split(',')]
+    orient_orig = [abs(int(i)) for i in strides_orig]
+
+    if 'i' in pe_dir:
+        pe_dir = 0
+    elif 'j' in pe_dir:
+        pe_dir = 1
+    elif 'k' in pe_dir:
+        pe_dir = 2
+
+    pe_dir_orig = (np.array(orient_orig)-1)[pe_dir]
+    if pe_dir_orig == 2:
+        raise ValueError("PE dir=k should not be possible. Phase encoding direction must be along the first or second axis of the image.")
+
+    transpose_order = np.argsort(orient_orig)
+
+    # TESTING for 3D image transposing 
+    if dwi.ndim == 3:
+        dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(2,1,0))
+    elif dwi.ndim == 4:
+        dwi_t = np.ascontiguousarray(dwi.transpose(transpose_order).transpose(3,2,1,0))
+
+
+    dwi_dg_t = rpg.unring(
+        dwi_t, minW=1, maxW=3, nsh=20, 
+        pfv=float(pf), pfdimf=pe_dir_orig, phase_flag=False
+    )
+
+    if dwi.ndim == 3:
+        dwi_dg = dwi_dg_t[0].copy().transpose(2,1,0).transpose(np.argsort(transpose_order))
+    elif dwi.ndim == 4:
+        dwi_dg = dwi_dg_t[0].copy().transpose(3,2,1,0).transpose(np.argsort(transpose_order))
+
+    out = from_numpy(
+        dwi_dg, origin=nii.origin, spacing=nii.spacing, direction=nii.direction
+    )
+    image_write(out, f'{output_prefix}_rpg.nii')
+
+    if ('b0_pair_topup' not in output_prefix) and ('b0rpe' not in output_prefix):
+        # if the file is not the paired topup image then convert back to nifti 
+        run.command(
+            f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}.mif',
+            show=False
+        )
+
+        # also saving out mif file with _rpg prefix name
+        run.command(
+            f'mrconvert -force -fslgrad {output_prefix}_rpg.bvec {output_prefix}_rpg.bval {output_prefix}_rpg.nii {output_prefix}_rpg.mif',
+            show=False
+        )
+
+    # Timer
+    elapsed_time = time.time() - start_time
+    hours, rem = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    print(f"RPG gibbs correction on {output_prefix} completed in {int(hours):02}h {int(minutes):02}m {int(seconds):02}s.")
+    print(separator + "\n")
+
 
 def group_alignment(group_list):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
@@ -431,9 +538,29 @@ def run_ants_moco(dwi_metadata):
 
     pre_eddy_ants_moco(dwi_metadata)
 
-def run_eddy(shell_table, dwi_metadata):
+def finalize_gnc_single_interpolation(eddy_proc_dir: Path, dwi_metadata: dict) -> None:
+    """
+    Stash eddy's sequential (double-interpolation) output for comparison,
+    then replace dwiec.mif with the single-interpolation GNC+eddy composite.
+
+    Args:
+        eddy_proc_dir: Eddy's scratch processing directory (holds
+            dwi_post_eddy, its .eddy_displacement_fields.*, and bvals)
+        dwi_metadata: DESIGNER's input metadata dict (used for 'stride')
+    """
+    from mrtrix3 import run, image
+    from lib.gnc import finalize_single_interpolation
+
+    run.command('mrconvert -force dwiec.mif dwiec_gnc_doubleinterp.mif')
+    n_volumes = int(image.Header('dwiec.mif').size()[3])
+    eddy_out_prefix = str(eddy_proc_dir / 'dwi_post_eddy')
+    eddy_bvals_file = str(eddy_proc_dir / 'bvals')
+    finalize_single_interpolation(eddy_out_prefix, eddy_bvals_file, n_volumes, dwi_metadata, 'dwiec.mif')
+
+def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
     from mrtrix3 import app, run, path, image, fsl, MRtrixError
     from lib.designer_input_utils import splitext_
+    from lib.utils import get_bids_total_readout_time
     import numpy as np
     import json
     import os
@@ -450,11 +577,24 @@ def run_eddy(shell_table, dwi_metadata):
 
     run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
     run.command('mrconvert -force -fslgrad working.bvec working.bval -json_import working.json working.nii working.mif', show=False)
+    force_remove('working.nii')
 
     eddyopts_list = ['--cnr_maps', '--repol', '--data_is_shelled']
     if app.ARGS.set_seed:
         eddyopts_list.append('--initrand')
     eddyopts = ' '.join(eddyopts_list)
+    eddy_exe = resolve_eddy_executable(app.ARGS.eddy_device)
+    print(f'... Using eddy executable: {eddy_exe} (-eddy_device {app.ARGS.eddy_device})')
+
+    # GNC (gradient nonlinearity correction) needs eddy's per-volume displacement
+    # fields to compose a single-interpolation GNC+eddy warp afterwards; see
+    # run_gnc_precorrection()/finalize_single_interpolation() in lib/gnc/pipeline.py.
+    # gnc_enabled and its scope (rpe_pair/rpe_none only) are resolved in
+    # designer.py's execute().
+
+    # Use the GNC-corrected rpe_pair (if GNC ran) throughout this function
+    # instead of reading/mutating the global app.ARGS.rpe_pair.
+    rpe_pair = gnc_rpe_pair if gnc_rpe_pair else app.ARGS.rpe_pair
 
     fsl_suffix = fsl.suffix()
 
@@ -477,6 +617,10 @@ def run_eddy(shell_table, dwi_metadata):
     else:
         flag_variable_bshape = True
 
+    readout_time_per_volume = np.asarray(dwi_metadata.get('readout_time')) if dwi_metadata.get('readout_time') is not None else None
+
+    # BIDS-backed readout time is only threaded through the active rpe_pair / rpe_all paths.
+
     if flag_variable_TE or flag_variable_bshape:
         if app.ARGS.eddy_groups is None and app.ARGS.eddy_fakeb is None:
             raise MRtrixError('for variable TE data, the user must supply the \
@@ -490,7 +634,7 @@ def run_eddy(shell_table, dwi_metadata):
 
             fake_bvals = np.array([])
             for i, bval_path in enumerate(dwi_metadata['bvals']):
-                bvals = np.loadtxt(bval_path)
+                bvals = np.reshape(np.loadtxt(bval_path),(-1))
                 scaled_bvals = bvals * eddy_fakeb[i]
                 fake_bvals = np.concatenate((fake_bvals, scaled_bvals))
 
@@ -500,15 +644,16 @@ def run_eddy(shell_table, dwi_metadata):
                 all_concatenated_bvecs = np.vstack((all_concatenated_bvecs, bvecs))
 
             fakeb_grad = np.hstack((all_concatenated_bvecs, fake_bvals[:, np.newaxis]))
-            np.savetxt('fakeb_grad.txt', fakeb_grad, fmt='%0.8f')
-            print("Scaled b-values and concatenated b-vectors have been saved to fakeb_grad.txt")
+            fakeb_grad_file = 'fakeb_grad.txt'
+            np.savetxt(fakeb_grad_file, fakeb_grad, fmt='%0.8f')
+            print(f"Scaled b-values and concatenated b-vectors have been saved to {fakeb_grad_file}")
         
          # get TE of the PA
-        if app.ARGS.rpe_pair:
+        if rpe_pair:
             if app.ARGS.rpe_te:
                 te_pa = float(app.ARGS.rpe_te)
             else:
-                pa_fpath = splitext_(app.ARGS.rpe_pair)[0]
+                pa_fpath = splitext_(rpe_pair)[0]
                 pa_bids_path = pa_fpath + '.json'
                 if not os.path.exists(pa_bids_path):
                     raise MRtrixError('for variable TE data the RPE \
@@ -529,7 +674,7 @@ def run_eddy(shell_table, dwi_metadata):
                                   match any of the input echo times, please check.')
 
             bidslist = dwi_metadata['bidslist']
-            rpe_fpath = splitext_(app.ARGS.rpe_pair)[0]
+            rpe_fpath = splitext_(rpe_pair)[0]
             rpe_bids_path = rpe_fpath + '.json'
             rpe_bvals_path = rpe_fpath + '.bval'
             rpe_bvec_path = rpe_fpath + '.bvec'
@@ -543,13 +688,13 @@ def run_eddy(shell_table, dwi_metadata):
                     'pe_original_meanb0.mif'),
                     show=False)
                 
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                rpe_size = [ int(s) for s in image.Header(rpe_pair).size() ]
                 if len(rpe_size) == 4:
                     run.command('mrconvert -coord 3 0 -strides "%s" -json_import "%s" "%s" "%s"' % 
-                        (stride, rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                        (stride, rpe_bids_path, rpe_pair, 'rpe_b0.mif'))
                 else: 
                     run.command('mrconvert -strides "%s" -json_import "%s" "%s" "%s"' % 
-                        (stride,rpe_bids_path, app.ARGS.rpe_pair, 'rpe_b0.mif'))
+                        (stride,rpe_bids_path, rpe_pair, 'rpe_b0.mif'))
                     
                 #need to import pe_original_meanb0 bids with phase encoding info so we can run mrinfo -export_pe_eddy
                 run.command('mrconvert pe_original_meanb0.mif pe_original_meanb0.nii')
@@ -562,13 +707,13 @@ def run_eddy(shell_table, dwi_metadata):
                     'pe_original_meanb0.nii'),
                     show=False)
 
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                rpe_size = [ int(s) for s in image.Header(rpe_pair).size() ]
                 if len(rpe_size) == 4:
                     run.command('mrconvert -coord 3 0 -strides "%s" "%s" "%s"' % 
-                        (stride, app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                        (stride, rpe_pair, 'rpe_b0.nii'))
                 else: 
                     run.command('mrconvert -strides "%s" "%s" "%s"' % 
-                        (stride, app.ARGS.rpe_pair, 'rpe_b0.nii'))
+                        (stride, rpe_pair, 'rpe_b0.nii'))
             
             # extract brain from mean b0
             run.command('bet "%s" "%s" -f 0.2 -m' %
@@ -598,125 +743,120 @@ def run_eddy(shell_table, dwi_metadata):
                 gindsi_str = ','.join([str(k) for k in gindsi])
                 ginds.append(gindsi_str)
                 start += len(group_vol_inds[j])            
-           
             run.command('mrconvert -coord 3 "%s" working.mif "%s"' % 
                 (volume_idx,
                 'dwi_pre_eddy_' + str(i) + '.mif'),
                 show=False)
+
+            eddy_proc_dir = Path(f'eddy_processing_{i}')
+            eddy_proc_dir.mkdir(parents=True, exist_ok=True)
             
-            if app.ARGS.rpe_pair:
-                run.command('dwiextract -bzero "%s" - | mrmath - mean "%s" -axis 3' %
-                    ('dwi_pre_eddy_' + str(i) + '.mif', 
-                    'b0_pre_eddy_' + str(i) + '.nii'))
-                run.command('bet "%s" "%s" -f 0.2 -m' %
-                    ('b0_pre_eddy_' + str(i) + '.nii', 
-                    'b0_pre_eddy_' + str(i) + '_brain'))
+            if rpe_pair:
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_pre_eddy.nii" -axis 3')
+                run.command(f'bet "{eddy_proc_dir}/b0_pre_eddy.nii" "{eddy_proc_dir}/b0_pre_eddy_brain" -f 0.2 -m')
 
-                run.command('flirt -in "%s" -ref "%s" -out "%s" -dof 6' %
-                    ('rpe_b0_brain',
-                    'b0_pre_eddy_' + str(i) + '_brain',
-                    'rpe_to_ref_' + str(i)))
+                run.command(f'flirt -in "rpe_b0_brain" -ref "{eddy_proc_dir}/b0_pre_eddy_brain" -out "{eddy_proc_dir}/rpe_to_ref" -dof 6')
 
-                run.command('flirt -in "%s" -ref "%s" -out "%s" -dof 6' %
-                    ('pe_original_brain' + fsl_suffix, 
-                    'b0_pre_eddy_' + str(i) + '_brain', 
-                    'pe_to_ref_' + str(i)))
+                run.command(f'flirt -in "pe_original_brain{fsl_suffix}" -ref "{eddy_proc_dir}/b0_pre_eddy_brain" -out "{eddy_proc_dir}/pe_to_ref" -dof 6')
 
-                run.command('mrcat -force -axis 3 "%s" "%s" "%s"' %
-                    ('pe_to_ref_' + str(i) + fsl_suffix,
-                    'rpe_to_ref_' + str(i) + fsl_suffix,
-                    'b0_pair_topup_' + str(i) + '.nii'))
-
+                run.command(f'mrcat -force -axis 3 "{eddy_proc_dir}/pe_to_ref{fsl_suffix}" "{eddy_proc_dir}/rpe_to_ref{fsl_suffix}" "{eddy_proc_dir}/b0_pair_topup.nii"')
+                # Prepare topup acquisition parameters from BIDS if available
+                topup_acqp_file = None
                 if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                    run.command('mrinfo -force pe_original_meanb0.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
-                    run.command('mrinfo -force rpe_b0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
-                    filenames = ['topup_config_1.txt', 'topup_config_2.txt']
-                    with open('topup_acqp.txt', 'w') as outfile:
+                    run.command(f'mrinfo -force pe_original_meanb0.mif -export_pe_eddy "{eddy_proc_dir}/topup_config_1.txt" "{eddy_proc_dir}/topup_indicies_1.txt"')
+                    run.command(f'mrinfo -force rpe_b0.mif -export_pe_eddy "{eddy_proc_dir}/topup_config_2.txt" "{eddy_proc_dir}/topup_indicies_2.txt"')
+                    filenames = [f'{eddy_proc_dir}/topup_config_1.txt', f'{eddy_proc_dir}/topup_config_2.txt']
+                    topup_acqp_file = f'{eddy_proc_dir}/topup_acqp.txt'
+                    with open(topup_acqp_file, 'w') as outfile:
                         for fname in filenames:
                             with open(fname) as infile:
                                 outfile.write(infile.read())
-                else:
-                    acqp = np.zeros((2,3))
-                    if 'i' in pe_dir: acqp[:,0] = 1
-                    if 'j' in pe_dir: acqp[:,1] = 1
-                    if 'k' in pe_dir: acqp[:,2] = 1
-                    if '-' in pe_dir:
-                        acqp[0,:] = -acqp[0,:]
-                    else:
-                        acqp[1,:] = -acqp[1,:]
-                    
-                    acqp[acqp==-0] = 0
-                    acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
-                    np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-                # if any of the image dims are odd dont subsample during topup
-                odd_dims = [ int(s) for s in image.Header('pe_to_ref_' + str(i) + fsl_suffix).size()[:3] if s % 2 ]
-                if np.any(np.array(odd_dims)):
-                    flag_no_subsampling = True
-                else:
-                    flag_no_subsampling = False
-
-                if flag_no_subsampling:
-                    run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                        ('b0_pair_topup_' + str(i) + '.nii',
-                        'topup_acqp.txt',
-                        'topup_results_' + str(i),
-                        'topup_results_' + str(i) + fsl_suffix))
-                else:
-                    run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                        ('b0_pair_topup_' + str(i) + '.nii',
-                        'topup_acqp.txt',
-                        'topup_results_' + str(i),
-                        'topup_results_' + str(i) + fsl_suffix))
-                
-                # mask the topup corrected image
-                run.command('mrmath "%s" mean "%s" -axis 3' %
-                            ('topup_results_' + str(i) + fsl_suffix,
-                             'topup_corrected_' + str(i) + '_mean.nii'
-                            ))
-                 
-                run.command('bet "%s" "%s" -f 0.2 -m' %
-                    ('topup_corrected_' + str(i) + '_mean.nii', 
-                    'topup_corrected_' + str(i) + '_brain'))
-                
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
-                    ('eddy_processing_' + str(i), 
-                    eddyopts, 
-                    'topup_corrected_' + str(i) + '_brain_mask' + fsl_suffix,
-                    'topup_results_' + str(i),
+                topupinputfile = 'b0_pair_topup.nii'
+                # Run topup and prepare mask for eddy
+                brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                    f'{eddy_proc_dir}/"{topupinputfile}"',
                     pe_dir,
-                    'dwi_pre_eddy_' + str(i) + '.mif',
-                    'dwi_post_eddy_' + str(i) + '.mif'))
+                    f'topup_results_{i}',
+                    fsl_suffix,
+                    eddy_proc_dir,
+                    acqp_file=topup_acqp_file
+                )
+
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
                 
             elif app.ARGS.rpe_none:
-
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -pe_dir "%s" "%s" "%s"' % 
-                    ('eddy_processing_' + str(i), 
-                    eddyopts, 
-                    pe_dir,
-                    'dwi_pre_eddy_' + str(i) + '.mif',
-                    'dwi_post_eddy_' + str(i) + '.mif'))
+                # Create brain mask from mean b0 for eddy
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
+                run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
+                
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', f'{eddy_proc_dir}/b0_brain_mask.nii.gz', eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg)
                 
             elif app.ARGS.rpe_all:
                 ### this needs to be changed for realistic compatiblity to eddy_groups
                 run.command('mrconvert -export_grad_mrtrix grad.txt working.mif tmp.mif', show=False)
-                run.command('mrconvert -strides ' + stride + ' -grad grad.txt ' + app.ARGS.rpe_all + ' dwirpe.mif', show=False)
+                run.command(f'mrconvert -strides {stride} -grad grad.txt {app.ARGS.rpe_all} dwirpe.mif', show=False)
                 run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" "%s" "%s"' %
-                    ('eddy_processing',
-                     eddyopts, 
-                     pe_dir, 
-                     'dwi_pre_eddy_' + str(i) + '.mif',
-                     'dwi_post_eddy_' + str(i) + '.mif'))
+                
+                # Extract b0s from both forward and reverse PE data for topup
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_forward.nii" -axis 3')
+                run.command(f'dwiextract -bzero dwirpe.mif - | mrmath - mean "{eddy_proc_dir}/b0_reverse.nii" -axis 3')
+                
+                # Create brain masks for registration
+                run.command(f'bet "{eddy_proc_dir}/b0_forward.nii" "{eddy_proc_dir}/b0_forward_brain" -f 0.2 -m')
+                run.command(f'bet "{eddy_proc_dir}/b0_reverse.nii" "{eddy_proc_dir}/b0_reverse_brain" -f 0.2 -m')
+                
+                # Register reverse to forward
+                run.command(f'flirt -in "{eddy_proc_dir}/b0_reverse_brain.nii.gz" -ref "{eddy_proc_dir}/b0_forward_brain.nii.gz" -out "{eddy_proc_dir}/b0_reverse_to_forward" -dof 6')
+                
+                # Concatenate for topup
+                run.command(f'mrcat -axis 3 "{eddy_proc_dir}/b0_forward.nii" "{eddy_proc_dir}/b0_reverse_to_forward{fsl_suffix}" "{eddy_proc_dir}/b0_pair_topup.nii"')
+                
+                topupinputfile = 'b0_pair_topup.nii'
+                # Run topup and prepare mask for eddy
+                brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                    f'{eddy_proc_dir}/{topupinputfile}',
+                    pe_dir,
+                    f'topup_results_{i}',
+                    fsl_suffix,
+                    eddy_proc_dir
+                )
+                
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
+                
                 run.function(os.remove,'tmp.mif')
 
             elif app.ARGS.rpe_header:
-
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header "%s" "%s"' % 
-                ('eddy_processing',
-                 eddyopts,
-                'dwi_pre_eddy_' + str(i) + '.mif',
-                'dwi_post_eddy_' + str(i) + '.mif'))
+                # Extract PE information from header and identify opposing PE volumes
+                run.command(f'mrinfo -export_pe_table "dwi_pre_eddy_{i}.mif" "{eddy_proc_dir}/pe_scheme.txt"')
+                
+                # Extract b0 volumes for topup (first volume of each unique PE direction)
+                # This assumes the image has opposing PE directions in the header
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrconvert -coord 3 0,1 - "{eddy_proc_dir}/b0_pair_topup.nii"')
+                
+                # Create brain mask from mean b0
+                run.command(f'mrmath "{eddy_proc_dir}/b0_pair_topup.nii" mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
+                run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
+                
+                # Extract PE info for topup from the b0 volumes
+                run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrinfo -export_pe_eddy "{eddy_proc_dir}/topup_config.txt" "{eddy_proc_dir}/topup_indices.txt" -')
+                
+                topupinputfile = 'b0_pair_topup.nii'
+                # Run topup and prepare mask for eddy
+                brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                    f'{eddy_proc_dir}/{topupinputfile}',
+                    pe_dir,
+                    f'topup_results_{i}',
+                    fsl_suffix,
+                    eddy_proc_dir,
+                    acqp_file=f'{eddy_proc_dir}/topup_config.txt'
+                )
+                
+                pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
 
             run.command('dwiextract -bzero "%s" - | mrmath - mean "%s" -axis 3' %
                     ('dwi_post_eddy_' + str(i) + '.mif', 
@@ -740,23 +880,105 @@ def run_eddy(shell_table, dwi_metadata):
 
     # if not variable TE (not using eddy_groups - only run eddy once)
     else:
+        # Set up eddy processing directory (used by all rpe_* cases)
+        eddy_proc_dir = Path('eddy_processing')
+        eddy_proc_dir.mkdir(parents=True, exist_ok=True)
 
-        if app.ARGS.rpe_pair:
+        if rpe_pair:
             bidslist = dwi_metadata['bidslist']
-            rpe_fpath = splitext_(app.ARGS.rpe_pair)[0]
+            rpe_fpath = splitext_(rpe_pair)[0]
             rpe_bids_path = rpe_fpath + '.json'
             rpe_bvals_path = rpe_fpath + '.bval'
             rpe_bvec_path = rpe_fpath + '.bvec'
             
+            rpe_dir = rpe_pair
+
+           # if json for both rpe and pe data exists 
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                #if user wants to denoise their data, take the denoised result. Otherwise, take the raw dmri
+                if getattr(app.ARGS, "denoise", False):
+                    run.command('dwiextract -bzero dwidn.mif - | mrconvert -coord 3 0 - b0pe.mif')
+                else:
+                    run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
+
+                rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                n=1
+                #if rpe data has more than one volumes
                 if len(rpe_size) == 4:
-                    run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
+                    #extract rpe b0 only
+                    if os.path.exists(rpe_bvals_path) and os.path.exists(rpe_bvec_path):
+                        # rpe_pair may contain non-b0 volumes; filter using its gradient table
+                        run.command('dwiextract -fslgrad "%s" "%s" -bzero "%s" "%s"' %
+                                    (rpe_bvec_path, rpe_bvals_path, rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    else:
+                        # no gradient table available for the rpe_pair image; assume all
+                        # volumes are already b=0 (per -rpe_pair's "reverse PE b=0 image" doc)
+                        print('rpe_pair image has multiple volumes but no matching .bval/.bvec found; assuming all volumes are b=0')
+                        run.command('mrconvert "%s" "%s"' % (rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    rpe_dir=f"{eddy_proc_dir}/b0rpe_raw.nii"
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    n = rpe_size[-1] # number of rpe b0s
+                    # we may dg or dn rpe b0 if there are multiple rpe b0
+                    if n>1:
+                        #if degibbs, degibbs each rpe b0
+                        if getattr(app.ARGS, "degibbs", False):
+                            # degibbs individual rpe b0
+                            run_degibbs_flexible(rpe_dir, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
+
+                        #if denoise
+                        if getattr(app.ARGS, "denoise", False):
+                            # extract each rpe b0 into individual volumes
+                            rpeb0s_dir = Path('eddy_processing/rpe_b0s')
+                            rpeb0s_dir.mkdir(parents=True, exist_ok=True)
+
+                            rpelist=""
+                            for i in range(n):
+                                run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii' %
+                                            (rpe_dir, str(i), rpeb0s_dir, str(i)))
+                                if i!=0:
+                                    rpelist=rpelist + " {}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                                else:
+                                    rpelist="{}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+
+                            # rigid register to unbiased population template
+                            run.command('population_template "%s" -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
+                                        (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
+                            # merge to 4D rpe and average to denoise
+                            rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
+                            rpelist_transformed = " ".join(rpelist_new)
+                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' %
+                                    (rpelist_transformed, stride, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
+                            # population_template pads its output grid with a fixed margin
+                            # (10 voxels/side) meant for inter-subject registration deviation;
+                            # since these are repeat b0 volumes of the same subject/session,
+                            # that margin has no source data and is left as NaN, which topup
+                            # cannot tolerate downstream. Reslice back onto the original
+                            # native grid to discard it.
+                            run.command('mrtransform "%s" -template "%s/rpeb0_0.nii" "%s/b0rpe_denoise_crop.nii"' %
+                                        (rpe_dir, rpeb0s_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_crop.nii"
+                            # the rigid registration's own small rotation/translation can still
+                            # leave a thin NaN sliver at the FOV edges even after cropping back
+                            # to the native grid; zero it out since topup tolerates no NaN at all
+                            run.command('mrcalc "%s" -finite "%s" 0 -if "%s/b0rpe_denoise_clean.nii"' %
+                                        (rpe_dir, rpe_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_clean.nii"
+
+                    #take the first rpe b0
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    if len(rpe_size) == 4:
+                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" -json_import "%s" b0rpe.mif' %
+                                (rpe_dir, stride, rpe_bids_path))
+                    else:
+                        run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' %
+                                (rpe_dir, stride, rpe_bids_path))
+                        
                 else: 
+                    #if just one single rpe b0, can't do denoising and don't do degibbsing on rpe b0 yet
                     run.command('mrconvert "%s" -strides "%s" -json_import "%s" b0rpe.mif' % 
-                            (app.ARGS.rpe_pair, stride, rpe_bids_path))
+                            (rpe_dir, stride, rpe_bids_path))
                 
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
                 run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
@@ -769,12 +991,86 @@ def run_eddy(shell_table, dwi_metadata):
                 run.command('mrconvert b0rpe.mif b0rpe.nii')
                 run.command('mrconvert b0pe.mif b0pe.nii')
             else:
-                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
-                rpe_size = [ int(s) for s in image.Header(app.ARGS.rpe_pair).size() ]
+                if getattr(app.ARGS, "denoise", False):
+                    run.command('dwiextract -bzero dwidn.mif - | mrconvert -coord 3 0 - b0pe.nii')
+                else:
+                    run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
+
+                rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                n=1
                 if len(rpe_size) == 4:
-                    run.command('mrconvert "%s" -strides "%s" -coord 3 0 b0rpe.nii' % (app.ARGS.rpe_pair, stride))
+                    #extract rpe b0 only
+                    if os.path.exists(rpe_bvals_path) and os.path.exists(rpe_bvec_path):
+                        # rpe_pair may contain non-b0 volumes; filter using its gradient table
+                        run.command('dwiextract -fslgrad "%s" "%s" -bzero "%s" "%s"' %
+                                    (rpe_bvec_path, rpe_bvals_path, rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    else:
+                        # no gradient table available for the rpe_pair image; assume all
+                        # volumes are already b=0 (per -rpe_pair's "reverse PE b=0 image" doc)
+                        print('rpe_pair image has multiple volumes but no matching .bval/.bvec found; assuming all volumes are b=0')
+                        run.command('mrconvert "%s" "%s"' % (rpe_dir, f"{eddy_proc_dir}/b0rpe_raw.nii"))
+                    rpe_dir=f"{eddy_proc_dir}/b0rpe_raw.nii"
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    n = rpe_size[-1] # number of rpe b0s
+                    # we may dg or dn rpe b0 if there are multiple rpe b0
+                    if n>1:
+                        #if degibbs
+                        if getattr(app.ARGS, "degibbs", False):
+                            # degibbs individual rpe b0
+                            run_degibbs_flexible(rpe_pair, dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
+                        
+                        #if denoise
+                        if getattr(app.ARGS, "denoise", False):
+                            # extract each rpe b0 into individual volumes
+                            rpeb0s_dir = Path('eddy_processing/rpe_b0s')
+                            rpeb0s_dir.mkdir(parents=True, exist_ok=True)
+                            rpelist=""
+                            for i in range(n):
+                                run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii ' %
+                                            (rpe_dir, str(i), rpeb0s_dir, str(i)))
+                                if i!=0:
+                                    rpelist=rpelist + " {}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                                else:
+                                    rpelist="{}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                            # rigid register to unbiased population template
+                            run.command('population_template %s -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
+                                        (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
+                            # merge to 4D rpe and average to denoise
+                            rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
+                            rpelist_transformed = " ".join(rpelist_new)
+                            run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' %
+                                    (rpelist_transformed, stride, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
+                            # population_template pads its output grid with a fixed margin
+                            # (10 voxels/side) meant for inter-subject registration deviation;
+                            # since these are repeat b0 volumes of the same subject/session,
+                            # that margin has no source data and is left as NaN, which topup
+                            # cannot tolerate downstream. Reslice back onto the original
+                            # native grid to discard it.
+                            run.command('mrtransform "%s" -template "%s/rpeb0_0.nii" "%s/b0rpe_denoise_crop.nii"' %
+                                        (rpe_dir, rpeb0s_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_crop.nii"
+                            # the rigid registration's own small rotation/translation can still
+                            # leave a thin NaN sliver at the FOV edges even after cropping back
+                            # to the native grid; zero it out since topup tolerates no NaN at all
+                            run.command('mrcalc "%s" -finite "%s" 0 -if "%s/b0rpe_denoise_clean.nii"' %
+                                        (rpe_dir, rpe_dir, eddy_proc_dir))
+                            rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_clean.nii"
+                            run.command('mrconvert "%s" -strides "%s" b0rpe.nii' %
+                                (rpe_dir, stride))
+
+                    #take the first rpe b0
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    if len(rpe_size) == 4:
+                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" b0rpe.nii' % 
+                                (rpe_dir, stride))
+                    else:
+                        run.command('mrconvert "%s" -strides "%s" b0rpe.mif' % 
+                                (rpe_dir, stride))
+                                  
                 else: 
-                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, app.ARGS.rpe_pair))
+                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, rpe_pair))
 
                 acqp = np.zeros((2,3))
                 if 'i' in pe_dir: acqp[:,0] = 1
@@ -789,104 +1085,97 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
-            run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
-
-            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
-            if np.any(np.array(odd_dims)):
-                flag_no_subsampling = True
-            else:
-                flag_no_subsampling = False
-
-            if flag_no_subsampling:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-            else:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-                
-            # mask the topup corrected image
-            run.command('mrmath %s mean %s -axis 3' %
-                        ('topup_results' + fsl_suffix,
-                            'topup_corrected_mean.nii'
-                        ))
-                 
-            run.command('bet %s %s -f 0.2 -m' %
-                ('topup_corrected_mean.nii', 
-                'topup_corrected_brain'))
+            #if degibbs is on and there is only one rpe b0 volume (has not been corrected for gibbs)
+            if getattr(app.ARGS, "degibbs", False) and (n==1):
+                # assuming the input data can be the same for forward and reversed phase encoding? *** 
+                # the degibbsed image will be called b0_pair_topup_rpg.nii
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+                run_degibbs_flexible("b0_pair_topup.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0_pair_topup")
             
-            if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing', 
-                        eddyopts, 
-                        'topup_corrected_brain_mask' + fsl_suffix,
-                        'topup_results',
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
+            #if degibbs is on and there multiple rpe b0 volumes (has been corrected for gibbs)
+            elif getattr(app.ARGS, "degibbs", False) and (n>1):
+                # degibbs pe only
+                run.command('mrcat -axis 3 b0pe.nii b0pe.nii b0_pair_topup_temp.nii')
+                run_degibbs_flexible("b0_pair_topup_temp.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="b0_pair_topup_temp")
+                run.command('mrconvert b0_pair_topup_temp_rpg.nii -coord 3 0 b0pe_rpg.nii')
+                run.command('flirt -in b0rpe.nii -ref b0pe_rpg.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe_rpg.nii b0rpe2pe.nii.gz "%s"'  % 
+                            (f"{eddy_proc_dir}/b0_pair_topup_rpg.nii"))
+                run.function(os.remove, 'b0_pair_topup_temp.nii', show=False)
+                run.function(os.remove, 'b0_pair_topup_temp_rpg.nii', show=False)
             else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -topup_files "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing',
-                        'fakeb_grad.txt', 
-                        eddyopts, 
-                        'topup_corrected_brain_mask' + fsl_suffix,
-                        'topup_results',
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.nii b0rpe2pe.nii.gz b0_pair_topup.nii')
+
+            if getattr(app.ARGS, "degibbs", False):
+                topupinputfile = 'b0_pair_topup_rpg.nii'
+            else:
+                topupinputfile = 'b0_pair_topup.nii'
+                # Move intermediate files into scratch directory
+                run.command('mv b0_pair_topup.nii eddy_processing/')
+
+            run.command('mv topup_acqp.txt eddy_processing/')
+            
+            # Run topup and prepare mask for eddy
+            brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                f'{eddy_proc_dir}/{topupinputfile}',
+                pe_dir,
+                'topup_results',
+                fsl_suffix,
+                eddy_proc_dir,
+                acqp_file=f'{eddy_proc_dir}/topup_acqp.txt'
+            )
+
+            # Call eddy
+            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
+
+            if gnc_enabled:
+                finalize_gnc_single_interpolation(eddy_proc_dir, dwi_metadata)
 
         elif app.ARGS.rpe_none:
+            # Create brain mask from mean b0 for eddy
+            run.command(f'dwiextract -bzero working.mif - | mrconvert -coord 3 0 - "{eddy_proc_dir}/b0_mean.nii"')
+            run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
+            
+            # Call eddy
+            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
 
-            run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.nii')
-            run.command('bet %s %s -f 0.2 -m' %
-                ('b0pe.nii', 
-                'b0_pe_brain'))
-            
-            if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing', 
-                        eddyopts, 
-                        'b0_pe_brain_mask' + fsl_suffix,
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
-            else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_none -eddy_mask "%s" -pe_dir "%s" "%s" "%s"' % 
-                        ('eddy_processing', 
-                        'fakeb_grad.txt', 
-                        eddyopts, 
-                        'b0_pe_brain_mask' + fsl_suffix,
-                        pe_dir,
-                        'working.mif',
-                        'dwiec.mif'))
-            
+            if gnc_enabled:
+                finalize_gnc_single_interpolation(eddy_proc_dir, dwi_metadata)
+
         elif app.ARGS.rpe_all:
+            rpe_dir = app.ARGS.rpe_all
+
             # run an initial topup to create a brain mask
             run.command('mrconvert -export_grad_mrtrix grad.txt dwi.mif tmp.mif', show=False)
-            run.command('dwiextract -bzero working.mif - | mrconvert -coord 3 0 - b0pe.mif')
+
+            #if user wants to denoise their data
+            if getattr(app.ARGS, "denoise", False):
+                run.command('dwiextract -bzero dwidn.mif - | mrconvert -coord 3 0 - b0pe.mif')
+            else:
+                run.command('dwiextract -bzero dwi.mif - | mrconvert -coord 3 0 - b0pe.mif')
 
             bidslist = dwi_metadata['bidslist']
             rpe_fpath = splitext_(app.ARGS.rpe_all)[0]
             rpe_bids_path = rpe_fpath + '.json'
             
             if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
-                run.command('mrconvert -grad grad.txt -strides  -json_import "%s" "%s" dwirpe.mif' % (stride,rpe_bids_path,app.ARGS.rpe_all))
-                run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.mif')
+                run.command('mrconvert -grad grad.txt -strides "%s" -json_import "%s" "%s" dwirpe.mif' % (stride, rpe_bids_path, app.ARGS.rpe_all))
+                run.command('dwiextract -bzero dwirpe.mif b0rpe.mif')
+                run.command('mrconvert -coord 3 0 b0rpe.mif b0rpe_0.mif')
                 run.command('mrinfo b0pe.mif -export_pe_eddy topup_config_1.txt topup_indicies_1.txt')
-                run.command('mrinfo b0rpe.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
+                run.command('mrinfo b0rpe_0.mif -export_pe_eddy topup_config_2.txt topup_indicies_2.txt')
                 filenames = ['topup_config_1.txt', 'topup_config_2.txt']
                 with open('topup_acqp.txt', 'w') as outfile:
                     for fname in filenames:
                         with open(fname) as infile:
                             outfile.write(infile.read())
-                run.command('mrconvert b0rpe.mif b0rpe.nii')
+                # run.command('mrconvert b0rpe.mif b0rpe.nii')
             else:
                 acqp = np.zeros((2,3))
                 if 'i' in pe_dir: acqp[:,0] = 1
@@ -901,75 +1190,221 @@ def run_eddy(shell_table, dwi_metadata):
                 acqp = np.hstack((acqp, np.array([0.1,0.1])[...,None]))
                 np.savetxt('topup_acqp.txt', acqp, fmt="%1.2f")
 
-            run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
-            run.command('dwiextract -bzero dwirpe.mif - | mrconvert -coord 3 0 - b0rpe.nii')
-            run.command('mrconvert b0pe.mif b0pe.nii')
-            run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
-            run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
+                run.command('mrconvert -strides "%s" -grad grad.txt "%s" dwirpe.mif' % (stride, app.ARGS.rpe_all))
+                run.command('dwiextract -bzero dwirpe.mif b0rpe.mif')
+                # run.command('dwiextract -bzero dwirpe.mif - | mrconvert -strides "%s" -coord 3 0 - b0rpe.nii' % 
+                #             (stride))
 
-            # if any of the image dims are odd dont subsample during topup. might be better off changing this to padding so topup doesnt take forever
-            odd_dims = [ int(s) for s in image.Header('b0pe.nii').size()[:3] if s % 2 ]
-            if np.any(np.array(odd_dims)):
-                flag_no_subsampling = True
-            else:
-                flag_no_subsampling = False
+            rpe_size = [ int(s) for s in image.Header("b0rpe.mif").size() ]
+            n=1
+            if len(rpe_size) == 4:
+                n = rpe_size[-1] # number of rpe b0s 
+                # we may dg or dn rpe b0 if there are multiple rpe b0
+                if n>1:
+                    #if degibbs
+                    if getattr(app.ARGS, "degibbs", False):
+                        # degibbs individual rpe b0
+                        run_degibbs_flexible("b0rpe.mif", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0rpe")
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_rpg.nii"
+                    
+                    #if denoise
+                    if getattr(app.ARGS, "denoise", False):
+                        # extract each rpe b0 into individual volumes
+                        rpeb0s_dir = Path('eddy_processing/rpe_b0s')
+                        rpeb0s_dir.mkdir(parents=True, exist_ok=True)
+                        rpelist=""
+                        for i in range(n):
+                            run.command(' mrconvert "%s" -coord 3 %s "%s"/rpeb0_%s.nii ' %
+                                        (rpe_dir, str(i), rpeb0s_dir, str(i)))
+                            if i!=0:
+                                rpelist=rpelist + " {}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                            else:
+                                rpelist="{}/rpeb0_{}.nii".format(rpeb0s_dir, str(i))
+                        # rigid register to unbiased population template
+                        run.command('population_template "%s" -type rigid -transformed_dir "%s"/transformed "%s"/template.nii ' %
+                                    (rpeb0s_dir, rpeb0s_dir, rpeb0s_dir))
+                        # merge to 4D rpe and average to denoise
+                        rpelist_new=glob.glob(os.path.join(rpeb0s_dir,'transformed/rpeb0*'))
+                        rpelist_transformed = " ".join(rpelist_new)
+                        run.command('mrcat -axis 3 %s - | mrmath - mean - -axis 3 | mrconvert - -strides "%s" "%s"/b0rpe_denoise.nii ' %
+                                (rpelist_transformed, stride, eddy_proc_dir))
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise.nii"
+                        # population_template pads its output grid with a fixed margin
+                        # (10 voxels/side) meant for inter-subject registration deviation;
+                        # since these are repeat b0 volumes of the same subject/session,
+                        # that margin has no source data and is left as NaN, which topup
+                        # cannot tolerate downstream. Reslice back onto the original
+                        # native grid to discard it.
+                        run.command('mrtransform "%s" -template "%s/rpeb0_0.nii" "%s/b0rpe_denoise_crop.nii"' %
+                                    (rpe_dir, rpeb0s_dir, eddy_proc_dir))
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_crop.nii"
+                        # the rigid registration's own small rotation/translation can still
+                        # leave a thin NaN sliver at the FOV edges even after cropping back
+                        # to the native grid; zero it out since topup tolerates no NaN at all
+                        run.command('mrcalc "%s" -finite "%s" 0 -if "%s/b0rpe_denoise_clean.nii"' %
+                                    (rpe_dir, rpe_dir, eddy_proc_dir))
+                        rpe_dir = f"{eddy_proc_dir}/b0rpe_denoise_clean.nii"
+                        run.command('mrconvert "%s" -strides "%s" b0rpe.nii' %
+                                (rpe_dir, stride))
 
-            if flag_no_subsampling:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --subsamp=1 --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
-            else:
-                run.command('topup --imain="%s" --datain="%s" --config=b02b0.cnf --scale=1 --out="%s" --iout="%s"' %
-                    ('b0_pair_topup.nii',
-                    'topup_acqp.txt',
-                    'topup_results',
-                    'topup_results' + fsl_suffix))
+                    #take the first rpe b0
+                    rpe_size = [ int(s) for s in image.Header(rpe_dir).size() ]
+                    if len(rpe_size) == 4:
+                        run.command('mrconvert "%s" -coord 3 0 -strides "%s" b0rpe.nii' % 
+                                (rpe_dir, stride))
+                                    
+                else: 
+                    run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, rpe_pair))
+                    rpe_dir = "b0rpe.nii"
+               
+            else: 
+                run.command('mrconvert -strides "%s" "%s" b0rpe.nii' % (stride, rpe_pair))
                 
-            # mask the topup corrected image
-            run.command('mrmath "%s" mean "%s" -axis 3' %
-                        ('topup_results' + fsl_suffix,
-                            'topup_corrected_mean.nii'
-                        ))
-                 
-            run.command('bet "%s" "%s" -f 0.2 -m' %
-                ('topup_corrected_mean.nii', 
-                'topup_corrected_brain'))
+            run.command('mrconvert b0pe.mif b0pe.nii')
+
+            if getattr(app.ARGS, "degibbs", False) and (n==0):
+                # assuming the input data can be the same for forward and reversed phase encoding? *** 
+                # the degibbsed image will be called b0_pair_topup_rpg.nii
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
+                run_degibbs_flexible("b0_pair_topup.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix=f"{eddy_proc_dir}/b0_pair_topup")
+            elif getattr(app.ARGS, "degibbs", False) and (n>1):
+                # degibbs pe only
+                run.command('mrcat -axis 3 b0pe.nii b0pe.nii b0_pair_topup_temp.nii')
+                run_degibbs_flexible("b0_pair_topup_temp.nii", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="b0_pair_topup_temp")
+                run.command('mrconvert b0_pair_topup_temp_rpg.nii -coord 3 0 b0pe_rpg.nii')
+                run.command('flirt -in b0rpe.nii -ref b0pe_rpg.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe_rpg.nii b0rpe2pe.nii.gz "%s"'  % 
+                            (f"{eddy_proc_dir}/b0_pair_topup_rpg.nii"))
+                run.function(os.remove, 'b0_pair_topup_temp.nii', show=False)
+                run.function(os.remove, 'b0_pair_topup_temp_rpg.nii', show=False)
+            else:
+                run.command('flirt -in b0rpe.nii -ref b0pe.nii -dof 6 -out b0rpe2pe.nii.gz')
+                run.command('mrcat -axis 3 b0pe.mif b0rpe2pe.nii.gz b0_pair_topup.nii')
 
             run.command('mrcat -axis 3 working.mif dwirpe.mif dwipe_rpe.mif')
-            
-            if app.ARGS.eddy_fakeb is None:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
-                            ('eddy_processing',
-                            eddyopts, 
-                            pe_dir,
-                            'topup_corrected_brain_mask' + fsl_suffix
-                            ))
+
+
+            if getattr(app.ARGS, "degibbs", False):
+                topupinputfile = 'b0_pair_topup_rpg.nii'
             else:
-                run.command('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_all -pe_dir "%s" -eddy_mask "%s" dwipe_rpe.mif dwiec.mif' %
-                            ('eddy_processing',
-                            'fakeb_grad.txt',
-                            eddyopts, 
-                            pe_dir,
-                            'topup_corrected_brain_mask' + fsl_suffix
-                            ))
-            run.function(os.remove,'tmp.mif')
+                topupinputfile = 'b0_pair_topup.nii'
+                # Move intermediate files into scratch directory
+                run.command('mv b0_pair_topup.nii eddy_processing/')
+            run.command('mv topup_acqp.txt eddy_processing/')
+            # Create manual PE scheme for concatenated data only when BIDS doesn't exist
+            # (when BIDS exists, PE info is already in working.mif and dwirpe.mif headers)
+            if not (os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path)):
+                n_vols_fwd = int(image.Header('working.mif').size()[3])
+                n_vols_rev = int(image.Header('dwirpe.mif').size()[3])
+                pe_scheme_path = f'{eddy_proc_dir}/dwi_manual_pe_scheme.txt'
+                write_rpe_all_pe_scheme(pe_scheme_path, pe_dir, n_vols_fwd, n_vols_rev)
+                
+                # Import PE scheme into concatenated image
+                run.command(f'mrconvert dwipe_rpe.mif -import_pe_table {pe_scheme_path} dwipe_rpe_with_pe.mif')
+                run.command('mv dwipe_rpe_with_pe.mif dwipe_rpe.mif')
+            
+
+            # Run topup and prepare mask for eddy
+            readout_time_arg = None
+            if os.path.exists(bidslist[0]) and os.path.exists(rpe_bids_path):
+                n_vols_rev = int(image.Header('dwirpe.mif').size()[3])
+                readout_time_arg = list(np.asarray(dwi_metadata.get('readout_time')).tolist()) + [get_bids_total_readout_time(rpe_bids_path)] * n_vols_rev
+            brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                f'{eddy_proc_dir}/{topupinputfile}',
+                pe_dir,
+                'topup_results',
+                fsl_suffix,
+                eddy_proc_dir,
+                acqp_file=f'{eddy_proc_dir}/topup_acqp.txt',
+                include_field_map=True
+            )
+
+            # Call eddy (PE info now in dwipe_rpe.mif header)
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            run_fsl_eddy(f'dwipe_rpe.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=readout_time_arg)
+            
+            # Volume recombination with distortion-based weighting
+            # Eddy outputs 2N volumes (N forward + N reverse PE), which we combine
+            # into N volumes using Jacobian weights for optimal SNR (Skare & Bammer 2010)
+            n_vols = int(image.Header('working.mif').size()[3])
+            
+            # Load phase encoding parameters and get field map from topup
+            eddy_config = np.loadtxt(f'{eddy_proc_dir}/eddy_config.txt')
+            if eddy_config.ndim == 1 or eddy_config.shape[0] != 2:
+                raise MRtrixError(f'Expected 2 PE directions for -rpe_all, got {eddy_config.shape[0] if eddy_config.ndim > 1 else 1}')
+
+            field_map = f'{topup_prefix}_field_map.nii.gz'
+            
+            # Compute Jacobian-based weights for forward and reverse PE acquisitions
+            compute_jacobian_weight_for_rpe_all(field_map, eddy_config[0], 'fwd', eddy_proc_dir)
+            compute_jacobian_weight_for_rpe_all(field_map, eddy_config[1], 'rev', eddy_proc_dir)
+            
+            # Combine each volume pair using formula: (I_fwd*w_fwd + I_rev*w_rev) / (w_fwd + w_rev)
+            app.console(f'Combining {n_vols} volume pairs with distortion-based weighting')
+            weight_fwd = f'{eddy_proc_dir}/weight_fwd.mif'
+            weight_rev = f'{eddy_proc_dir}/weight_rev.mif'
+            combined_files = []
+            for i in range(n_vols):
+                run.command(f'mrconvert dwiec.mif vol_fwd.mif -coord 3 {i}', show=False)
+                run.command(f'mrconvert dwiec.mif vol_rev.mif -coord 3 {i + n_vols}', show=False)
+                combined_file = f'combined{i}.mif'
+                run.command(f'mrcalc vol_fwd.mif {weight_fwd} -mult '
+                           f'vol_rev.mif {weight_rev} -mult -add '
+                           f'{weight_fwd} {weight_rev} -add -divide 0.0 -max {combined_file}', show=False)
+                combined_files.append(combined_file)
+                run.function(os.remove, 'vol_fwd.mif', show=False)
+                run.function(os.remove, 'vol_rev.mif', show=False)
+            
+            # Concatenate combined volumes and cleanup
+            combined_list = ' '.join(combined_files)
+            run.command(f'mrcat {combined_list} dwiec_combined.mif -axis 3')
+            for f in combined_files:
+                run.function(os.remove, f, show=False)
+            run.function(os.remove, weight_fwd)
+            run.function(os.remove, weight_rev)
+            run.command('mv dwiec_combined.mif dwiec.mif')
+            run.function(os.remove, 'tmp.mif')
 
         elif app.ARGS.rpe_header:
-            if app.ARGS.eddy_fakeb is None: 
-                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
-                    ('eddy_processing',eddyopts))
-            else:
-                cmd = ('dwifslpreproc -nocleanup -scratch "%s" -grad "%s" -eddy_options "%s" -rpe_header working.mif dwiec.mif' % 
-                    ('eddy_processing','fakeb_grad.txt', eddyopts))
-            run.command(cmd)
+            # Extract PE information from header and identify opposing PE volumes
+            run.command(f'mrinfo -export_pe_table working.mif "{eddy_proc_dir}/pe_scheme.txt"')
+            
+            # Extract b0 volumes for topup (first volume of each unique PE direction)
+            # This assumes the image has opposing PE directions in the header
+            run.command(f'dwiextract -bzero working.mif - | mrconvert -coord 3 0,1 - "{eddy_proc_dir}/b0_pair_topup.nii"')
+            
+            # Create brain mask from mean b0
+            run.command(f'mrmath "{eddy_proc_dir}/b0_pair_topup.nii" mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
+            run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
+            
+            topupinputfile = 'b0_pair_topup.nii'
 
-        elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not app.ARGS.rpe_pair:
+            # Extract PE info for topup from the b0 volumes
+            run.command(f'dwiextract -bzero working.mif - | mrinfo -export_pe_eddy "{eddy_proc_dir}/topup_config.txt" "{eddy_proc_dir}/topup_indices.txt" -')
+            
+            # Run topup and prepare mask for eddy
+            brain_mask, topup_prefix = run_topup_and_prepare_for_eddy(
+                f'{eddy_proc_dir}/{topupinputfile}',
+                pe_dir,
+                'topup_results',
+                fsl_suffix,
+                eddy_proc_dir,
+                acqp_file=f'{eddy_proc_dir}/topup_config.txt'
+            )
+            
+            # Call eddy
+            pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
+            fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, topup_prefix=topup_prefix, readout_time=dwi_metadata.get('readout_time'))
+
+        elif not app.ARGS.rpe_header and not app.ARGS.rpe_all and not rpe_pair:
             raise MRtrixError("the eddy option must run alongside -rpe_header, -rpe_all, or -rpe_pair option")
 
     run.command('mrconvert -force -fslgrad working.bvec working.bval dwiec.mif working.mif', show=False)
     run.command('mrconvert -export_grad_fsl dwiec.bvec dwiec.bval dwiec.mif dwiec.nii', show=False)
+    # dwiec.nii/.bvec/.bval are read by tests/e2e_runners.py's get_dwi_path()
+    # ("eddy" -> "dwiec") for per-stage validation; keep them.
     # End timer
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -997,6 +1432,7 @@ def run_b1correct(dwi_metadata):
     # b1 bias field correction
     if len(DWInlist) == 1:
         run.command('dwibiascorrect ants -bias biasfield.mif working.mif dwibc.mif')
+        run.command('mrcalc -force sigma.nii biasfield.mif -div sigma_b1corr.nii ') # added by omnia 
     else:
         # b1 correction may still need to be done individually for each diffusion series ...
         miflist = []
@@ -1007,6 +1443,8 @@ def run_b1correct(dwi_metadata):
             cmd = ('dwibiascorrect ants -bias biasfield%s.mif dwiprebc%s.mif dwibc%s.mif' % 
                 (str(idx), str(idx), str(idx)))
             run.command(cmd)
+            run.command('mrcalc -force sigma.nii biasfield%s.mif -div sigma_b1corr%s.mif ' %
+                (str(idx), str(idx)))  # added by omnia 
             miflist.append('dwibc' + str(idx) + '.mif')
 
         DWImif = ' '.join(miflist)
@@ -1049,10 +1487,41 @@ def run_rice_bias_correct(dwi_metadata):
     from mrtrix3 import run, app
 
     print("...Rician Bias correction...")
-    if app.ARGS.denoise:
+
+    if app.ARGS.denoise and not app.ARGS.b1correct: # edited by omnia
         run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
-        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc.mif') # updated rician bias correction
         run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
+
+    elif app.ARGS.denoise and app.ARGS.b1correct: # added by omnia
+        DWInlist = dwi_metadata['dwi_list'] 
+        idxlist  = dwi_metadata['idxlist'] 
+        run.command('mrcalc noisemap.mif -finite noisemap.mif 0 -if lowbnoisemap.mif', show=False)
+  
+        if len(DWInlist) == 1: 
+            # normalize sigma by B1 field
+            run.command('mrcalc -force lowbnoisemap.mif biasfield.mif -div lowbnoisemap_b1corr.mif ')
+            # rician correction
+            run.command('mrcalc working.mif 2 -pow lowbnoisemap_b1corr.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc.mif') # updated rician bias correction
+            run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
+        else:
+            # handle multiple DWI series individually, then concatenate
+            miflist = []
+            for idx,i in enumerate(DWInlist):
+                run.command('mrconvert -coord 3 "%s" working.mif dwiprerc%s.mif' %
+                    (idxlist[idx], str(idx)))
+
+                run.command('mrcalc -force lowbnoisemap.mif biasfield%s.mif -div lowbnoisemap_b1corr%s.mif ' %
+                    (str(idx), str(idx)))
+
+                run.command('mrcalc dwiprerc%s.mif 2 -pow lowbnoisemap_b1corr%s.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc%s.mif' %
+                    (str(idx), str(idx), str(idx))) # updated rician bias correction
+
+                miflist.append('dwirc' + str(idx) + '.mif')
+            
+            DWImif = ' '.join(miflist)
+            run.command('mrcat -axis 3 ' + DWImif + ' dwirc.mif')
+            run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
     else:
         if app.ARGS.noisemap:
             stride=dwi_metadata['designer_stride_3dim']
@@ -1062,12 +1531,15 @@ def run_rice_bias_correct(dwi_metadata):
                         show=False)
         else:
             run.command('dwidenoise -noise lowbnoisemap.mif -estimator Exp2 dwi.mif dwitmp.mif', show=False)
-            app.cleanup('dwitmp.mif')
-        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub -abs -sqrt - | mrcalc - -finite - 0 -if dwirc.mif')
+            force_remove('dwitmp.mif')
+        run.command('mrcalc working.mif 2 -pow lowbnoisemap.mif 2 -pow -sub 0 -max -sqrt - | mrcalc - -finite - 0 -if dwirc.mif') # updated rician bias correction
         run.command('mrconvert -export_grad_fsl dwirc.bvec dwirc.bval dwirc.mif dwirc.nii', show=False) # for e2e testing
-        if not app.ARGS.degibbs:
-            run.command('mrconvert -force -export_grad_fsl working.bvec working.bval working.mif working.nii', show=False)
-        run.command('mrconvert -force -fslgrad working.bvec working.bval dwirc.mif working.mif', show=False)
+        # dwirc.nii/.bvec/.bval are read by tests/e2e_runners.py's get_dwi_path()
+        # ("rician" -> "dwirc") for per-stage validation; keep them.
+        
+    # dwirc.mif inherits working.mif's header (incl. gradient table) from mrcalc
+    run.command('mrconvert -force dwirc.mif working.mif', show=False)
+
 
 def run_normalization(dwi_metadata):
     from mrtrix3 import app, run

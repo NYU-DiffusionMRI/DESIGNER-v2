@@ -1,12 +1,20 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 
 import os
 import logging
 import json
+import numpy as np
 from logging import StreamHandler, FileHandler
 
 from lib.designer_input_utils import get_input_info, convert_input_data, create_shell_table, assert_inputs
-from lib.designer_fit_wrappers import refit_or_smooth, save_params
+from lib.designer_fit_wrappers import (
+    refit_or_smooth,
+    save_params,
+    db0restore_slope,
+    akc_out,
+    replace_outlier_tensors,
+)
 from lib.io import load_mrtrix
+from mrtrix3 import run, path
 
 # List of keys to exclude from logs
 EXCLUDED_KEYS = {
@@ -14,6 +22,100 @@ EXCLUDED_KEYS = {
     "stack_info", "created", "msecs", "relativeCreated", 
     "thread", "threadName", "processName", "process", "args"
 }
+
+def _propagate_restored_b0(smi_dwi, restored_dwi, restored_bvals, source_volume_indices):
+    """Copy restored b=0 volumes into the full DWI array used by SMI.
+
+    Parameters
+    ----------
+    smi_dwi : ndarray
+        Full DWI array that will be passed to SMI (modified in place).
+    restored_dwi : ndarray
+        DWI subset after b=0 restoration.
+    restored_bvals : ndarray
+        b-values corresponding to the last axis of ``restored_dwi``.
+    source_volume_indices : ndarray
+        Indices mapping each volume in ``restored_dwi`` to ``smi_dwi``.
+
+    Only b=0 volumes are copied; all non-b=0 SMI input volumes are preserved.
+    """
+    source_volume_indices = np.asarray(source_volume_indices, dtype=int)
+    restored_bvals = np.asarray(restored_bvals)
+    if restored_dwi.shape[-1] != source_volume_indices.size:
+        raise ValueError(
+            "Cannot propagate restored b=0 data to SMI: restored DWI has "
+            f"{restored_dwi.shape[-1]} volumes but source index map has "
+            f"{source_volume_indices.size}."
+        )
+    b0_local_indices = np.flatnonzero(restored_bvals < 0.01)
+    if b0_local_indices.size:
+        target_indices = source_volume_indices[b0_local_indices]
+        smi_dwi[..., target_indices] = restored_dwi[..., b0_local_indices]
+    return smi_dwi
+
+def _apply_db0restore(
+    method, outlier_locations, dwi, bval, kernel, percentile,
+    fa, md, n_cores
+):
+    """Dispatch to the selected b=0 restoration method
+    """
+    if method == "slope":
+        return db0restore_slope(
+            outlier_locations, dwi, bval, kernel, percentile,
+            fa, md, mask=None, n_cores=n_cores,
+            return_slope_maps=False,
+        )
+
+    raise ValueError(f"Unknown db0 restoration method: {method!r}")
+
+def _ensure_spatial_map_3d(data, spatial_shape, name="map"):
+    """
+    Ensure a spatial map has the same 3D shape as the DWI spatial dimensions.
+
+    Preserves singleton spatial dimensions, e.g. converts (128, 128)
+    to (128, 128, 1) when the DWI shape is (128, 128, 1, N).
+    """
+    data = np.asarray(data)
+
+    if data.shape == spatial_shape:
+        return data
+
+    singleton_axes = [axis for axis, size in enumerate(spatial_shape)
+        if size == 1]
+
+    expected_shape = tuple(size for size in spatial_shape if size != 1)
+
+    if (data.ndim == len(spatial_shape) - len(singleton_axes)
+        and data.shape == expected_shape):
+        for axis in singleton_axes:
+            data = np.expand_dims(data, axis=axis)
+
+    if data.shape != spatial_shape:
+        raise ValueError(
+            f"{name} shape {data.shape} does not match "
+            f"DWI spatial shape {spatial_shape}")
+
+    return data
+
+def ensure_spatial_3d(arr, spatial_shape, name):
+    arr = np.asarray(arr)
+
+    if arr.shape == spatial_shape:
+        return arr
+
+    # Restore the singleton Z dimension for single-slice data.
+    if (
+        arr.ndim == 2
+        and len(spatial_shape) == 3
+        and spatial_shape[2] == 1
+        and arr.shape == spatial_shape[:2] ):
+        arr = arr[:, :, np.newaxis]
+
+    if arr.shape != spatial_shape:
+        raise ValueError(
+            f"{name} shape {arr.shape} does not match "
+            f"expected spatial shape {spatial_shape}" )
+    return arr
 
 # Set up logging in JSON format
 class JsonFormatter(logging.Formatter):
@@ -62,6 +164,12 @@ def setup_logging(output_dir):
 
     return logger
 
+def shell_counts(b):
+    # {b-value (ms/um^2, rounded to 3 decimals): number of volumes}, JSON-serializable
+    import numpy as np
+    shells, counts = np.unique(np.round(b, 3), return_counts=True)
+    return dict(zip(shells.tolist(), counts.tolist()))
+
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
 
@@ -107,10 +215,11 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-fslbvec',metavar=('<bvecs>'),help='specify bvec path if path is different from the path to the dwi or the file has an unusual extention')
     options.add_argument('-fslbval',metavar=('<bvals>'),help='specify bval path if path is different from the path to the dwi or the file has an unusual extention')
     options.add_argument('-bids',metavar=('<bids>'),help='specify bids.json path if path is different from the path to the dwi or the file has an unusual extention')
-    options.add_argument('-n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasts, by default designer will use available cores - 2', default=-3)
+    options.add_argument('-n_cores',type=int,metavar=('<ncores>'),help='specify the number of cores to use in parallel tasts, by default designer will use available cores - 2', default=-3)
     options.add_argument('-echo_time',metavar=('<TE1,TE2,...>'),help='specify the echo time used in the acquisition (comma separated list the same length as number of inputs)')
     options.add_argument('-bshape',metavar=('<beta1,beta2,...>'),help='specify the b-shape used in the acquisition (comma separated list the same length as number of inputs)')
-    
+    options.add_argument('-dt',metavar=('<dt>'),help='specify your own dt to fit (JC added for fitting RobustDKI dt output)')
+
     dki_options = cmdline.add_argument_group('tensor options for the TMI script')
     dki_options.add_argument('-DKI', action='store_true', help='Include DKI parameters in output folder (mk,ak,rk)')
     dki_options.add_argument('-DTI', action='store_true', help='Include DTI parameters in output folder (md,ad,rd,fa,eigenvalues, eigenvectors')
@@ -120,6 +229,18 @@ def usage(cmdline): #pylint: disable=unused-variable
     dki_options.add_argument('-fit_smoothing',metavar=('<percentile>'),help='NLM smoothing on wlls fit')
     dki_options.add_argument('-polyreg',action='store_true',help='polynomial regression based DKI estimation')
     dki_options.add_argument('-maxb', metavar=('<bmax>'),help='maximum b-value for DKI fitting, default=3.')
+    dki_options.add_argument('-maxb_dti', metavar=('<bmax>'),help='maximum b-value for DTI fitting, default=1.5.')
+
+
+#=======================================tmi d-b0restore======================================
+    dki_options.add_argument('-akc_lowerlim', metavar=('<akc_lowerlim>'),help='akc lower threshold, default=0')
+    dki_options.add_argument('-akc_lowerlim_conservative', metavar=('<onservative_akc_lowerlim>'),help='akc lower threshold after first iteration, default=-2')
+    dki_options.add_argument('-akc_upperlim', metavar=('<akc_upperlim>'),help='akc upper threshold, default=10')
+    dki_options.add_argument('-db0restore', action='store_true',help='d-b0restore dki outlier correction')
+    dki_options.add_argument('-kernel', metavar=('<kernel_size>'),help='kernel/patch size for d-b0restore correction (patch for neighboring voxels), default=5')
+    dki_options.add_argument('-percentile', metavar=('<percentile>'),help='percentile of patch to include, default=10')
+    dki_options.add_argument('-thresh_criteria', metavar=('<criteria>'),help='outlier percent improvement iteration threshold, default: 0.05')
+#=======================================tmi d-b0restore======================================
 
     smi_options = cmdline.add_argument_group('tensor options for the TMI script')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
@@ -128,6 +249,22 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for SMI polynomial regression. must be 0,2,4, or 6.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
     smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
+    smi_options.add_argument('-smi_fw_thres', metavar=(''), type=float, default=0.2, help='Free-water threshold used by the SMI two-step free-water fit. Only used when FW is included in -compartments. Default=0.2.')
+
+    # enabling the use of bmat - this only supports LTE
+    options.add_argument(
+        '-bmat', metavar=('<bmat>'),
+        help='Path to .bmat text file (6xN): rows/entries are [Bxx,Bxy,Bxz,Byy,Byz,Bzz] per DWI column. '
+            'If provided, overrides bval/bvec in the input header.'
+    )
+
+    # GNC correction - this only supports LTE
+    options.add_argument(
+        '-gnc', metavar=('<Lfile>'),
+        help='Path to gradient nonlinearity tensor field L (per-voxel 3x3). '
+            'Will apply voxelwise correction: Bcorr = L B L^T (equivalently qcorr=L q). '
+            'Expected as nifti/mif with last dim = 9 (flattened 3x3) or (...,3,3).'
+    )
 
 
     #wmti_options = cmdline.add_argument_group('tensor options for the TMI script')
@@ -174,19 +311,117 @@ def execute(): #pylint: disable=unused-variable
 
     mif = load_mrtrix('dwi.mif')
     dwi = mif.data
-    grad_mif = mif.grad
-    bval = grad_mif[:,3]
-    bvec = grad_mif[:,:3].T
-    
-    logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
+    dwi=abs(dwi)
+    # grad_mif = mif.grad
+    # bval = grad_mif[:,3]
+    # bvec = grad_mif[:,:3].T
+
+    # GNC: load L tensor field 
+    L_field = None
+    if app.ARGS.gnc:
+
+        L_in = path.from_user(app.ARGS.gnc)
+        run.command(f"mrconvert {L_in} L_gnc.mif -force", show=False)
+        Lmif = load_mrtrix("L_gnc.mif")
+        Ldat = Lmif.data
+
+        # Accept either (...,9) or (...,3,3)
+        if Ldat.ndim == 4 and Ldat.shape[-1] == 9:
+            L_field = Ldat.reshape(Ldat.shape[0], Ldat.shape[1], Ldat.shape[2], 3, 3)
+        elif Ldat.ndim == 5 and Ldat.shape[-2:] == (3, 3):
+            L_field = Ldat
+        else:
+            raise MRtrixError(f"-gnc L must be (...,9) or (...,3,3); got {Ldat.shape}")
+
+        # DEBUG: prove it isn't identity
+        app.console(f"GNC: L_field shape = {L_field.shape}")
+        app.console(f"GNC: sample L[0,0,0]=\n{L_field[0,0,0,:,:]}")
+
+
+
+
+    if app.ARGS.bmat:
+        grad = None   # will be filled from bmat
+        app.console(f"Using B-matrix from {app.ARGS.bmat} (ignoring header bval/bvec) - bmat should be in image voxel coordinate frame just like .mif header")
+    else:
+        grad_mif = mif.grad
+        bval = grad_mif[:,3]
+        bvec = grad_mif[:,:3].T
+        app.console("Using gradient table from DWI header")
+        logger.info("Loaded bvec and bval data.", extra={"bvec_shape": bvec.shape, "bval_shape": bval.shape})
+
+
+
+
+    # grad = np.column_stack((bvec, bval))
+
+    # Optional override from -bmat
+    if app.ARGS.bmat:
+        bmat = np.loadtxt(path.from_user(app.ARGS.bmat), dtype=float)
+
+        # Accept either (6,N) or (N,6)
+        if bmat.shape[0] == 6:
+            B6 = bmat
+        elif bmat.shape[1] == 6:
+            B6 = bmat.T
+        else:
+            raise MRtrixError(f"-bmat must be 6xN or Nx6, got {bmat.shape}")
+
+        N = dwi.shape[-1]
+        if B6.shape[1] != N:
+            raise MRtrixError(f"-bmat has {B6.shape[1]} volumes but DWI has {N}")
+
+        # Convert B6 -> (bvec,bval) via principal eigenpair of B (LTE assumption)
+        bvec = np.zeros((3, N), dtype=float)
+        bval = np.zeros((N,), dtype=float)
+
+        for i in range(N):
+            Bxx, Bxy, Bxz, Byy, Byz, Bzz = B6[:, i]
+            B = np.array([[Bxx, Bxy, Bxz],
+                        [Bxy, Byy, Byz],
+                        [Bxz, Byz, Bzz]], dtype=float)
+
+            # b0: all ~0
+            if np.allclose(B, 0, atol=0, rtol=0):
+                continue
+
+            w, v = np.linalg.eigh(B)
+            idx = np.argmax(w)
+            lam = w[idx]
+            if lam < 0:
+                # if numerical noise causes slightly negative, clamp
+                lam = 0.0
+            g = v[:, idx]
+            ng = np.linalg.norm(g)
+            if ng > 0:
+                g = g / ng
+            else:
+                g[:] = 0
+
+            bval[i] = lam
+            bvec[:, i] = g
 
     order = np.floor(np.log(abs(np.max(bval)+1)) / np.log(10))
     if order >= 2:
         bval = bval / 1000
         logger.info("bval converted normalized to ms/um^2.", extra={"bval": list(set(np.round(bval, 2)))})
 
-    grad = np.hstack((bvec.T, bval[None,...].T))
+    if bvec is None or bval is None:
+        raise MRtrixError("Gradient components were not initialized")
+
+    # Rebuild grad table used downstream (N,4)
+    # NOTE: your tensor.py will re-normalize bvec rows anyway, but keep consistent.
+    grad = np.column_stack([bvec.T, bval])
+
     logger.info("Gradient table created.", extra={"grad_shape": grad.shape})
+
+
+
+
+
+
+
+
 
     if app.ARGS.mask:
         if not path.from_user(app.ARGS.mask).endswith('.mif'):
@@ -199,6 +434,35 @@ def execute(): #pylint: disable=unused-variable
         mask = np.ones(dwi.shape[:-1])
         logger.info("No mask provided. Using default mask with all ones.", extra={"mask_shape": mask.shape})
     mask = mask.astype(bool)
+
+    # Ensure mask has exactly the same 3D spatial dimensions as DWI.
+    spatial_shape = dwi.shape[:-1]
+
+    if mask.shape != spatial_shape:
+        missing_dims = len(spatial_shape) - mask.ndim
+
+        if missing_dims > 0:
+            singleton_axes = [
+                axis for axis, size in enumerate(spatial_shape)
+                if size == 1
+            ]
+
+            if len(singleton_axes) == missing_dims:
+                for axis in singleton_axes:
+                    mask = np.expand_dims(mask, axis=axis)
+
+    if mask.shape != spatial_shape:
+        raise ValueError(
+            f"Mask shape {mask.shape} does not match "
+            f"DWI spatial shape {spatial_shape}"
+        )
+
+    mask = mask.astype(bool)
+
+    logger.info("Spatial dimensions validated.",
+        extra={
+            "dwi_shape": dwi.shape,
+            "mask_shape": mask.shape})
 
     if app.ARGS.fit_constraints:
         constraints = app.ARGS.fit_constraints
@@ -221,7 +485,6 @@ def execute(): #pylint: disable=unused-variable
     else:
         multi_te_beta = False
 
-
     if len(set(dwi_metadata['bshape_per_volume'])) > 1:
         if (app.ARGS.DTI) or (app.ARGS.DKI) or (app.ARGS.WDKI):
             logger.info("Variable b-shape detected, filtering for LTE volumes.")
@@ -234,24 +497,38 @@ def execute(): #pylint: disable=unused-variable
             bvec = bvec_orig[:,lte_idx]
             logger.info("Filtered DWI, bval, and bvec for LTE volumes.", extra={"dwi_shape": dwi.shape})
 
-
+    # moved outside DTI loop, to work with multi-TE max b as well
+    if app.ARGS.maxb_dti:
+        maxb_dti=float(app.ARGS.maxb_dti)
+    else:
+        maxb_dti=1.5
+        
     if len(set(dwi_metadata['echo_time_per_volume'])) == 1:
         logger.info("Single echo time detected.")
 
         if app.ARGS.DTI:
             from lib.mpunits import vectorize
             logger.info("Starting DTI fit...")
-            dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= 1.5))
+            logger.info("Setting b max for DTI...", extra={"max b": maxb_dti})
+            
+
+            dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= maxb_dti))
             dwi_dti = dwi[:,:,:,dtishell]
             bval_dti = bval[dtishell]
+            logger.info("DTI shells selected [shell: number of volumes].", extra={"dti_shells": shell_counts(bval_dti)})
             bvec_dti = bvec[:,dtishell]
             grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
             dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
-            dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+            # dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+            dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask, L=L_field)
             logger.info("DTI fit completed.", extra={"dt_dti_shape": dt_dti.shape})
 
             dt_ = {}
             dt_dti_ = vectorize(dt_dti, mask)
+
+            # Ensure spatial dimensions are preserved for single-slice data
+            if dt_dti_.ndim == 3:
+                dt_dti_ = np.expand_dims(dt_dti_, axis=2)
 
             # convert to mrtrix convention
             dt_dti_ = dt_dti_[:,:,:,[0,3,5,1,2,4]] / 1000
@@ -274,7 +551,7 @@ def execute(): #pylint: disable=unused-variable
             dwi_dki = dwi[:,:,:,bval < maxb]
             bvec_dki = bvec[:,bval < maxb]
             bval_dki = bval[bval < maxb]
-
+            logger.info("DKI shells selected.", extra={"dki_shells": shell_counts(bval_dki)})
             bvec_dki_temp=bvec_dki[:,bval_dki > 0.1]
             ndir=np.shape(np.unique(bvec_dki_temp,axis=1))[1]
 
@@ -294,14 +571,19 @@ def execute(): #pylint: disable=unused-variable
 
                 grad_dki = np.hstack((bvec_dki.T, bval_dki[None,...].T))
                 dki = tensor.TensorFitting(grad_dki, int(app.ARGS.n_cores))
-                dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                # dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints, L=L_field)
                 logger.info("DKI fit completed.", extra={"dt_dki_shape": dt_dki.shape})
 
                 dt_ = {}
                 dt_dki_ = vectorize(dt_dki, mask)
 
-                # dt tensors in mrtrix convention
-                dt_dki_ = dt_dki_[:,:,:,[0,3,5,1,2,4]] / 1000
+                # Ensure spatial dimensions are preserved for single-slice data
+                if dt_dki_.ndim == 3:
+                    dt_dki_ = np.expand_dims(dt_dki_, axis=2)
+
+                # Convert tensor coefficients to MRtrix convention
+                dt_dki_ = dt_dki_[..., [0, 3, 5, 1, 2, 4]] / 1000
 
                 dt_['dt'] = dt_dki_
                 save_params(dt_, mif, model='dki', outdir=outdir)
@@ -315,62 +597,445 @@ def execute(): #pylint: disable=unused-variable
                 dt_poly_dti = dti.train_rotated_bayes_fit(dwi_dti, dt_dti, s0_dti, b_dti, mask, True)
                 logger.info("Polyreg DTI fit completed.", extra={"dt_poly_dti_shape": dt_poly_dti.shape})
 
+        #=======================================tmi d-b0restore======================================
+        if app.ARGS.db0restore:
+            from lib.mpunits import vectorize
+            import scipy.io as sio
+
+            #DETECTING OUTLIERS
+            logger.info("Starting AKC outlier detection...")
+            dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+            dir = mat['dirs']
+            # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+            # dir = mat['dir']
+
+            if not app.ARGS.akc_lowerlim:
+                akc_lowerlim=0
+            else:
+                akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+            if not app.ARGS.akc_upperlim:
+                akc_upperlim=10
+            else:
+                akc_upperlim=int(app.ARGS.akc_upperlim)
+
+            if not (app.ARGS.DKI or app.ARGS.WDKI):
+                logger.error("AKC Outlier detection must be accompanied by DKI option")
+                raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+            else:
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_upperlim)
+                akc_mask_copy = akc_mask.copy()
+                
+            logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
+
+            outlier_mask = {}
+            akc_mask_tmp = vectorize(akc_mask, mask)
+            akc_mask_tmp = ensure_spatial_3d(akc_mask_tmp, mask.shape, "AKC mask")
+            outlier_mask['akc'] = akc_mask_tmp
+            save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+            x=np.shape(mask)[0]
+            y=np.shape(mask)[1]
+            z=np.shape(mask)[2]
+            akc_dirs=np.zeros((x,y,z,np.shape(akc_d)[0]))
+            # print(np.shape(akc_d))
+            for i in range(np.shape(akc_d)[0]):
+                akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+
+
+        # ====================================================================================
+            params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
+            spatial_shape = dwi.shape[:3]
+            rk = _ensure_spatial_map_3d(params_dki['rk'], spatial_shape, "RK")
+            md = _ensure_spatial_map_3d(params_dki['md'], spatial_shape, "MD")
+            fa = _ensure_spatial_map_3d(params_dki['fa'], spatial_shape, "FA")
+            mk = _ensure_spatial_map_3d(params_dki['mk'], spatial_shape, "MK")
+
+            rk_ = {}
+            rk_['rk_0'] = rk
+            save_params(rk_, mif, model='wdki', outdir=outdir)
+
+            md_ = {}
+            md_['md_0'] = md
+            save_params(md_, mif, model='wdki', outdir=outdir)
+
+            mk_ = {}
+            mk_['mk_0'] = mk
+            save_params(mk_, mif, model='wdki', outdir=outdir)
+
+
+        # first akc outlier mask
+            # print("============AKC mask============")
+            outlier_inds=np.array(np.where(mask>0))
+            # n=np.shape(outlier_inds)[-1]
+            dwi_norm = abs(dwi_dki) / np.amax(dwi_dki, axis=(0,1,2))
+            akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+            
+            outlier_mask = {}
+            akc_mask[akc_mask!=0]=1
+            akc_mask=vectorize(akc_mask, mask)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+            akc_mask[akc_mask_new==1]=1
+            outlier_mask['outlier_mask'] = akc_mask
+            save_params(outlier_mask, mif, model='dki', outdir=outdir)
+            akc_mask = akc_mask.astype(bool)
+            noutlier0=np.sum(akc_mask)
+
+        # =======================================d-b0restore=======================================
+            print("==============d-b0restore==============")
+            if not app.ARGS.percentile:
+                percentile=10
+            else:
+                percentile=int(app.ARGS.percentile)
+
+            if not app.ARGS.kernel:
+                kernel=5
+            else:
+                kernel=int(app.ARGS.kernel)
+
+            # Restore b=0 using the current fitted diffusion tensor.
+            restore_result = _apply_db0restore(
+                'slope',
+                akc_mask,
+                dwi_dki,
+                bval_dki,
+                kernel,
+                percentile,
+                fa,
+                md,
+                app.ARGS.n_cores
+            )
+            dwi_new = restore_result
+
+
+            dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
+            dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
+
+            x,y,z = np.where(akc_mask == 1)
+            DT = vectorize(dt_dki, mask)
+            # Ensure spatial dimensions are preserved for single-slice data
+            if DT.ndim == 3:
+                DT = np.expand_dims(DT, axis=2)
+            DT[x,y,z,:] = dt_new.T
+            dt_dki = vectorize(DT, mask)
+
+            # Detect Outlier after first iteration of b0-restore
+            print("============Detect Outlier now with conservative outlier detection (AKC < -2)============")
+            if app.ARGS.akc_lowerlim_conservative:
+                akc_lowerlim=int(app.ARGS.akc_lowerlim_conservative)
+            else:
+                akc_lowerlim=-2
+            #akc-based outlier detection
+            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
+            akc_mask_copy = akc_mask.copy()
+            akc_mask = vectorize(akc_mask, mask)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+            akc_mask_tmp = akc_mask
+            
+            #extract new rk, md, fa, mk
+            params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
+            spatial_shape = dwi.shape[:3]
+            rk = _ensure_spatial_map_3d(params_dki['rk'], spatial_shape, "RK")
+            md = _ensure_spatial_map_3d(params_dki['md'], spatial_shape, "MD")
+            fa = _ensure_spatial_map_3d(params_dki['fa'], spatial_shape, "FA")
+            mk = _ensure_spatial_map_3d(params_dki['mk'], spatial_shape, "MK")
+
+            # rk_ = {}
+            # rk_['rk_1'] = rk
+            # save_params(rk_, mif, model='wdki', outdir=outdir)
+
+            # md_ = {}
+            # md_['md_1'] = md
+            # save_params(md_, mif, model='wdki', outdir=outdir)
+
+            # mk_ = {}
+            # mk_['mk_1'] = mk
+            # save_params(mk_, mif, model='wdki', outdir=outdir)
+
+
+            #new akc outlier mask based on rk and md
+            xx=np.shape(mask)[0]
+            yy=np.shape(mask)[1]
+            zz=np.shape(mask)[2]
+            dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+            akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+            for i in range(np.shape(akc_d)[0]):
+                akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+            akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+            akc_mask[akc_mask!=0]=1
+            akc_mask[akc_mask_new==1]=1
+            # akc_dirs_mask= np.repeat(np.reshape(akc_mask,(xx,yy,zz,1)),np.shape(akc_d)[0],axis=3)
+            akc_mask = akc_mask.astype(bool)
+
+            # # print('dir shape: {}'.format(np.shape(dir)))
+            # # print('dir type: {}'.format(type(dir)))
+            # # print('bvec shape: {}'.format(np.shape(np.reshape(bvec_dki,(-1,3)))))
+            # _,akc_d_temp = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
+            # akc_dirs_temp=np.zeros((xx,yy,zz,np.shape(akc_d_temp)[0]))
+            # for i in range(np.shape(akc_d_temp)[0]):
+            #     akc_dirs_temp[:,:,:,i]=vectorize(akc_d_temp[i,:],mask)
+            # akc_dirs_mask[np.where(akc_dirs_mask>0) and np.where(akc_dirs_temp>1)]=0
+
+            noutlier=np.sum(akc_mask)
+            c=np.sum(akc_mask)+1
+            count=0
+            improve=np.round((noutlier0-noutlier)/noutlier0,3)
+            print('Number of outliers: {}'.format(np.sum(mask)))
+
+            # ==========================iteration===========================
+            if app.ARGS.thresh_criteria:
+                thresh=float(app.ARGS.thresh_criteria)
+            else:
+                thresh=0.05
+
+            if improve>thresh:
+                print(f"{improve} > {thresh}")
+            
+            while True:
+                count=count+1
+                print('iteration {}'.format(count))
+                noutlier0=np.sum(akc_mask)
+
+                # iterate b0-restore
+                print('Start correction {}'.format(count))
+                dwi_new = _apply_db0restore(
+                    'slope', akc_mask, dwi_new, bval_dki,
+                    kernel, percentile, fa, md, app.ARGS.n_cores
+                )
+
+                # detect new outliers
+                dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
+                x,y,z = np.where(akc_mask == 1)
+                # DT = vectorize(dt_dki, mask)
+                if DT.shape[:3] != mask.shape:
+                    raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                    f"spatial shape {mask.shape}")
+
+                DT[x,y,z,:] = dt_new.T
+                dt_dki = vectorize(DT, mask)
+
+                print('detecting AKC outliers')
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
+                akc_mask_copy = akc_mask.copy()
+
+                #akc mask
+                dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+                akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+                for i in range(np.shape(akc_d)[0]):
+                    akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                    # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+                akc_mask_tmp = akc_mask
+
+                params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=True)
+                spatial_shape = dwi.shape[:3]
+                rk = _ensure_spatial_map_3d(params_dki['rk'], spatial_shape, "RK")
+                md = _ensure_spatial_map_3d(params_dki['md'], spatial_shape, "MD")
+                fa = _ensure_spatial_map_3d(params_dki['fa'], spatial_shape, "FA")
+                mk = _ensure_spatial_map_3d(params_dki['mk'], spatial_shape, "MK")
+
+                # rk_ = {}
+                # rk_['rk_{}'.format(count+1)] = rk
+                # save_params(rk_, mif, model='wdki', outdir=outdir)
+    
+                # md_ = {}
+                # md_['md_{}'.format(count+1)] = md
+                # save_params(md_, mif, model='wdki', outdir=outdir)
+    
+                # mk_ = {}
+                # mk_['mk_{}'.format(count+1)] = mk
+                # save_params(mk_, mif, model='wdki', outdir=outdir)
+
+                print('detecting RK outliers')
+                akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                akc_mask[akc_mask!=0]=1
+                akc_mask[akc_mask_new==1]=1
+                akc_mask = akc_mask.astype(bool)
+                noutlier=np.sum(akc_mask)
+                improve=(noutlier0-noutlier)/noutlier0
+                print("nOutlier {}".format(np.sum(akc_mask)))
+                # print('{} > {}'.format(improve, thresh))
+
+                logger.info("Outlier correction iteration {}".format(count), extra={"num_outliers": str(np.sum(akc_mask))})
+                if improve < thresh:
+                    break
+            # ==========================iteration===========================
+            
+            # Propagate corrected b=0 volumes into the full DWI array used by SMI.
+            # In variable-b-shape data, DKI was fit only to LTE volumes, so map
+            # those volumes back to their indices in the original acquisition.
+            if multi_te_beta:
+                smi_source = dwi_orig
+                if len(set(dwi_metadata['bshape_per_volume'])) > 1:
+                    source_dki_indices = np.flatnonzero(
+                        (dwi_metadata['bshape_per_volume'] == 1) & (bval_orig < maxb)
+                    )
+                else:
+                    source_dki_indices = np.flatnonzero(bval_orig < maxb)
+            else:
+                smi_source = dwi
+                source_dki_indices = np.flatnonzero(bval < maxb)
+            _propagate_restored_b0(smi_source, dwi_new, bval_dki, source_dki_indices)
+            logger.info("Propagated restored b=0 volumes to the SMI input data (single-TE branch).")
+
+            #save new b0
+            newdwi = {}
+            b0_idx = np.where(bval_dki < 0.01)[0]
+            np.savetxt('{}/b0_indices.txt'.format(outdir),b0_idx,fmt='%d')
+            newdwi['b0'] = dwi_new[:,:,:,b0_idx]
+            save_params(newdwi, mif, model='dki', outdir=outdir)
+
+            #save new dt
+            dt_ = {}
+            # Convert tensor coefficients to MRtrix convention
+            DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+            dt_['dt'] = DT
+            save_params(dt_, mif, model='dki_db0restore', outdir=outdir)
+            logger.info("DKT with d-b0restore saved.")
+
+            #save new outlier mask
+            outlier_mask = {}
+            akc_mask_copy[akc_mask_copy!=0]=1
+            akc_mask_copy=vectorize(akc_mask_copy, mask)
+            
+            # Preserve the singleton Z dimension
+            akc_mask_copy = ensure_spatial_3d(akc_mask_copy, mask.shape, "AKC mask copy")
+            akc_mask_new = ensure_spatial_3d(akc_mask_new, mask.shape, "New AKC mask")
+
+            # Combine masks
+            akc_mask_copy[akc_mask_new == 1] = 1
+
+            outlier_mask['outliermask_final'] = akc_mask_copy
+            save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+            logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
+        else:
+            akc_mask = np.zeros_like(mask)
+
+        #=======================================tmi d-b0restore======================================
+        
         if app.ARGS.akc_outliers:
             from lib.mpunits import vectorize
             import scipy.io as sio
 
             logger.info("Starting AKC outlier detection...")
             dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
-            dir = mat['dir']
+            # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+            mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+            dir = mat['dirs']
 
             if not (app.ARGS.DKI or app.ARGS.WDKI):
                 logger.error("AKC Outlier detection must be accompanied by DKI option")
                 raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
             else:
-                akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                if not app.ARGS.akc_lowerlim:
+                    akc_lowerlim=0
+                else:
+                    akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                if not app.ARGS.akc_upperlim:
+                    akc_upperlim=10
+                else:
+                    akc_upperlim=int(app.ARGS.akc_upperlim)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_upperlim)
                 
             akc_mask = vectorize(akc_mask, mask).astype(bool)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
             logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
 
-            dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-            dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
-
-            x,y,z = np.where(akc_mask == 1)
+            if not app.ARGS.db0restore:
+                dwi_new = dwi_dki.copy()
+            
+            dwi_new,dt_dki = replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)            
             DT = vectorize(dt_dki, mask)
-            DT[x,y,z,:] = dt_new.T
+            # Ensure spatial dimensions are preserved for single-slice data
+            if DT.ndim == 3:
+                DT = np.expand_dims(DT, axis=2)
 
+            if DT.shape[:3] != mask.shape:
+                raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                f"spatial shape {mask.shape}")
             dt_ = {}
+            # Convert tensor coefficients to MRtrix convention
+            DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
             dt_['dt'] = DT
             save_params(dt_, mif, model='dki_akc', outdir=outdir)
             logger.info("DKT with AKC saved.")
 
-            dt_dki = vectorize(DT, mask)
-            akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+#             dt_dki = vectorize(DT, mask)
+            akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
             akc_mask = vectorize(akc_mask, mask).astype(bool)
+            akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
             logger.info("AKC outlier post-processing completed.", extra={"num_outliers": str(np.sum(akc_mask))})
         else:
             akc_mask = np.zeros_like(mask)
 
+
+        if app.ARGS.fit_smoothing and app.ARGS.db0restore:
+            logger.info("Starting AKC outlier detection...")
+            dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+            mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+            dir = mat['dirs']
+
+            if not (app.ARGS.DKI or app.ARGS.WDKI):
+                logger.error("AKC Outlier detection must be accompanied by DKI option")
+                raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+            else:
+                if not app.ARGS.akc_lowerlim:
+                    akc_lowerlim=0
+                else:
+                    akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                if not app.ARGS.akc_upperlim:
+                    akc_upperlim=10
+                else:
+                    akc_upperlim=int(app.ARGS.akc_upperlim)
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_upperlim)
+                akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+
         if app.ARGS.fit_smoothing:
             logger.info("Starting tensor based smoothing...")
             if app.ARGS.DTI:
-                dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
+                dwi_new_dti = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+            
+                dt_dti,_,_ = dti.dti_fit(dwi_new_dti, mask, L=L_field)
 
                 DT = vectorize(dt_dti, mask)
+                # Ensure spatial dimensions are preserved for single-slice data
+                if DT.ndim == 3:
+                    DT = np.expand_dims(DT, axis=2)
                 dt_ = {}
+                # Convert tensor coefficients to MRtrix convention
+                DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
                 dt_['dt'] = DT
                 save_params(dt_, mif, model='dti_fitsmooth', outdir=outdir)
                 logger.info("DT with fit smooth saved.")
 
                 logger.info("DTI fit after smoothing completed.", extra={"dt_dti_shape": dt_dti.shape})
             if (app.ARGS.DKI or app.ARGS.WDKI):
-                dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+                if app.ARGS.db0restore or app.ARGS.akc_outliers:
+                    dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                else:
+                    dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
 
                 DT = vectorize(dt_dki, mask)
+                # Ensure spatial dimensions are preserved for single-slice data
+                if DT.ndim == 3:
+                    DT = np.expand_dims(DT, axis=2)
+
+                if DT.shape[:3] != mask.shape:
+                    raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                    f"spatial shape {mask.shape}")
                 dt_ = {}
+                # Convert tensor coefficients to MRtrix convention
+                DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
                 dt_['dt'] = DT
                 save_params(dt_, mif, model='dki_fitsmooth', outdir=outdir)
                 logger.info("DKT with fit smooth saved.")
@@ -402,7 +1067,13 @@ def execute(): #pylint: disable=unused-variable
             logger.info("DTI maps saved.")
 
         if app.ARGS.DKI:
+            if app.ARGS.dt:
+                run.command('mrconvert %s dt.mif -force' % path.from_user(app.ARGS.dt), show=False) 
+                dt_dki = load_mrtrix('dt.mif').data
+                dt_dki=vectorize(dt_dki, mask)
+
             logger.info("Extracting and saving DKI maps...")
+            dt_dki = np.nan_to_num(dt_dki, nan=0.0, posinf=0, neginf=0)
             params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
             save_params(params_dki, mif, model='dki', outdir=outdir)
             logger.info("DKI maps saved.")
@@ -441,13 +1112,16 @@ def execute(): #pylint: disable=unused-variable
                     continue
                 
                 logger.info(f"Starting DTI fit for TE={te}...")
-                dtishell = (bval_te <= 0.15) | ((bval_te > .5) & (bval_te <= 1.5))
+                logger.info(f"Setting b max for DTI for TE={te}...", extra={"max b": maxb_dti})
+                dtishell = (bval_te <= 0.15) | ((bval_te > .5) & (bval_te <= maxb_dti))
                 dwi_dti = dwi[:,:,:,dtishell]
                 bval_dti = bval_te[dtishell]
+                logger.info(f"DTI shells selected for TE={te}.", extra={"dti_shells": shell_counts(bval_dti)})
                 bvec_dti = bvec_te[:,dtishell]
                 grad_dti = np.hstack((bvec_dti.T, bval_dti[None,...].T))
                 dti = tensor.TensorFitting(grad_dti, int(app.ARGS.n_cores))
-                dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+                # dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask)
+                dt_dti, s0_dti, b_dti = dti.dti_fit(dwi_dti, mask, L=L_field)
                 logger.info(f"DTI fit completed for TE={te}.", extra={"dt_dti_shape": dt_dti.shape})
 
             if app.ARGS.DKI or app.ARGS.WDKI:
@@ -467,7 +1141,8 @@ def execute(): #pylint: disable=unused-variable
                 dwi_dki = dwi[:,:,:,bval_te < maxb]
                 bvec_dki = bvec_te[:,bval_te < maxb]
                 bval_dki = bval_te[bval_te < maxb]
-
+                logger.info(f"DKI shells selected for TE={te}.", extra={"dki_shells": shell_counts(bval_dki)})
+                
                 bvec_dki_temp=bvec_dki[:,bval_dki > 0.1]
                 ndir=np.shape(np.unique(bvec_dki_temp,axis=1))[1]
 
@@ -487,7 +1162,8 @@ def execute(): #pylint: disable=unused-variable
 
                     grad = np.hstack((bvec_dki.T, bval_dki[None,...].T))
                     dki = tensor.TensorFitting(grad, int(app.ARGS.n_cores))
-                    dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                    # dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints)
+                    dt_dki, s0_dki, b_dki = dki.dki_fit(dwi_dki, mask, constraints=constraints, L=L_field)
                     logger.info(f"DKI fit completed for TE={te}.", extra={"dt_dki_shape": dt_dki.shape})
 
                 if app.ARGS.polyreg:
@@ -498,47 +1174,388 @@ def execute(): #pylint: disable=unused-variable
                         dt_poly_dti = dti.train_rotated_bayes_fit(dwi_dti, dt_dti, s0_dti, b_dti, mask, True)
                         logger.info(f"Polyreg DTI fit completed for TE={te}.", extra={"dt_poly_dti_shape": dt_poly_dti.shape})
 
+                #=======================================tmi db0restore======================================
+                if app.ARGS.db0restore:
+                    from lib.mpunits import vectorize
+                    import scipy.io as sio
+
+                    #DETECTING OUTLIERS
+                    logger.info("Starting AKC outlier detection...")
+                    dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+                    dir = mat['dirs']
+                    # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+                    # dir = mat['dir']
+
+                    if not app.ARGS.akc_lowerlim:
+                        akc_lowerlim=0
+                    else:
+                        akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                    if not app.ARGS.akc_upperlim:
+                        akc_upperlim=10
+                    else:
+                        akc_upperlim=int(app.ARGS.akc_upperlim)
+
+                    if not (app.ARGS.DKI or app.ARGS.WDKI):
+                        logger.error("AKC Outlier detection must be accompanied by DKI option")
+                        raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+                    else:
+                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim, akc_upperlim)
+                        akc_mask_copy = akc_mask.copy()
+                        
+                    logger.info("Outlier detection completed.", extra={"num_outliers": str(np.sum(akc_mask))})
+
+                    outlier_mask = {}
+                    akc_mask_tmp = vectorize(akc_mask, mask)
+                    akc_mask_tmp = ensure_spatial_3d(akc_mask_tmp, mask.shape, "AKC mask")
+
+                    outlier_mask['akc'] = akc_mask_tmp
+                    save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+                    x=np.shape(mask)[0]
+                    y=np.shape(mask)[1]
+                    z=np.shape(mask)[2]
+                    akc_dirs=np.zeros((x,y,z,np.shape(akc_d)[0]))
+                    # print(np.shape(akc_d))
+                    for i in range(np.shape(akc_d)[0]):
+                        akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                        # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+
+
+                # ====================================================================================
+                    params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                    rk = params_dki['rk']
+                    md = params_dki['md']
+                    fa = params_dki['fa']
+                    mk = params_dki['mk']
+                # first akc outlier mask
+                    # print("============AKC mask============")
+                    outlier_inds=np.array(np.where(mask>0))
+                    # n=np.shape(outlier_inds)[-1]
+                    dwi_norm = abs(dwi_dki) / np.amax(dwi_dki, axis=(0,1,2))
+                    akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                    
+                    outlier_mask = {}
+                    akc_mask[akc_mask!=0]=1
+                    akc_mask=vectorize(akc_mask, mask)
+                    akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+                    akc_mask[akc_mask_new==1]=1
+                    outlier_mask['outlier_mask'] = akc_mask
+                    save_params(outlier_mask, mif, model='dki', outdir=outdir)
+                    akc_mask = akc_mask.astype(bool)
+                    noutlier0=np.sum(akc_mask)
+
+                # =======================================d-b0restore=======================================
+                    print("==============d-b0restore==============")
+                    if not app.ARGS.percentile:
+                        percentile=10
+                    else:
+                        percentile=int(app.ARGS.percentile)
+
+                    if not app.ARGS.kernel:
+                        kernel=5
+                    else:
+                        kernel=int(app.ARGS.kernel)
+
+                    # Restore b=0 for single-TE data.
+                    restore_result = _apply_db0restore(
+                        'slope',
+                        akc_mask,
+                        dwi_dki,
+                        bval_dki,
+                        kernel,
+                        percentile,
+                        fa,
+                        md,
+                        app.ARGS.n_cores
+                    )
+        
+                    dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
+                    dtishell = (bval_dki <= 0.1) | ((bval_dki > .5) & (bval_dki <= 1.5))
+
+                    x,y,z = np.where(akc_mask == 1)
+                    DT = vectorize(dt_dki, mask)
+                    # Ensure spatial dimensions are preserved for single-slice data
+                    if DT.ndim == 3:
+                        DT = np.expand_dims(DT, axis=2)
+
+                    if DT.shape[:3] != mask.shape:
+                        raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                        f"spatial shape {mask.shape}")
+
+                    DT[x,y,z,:] = dt_new.T
+                    dt_dki = vectorize(DT, mask)
+
+                    # Detect Outlier
+                    print("============Detect Outlier now with conservative AKC outlier detection (AKC < -2)============")
+                    akc_lowerlim=-2
+                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
+                    akc_mask_copy = akc_mask.copy()
+                    akc_mask = vectorize(akc_mask, mask)
+                    akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+                    akc_mask_tmp = akc_mask
+                    
+                    #extract new rk, md, fa
+                    params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                    rk = params_dki['rk']
+                    md = params_dki['md']
+                    fa = params_dki['fa']
+
+                    #new akc outlier mask based on rk and md
+                    xx=np.shape(mask)[0]
+                    yy=np.shape(mask)[1]
+                    zz=np.shape(mask)[2]
+                    dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+                    akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+                    for i in range(np.shape(akc_d)[0]):
+                        akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                        # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                    akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                    akc_mask[akc_mask!=0]=1
+                    akc_mask[akc_mask_new==1]=1
+                    akc_mask = akc_mask.astype(bool)
+
+                    noutlier=np.sum(akc_mask)
+                    c=np.sum(akc_mask)+1
+                    count=0
+                    improve=np.round((noutlier0-noutlier)/noutlier0,3)
+                    print('Number of outliers: {}'.format(np.sum(mask)))
+
+                    # # ====================================iteration===================================
+                    # iteration
+                    if app.ARGS.thresh_criteria:
+                        thresh=float(app.ARGS.thresh_criteria)
+                    else:
+                        thresh=0.05
+
+                    if improve>thresh:
+                        print('{} > {}'.format(improve, thresh))
+                    
+                    while True:
+                        count=count+1
+                        print('iteration {}'.format(count))
+                        noutlier0=np.sum(akc_mask)
+
+                        # iterate b0-restore
+                        print('Start correction {}'.format(count))
+                        dwi_new = _apply_db0restore(
+                            'slope', akc_mask, dwi_new, bval_dki,
+                            kernel, percentile, fa, md, app.ARGS.n_cores
+                        )
+
+                        # detect new outliers
+                        dt_new,s0_new,b_dki = dki.dki_fit(dwi_new, akc_mask,L=L_field)
+                        x,y,z = np.where(akc_mask == 1)
+                        # DT = vectorize(dt_dki, mask)
+                        if DT.shape[:3] != mask.shape:
+                            raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                            f"spatial shape {mask.shape}")
+                        DT[x,y,z,:] = dt_new.T
+                        dt_dki = vectorize(DT, mask)
+                        print('detecting outliers')
+                        akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
+                        akc_mask_copy = akc_mask.copy()
+
+                        #akc mask
+                        dwi_norm = abs(dwi_new) / np.amax(dwi_new, axis=(0,1,2))
+                        akc_dirs=np.zeros((xx,yy,zz,np.shape(akc_d)[0]))
+                        for i in range(np.shape(akc_d)[0]):
+                            akc_dirs[:,:,:,i] = vectorize(akc_d[i,:], mask).reshape(akc_dirs[:,:,:,i].shape)
+                            # akc_dirs[:,:,:,i]=vectorize(akc_d[i,:],mask)
+                        akc_mask = vectorize(akc_mask, mask).astype(bool)
+                        akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+                        akc_mask_tmp = akc_mask
+                        params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
+                        rk = params_dki['rk']
+                        md = params_dki['md']
+                        fa = params_dki['fa']
+                        print('detecting outliers')
+                        akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
+                        akc_mask[akc_mask!=0]=1
+                        akc_mask[akc_mask_new==1]=1
+                        akc_mask = akc_mask.astype(bool)
+                        noutlier=np.sum(akc_mask)
+                        improve=(noutlier0-noutlier)/noutlier0
+                        print("nOutlier {}".format(np.sum(akc_mask)))
+                        # print('{} > {}'.format(improve, thresh))
+
+                        logger.info("Outlier correction iteration {} for TE={}".format(count,te), extra={"num_outliers": str(np.sum(akc_mask))})
+                        if improve < thresh:
+                            break
+                        # ====================================iteration===================================
+                    
+                    # Propagate this TE's restored b=0 volumes into the full SMI
+                    # input array. The local DKI subset contains LTE volumes below
+                    # maxb, and source indices map them back to the original data.
+                    source_dki_indices = np.flatnonzero(
+                        (dwi_metadata['echo_time_per_volume'] == te)
+                        & (dwi_metadata['bshape_per_volume'] == 1)
+                        & (bval_orig < maxb)
+                    )
+                    _propagate_restored_b0(dwi_orig, dwi_new, bval_dki, source_dki_indices)
+                    logger.info("Propagated restored b=0 volumes to the SMI input data for TE=%s.", te)
+
+                    #save new b0
+                    newdwi = {}
+                    b0_idx = np.where(bval_dki < 0.01)[0]
+                    np.savetxt('{}/b0_indices.txt'.format(outdir),b0_idx,fmt='%d')
+                    newdwi['b0'] = dwi_new[:,:,:,b0_idx]
+                    save_params(newdwi, mif, model='dki', outdir=outdir)
+
+                    #save new dt
+                    dt_ = {}
+                    # Convert tensor coefficients to MRtrix convention
+                    DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+                    dt_['dt'] = DT
+                    save_params(dt_, mif, model='dki_db0restore', outdir=outdir)
+                    logger.info("DKT with b0-restore saved.")
+
+                    #save new outlier mask
+                    outlier_mask = {}
+                    akc_mask_copy[akc_mask_copy!=0]=1
+                    akc_mask_copy=vectorize(akc_mask_copy, mask)
+                    
+                    # Preserve the singleton Z dimension
+                    akc_mask_copy = ensure_spatial_3d(akc_mask_copy, mask.shape, "AKC mask copy")
+                    akc_mask_new = ensure_spatial_3d(akc_mask_new, mask.shape, "New AKC mask")
+
+                    # Combine masks
+                    akc_mask_copy[akc_mask_new == 1] = 1
+
+                    outlier_mask['outliermask_final'] = akc_mask_copy
+                    save_params(outlier_mask, mif, model='dki', outdir=outdir)
+
+                    logger.info("b0-restore AKC outlier post-processing completed for TE={}.".format(te), extra={"num_outliers": str(np.sum(akc_mask))})
+                else:
+                    akc_mask = np.zeros_like(mask)
+
+                #=======================================tmi d-b0restore======================================
+
+
             if app.ARGS.akc_outliers:
                 from lib.mpunits import vectorize
                 import scipy.io as sio
 
                 logger.info(f"Starting AKC outlier detection for TE={te}...")
                 dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
-                dir = mat['dir']
+                # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+                mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+                dir = mat['dirs']
+
+                if not app.ARGS.akc_lowerlim:
+                    akc_lowerlim=0
+                else:
+                    akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                if not app.ARGS.akc_upperlim:
+                    akc_upperlim=10
+                else:
+                    akc_upperlim=int(app.ARGS.akc_upperlim)
 
                 if not (app.ARGS.DKI or app.ARGS.WDKI):
                     logger.error(f"AKC Outlier detection for TE={te} must be accompanied by DKI option.")
                     raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
                 else:
-                    akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                     
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                 logger.info(f"Outlier detection completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
 
                 dwi_new = refit_or_smooth(akc_mask, dwi_dki, n_cores=int(app.ARGS.n_cores))
-                dt_new,_,_ = dki.dki_fit(dwi_new, akc_mask)
-
-                x,y,z = np.where(akc_mask == 1)
+                if not app.ARGS.db0restore:
+                    dwi_new = dwi_dki.copy()
+                dwi_new,dt_dki = replace_outlier_tensors(dki, dwi_new, dt_dki, mask, akc_mask, L=L_field)
+                
                 DT = vectorize(dt_dki, mask)
-                DT[x,y,z,:] = dt_new.T
-                dt_dki = vectorize(DT, mask)
-                akc_mask = dki.outlierdetection(dt_dki, mask, dir)
+                # Ensure spatial dimensions are preserved for single-slice data
+                if DT.ndim == 3:
+                    DT = np.expand_dims(DT, axis=2)
+
+                if DT.shape[:3] != mask.shape:
+                    raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                    f"spatial shape {mask.shape}")
+                dt_ = {}
+                # Convert tensor coefficients to MRtrix convention
+                DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+                dt_['dt'] = DT
+                save_params(dt_, mif, model='dki_akc', outdir=outdir)
+                logger.info(f"DKT with AKC saved for TE={te}.")
+                
+                akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir, akc_lowerlim,akc_upperlim)
                 akc_mask = vectorize(akc_mask, mask).astype(bool)
+                akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                 logger.info(f"AKC outlier post-processing completed for TE={te}.", extra={"num_outliers": str(np.sum(akc_mask))})
             else:
                 akc_mask = np.zeros_like(mask)
 
+            if app.ARGS.fit_smoothing and app.ARGS.db0restore:
+                logger.info("Starting AKC outlier detection...")
+                dwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                # mat = sio.loadmat(os.path.join(dwd,'constant','dirs10000.mat'))
+                mat = sio.loadmat(os.path.join(dwd,'constant','dirs256.mat'))
+                dir = mat['dirs']
+
+                if not (app.ARGS.DKI or app.ARGS.WDKI):
+                    logger.error("AKC Outlier detection must be accompanied by DKI option")
+                    raise MRtrixError("AKC Outlier detection must be accompanied by DKI option")
+                else:
+                    if not app.ARGS.akc_lowerlim:
+                        akc_lowerlim=0
+                    else:
+                        akc_lowerlim=int(app.ARGS.akc_lowerlim)
+
+                    if not app.ARGS.akc_upperlim:
+                        akc_upperlim=10
+                    else:
+                        akc_upperlim=int(app.ARGS.akc_upperlim)
+                    akc_mask,akc_d = dki.outlierdetection(dt_dki, mask, dir,akc_lowerlim,akc_upperlim)
+                    akc_mask = vectorize(akc_mask, mask).astype(bool)
+                    akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
+
+
+
             if app.ARGS.fit_smoothing:
                 logger.info(f"Starting tensor based smoothing for TE={te}...")
                 if app.ARGS.DTI:
-                    dwi_new = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dti,_,_ = dti.dti_fit(dwi_new, mask)
+                    dwi_new_dti = refit_or_smooth(akc_mask, dwi_dti, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    dt_dti,_,_ = dti.dti_fit(dwi_new_dti, mask, L=L_field)
                     logger.info(f"DTI fit after smoothing completed for TE={te}.", extra={"dt_dti_shape": dt_dti.shape})
+                    
+                    DT = vectorize(dt_dti, mask)
+                    # Ensure spatial dimensions are preserved for single-slice data
+                    if DT.ndim == 3:
+                        DT = np.expand_dims(DT, axis=2)
+                    dt_ = {}
+                    # Convert tensor coefficients to MRtrix convention
+                    DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+                    dt_['dt'] = DT
+                    save_params(dt_, mif, model='dti_fitsmooth', outdir=outdir)
+                    logger.info(f"DT with fit smooth saved for TE={te}.")
+                
                 if (app.ARGS.DKI or app.ARGS.WDKI):
-                    dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
-                    dt_dki,_,_ = dki.dki_fit(dwi_new, mask)
+                    if app.ARGS.db0restore or app.ARGS.akc_outliers:
+                        dwi_new = refit_or_smooth(akc_mask, dwi_new, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    else:
+                        dwi_new = refit_or_smooth(akc_mask, dwi_dki, mask=mask, smoothlevel=int(app.ARGS.fit_smoothing))
+                    dt_dki,_,_ = dki.dki_fit(dwi_new, mask, L=L_field)
                     logger.info(f"DKI fit after smoothing completed for TE={te}.", extra={"dt_dki_shape": dt_dki.shape})
+                    
+                    DT = vectorize(dt_dki, mask)
+                    # Ensure spatial dimensions are preserved for single-slice data
+                    if DT.ndim == 3:
+                        DT = np.expand_dims(DT, axis=2)
+
+                    if DT.shape[:3] != mask.shape:
+                        raise ValueError(f"Tensor image shape {DT.shape} does not match mask "
+                                        f"spatial shape {mask.shape}")
+                    dt_ = {}
+                    # Convert tensor coefficients to MRtrix convention
+                    DT = DT[..., [0, 3, 5, 1, 2, 4]] / 1000
+                    dt_['dt'] = DT
+                    save_params(dt_, mif, model='dki_fitsmooth', outdir=outdir)
+                    logger.info(f"DKT with fit smooth saved for TE={te}.")
 
             if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
                 rdwi = tensor.vectorize(dwi, mask)
@@ -565,7 +1582,13 @@ def execute(): #pylint: disable=unused-variable
                 logger.info(f"DTI maps saved for TE={te}.")
 
             if app.ARGS.DKI:
+                if app.ARGS.dt:
+                    run.command('mrconvert %s dt.mif -force' % path.from_user(app.ARGS.dt), show=False) 
+                    dt_dki = load_mrtrix('dt.mif').data
+                    dt_dki=vectorize(dt_dki, mask)
+
                 logger.info(f"Extracting and saving DKI maps for TE={te}...")
+                dt_dki = np.nan_to_num(dt_dki, nan=0.0, posinf=0, neginf=0)
                 params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
                 save_params(params_dki, mif, model='dki_te'+str(te), outdir=outdir)
                 logger.info(f"DKI maps saved for TE={te}.")
@@ -649,6 +1672,9 @@ def execute(): #pylint: disable=unused-variable
                 compartments = ['IAS', 'EAS']
                 logger.info("Using default SMI compartments.", extra={"compartments": compartments})
 
+            if 'FW' in compartments:
+                logger.info("SMI free-water two-step threshold.", extra={"smi_fw_thres": float(app.ARGS.smi_fw_thres)})
+
             if app.ARGS.lmax:
                 if int(app.ARGS.lmax) not in {0, 2, 4, 6}:
                     raise ValueError("lmax value must be 0, 2, 4, or 6.")
@@ -693,10 +1719,11 @@ def execute(): #pylint: disable=unused-variable
                 prior = mat[array_name[-1]]
                 smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres))
                 
 
                 logger.info("SMI model initialized for multi-TE/beta data.")
+                logger.info("SMI shells selected.", extra={"smi_shells": shell_counts(bval_orig)})
                 
                 params_smi = smi.fit(dwi_orig, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for multi-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})
@@ -733,7 +1760,7 @@ def execute(): #pylint: disable=unused-variable
                 
                 smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior)
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres))
 
                 # else:
                 #     smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
@@ -741,6 +1768,7 @@ def execute(): #pylint: disable=unused-variable
                 #             beta=dwi_metadata['bshape_per_volume'])
                 
                 logger.info("SMI model initialized for single-TE/beta data.")
+                logger.info("SMI shells selected.", extra={"smi_shells": shell_counts(bval)})
 
                 params_smi = smi.fit(dwi, mask=mask, sigma=sigma)
                 logger.info("SMI fitting completed for single-TE/beta data.", extra={"params_smi_shape": {key: value.shape for key, value in params_smi.items()}})

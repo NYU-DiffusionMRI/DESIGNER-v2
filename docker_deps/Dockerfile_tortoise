@@ -1,0 +1,38 @@
+# TORTOISE V4 (GPL-3.0): only CreateNonlinearityDisplacementMap and
+# CreateGradientNonlinearityBMatrix, for gradient nonlinearity correction (GNC).
+# The full TORTOISE install is ~435 MB; these two binaries plus the ITK shared
+# libraries they link (resolved through their $ORIGIN/lib/itk RPATH, so no
+# LD_LIBRARY_PATH is needed) are a small fraction of that. Extracted from
+# PennLINC's pre-built DR-BUDDI image (https://github.com/PennLINC/qsiprep_TORTOISE)
+# rather than built from source here — see PennLINC/aslprep's Dockerfile.base
+# for the reference extraction this follows.
+FROM pennlinc/qsiprep-drbuddi:26.10.3 AS builder
+
+RUN mkdir -p /usr/local/tortoise/bin/lib/itk /usr/local/tortoise/licenses \
+    && cd /src/TORTOISEV4/bin \
+    && cp CreateNonlinearityDisplacementMap CreateGradientNonlinearityBMatrix /usr/local/tortoise/bin/ \
+    && ldd CreateNonlinearityDisplacementMap CreateGradientNonlinearityBMatrix \
+        | awk '$3 ~ /^\/src\/TORTOISEV4\// {print $3}' \
+        | sort -u \
+        | xargs -I{} cp -L {} /usr/local/tortoise/bin/lib/itk/ \
+    && cp /src/TORTOISEV4/LICENSE /usr/local/tortoise/licenses/TORTOISE-LICENSE \
+    && cp -r /src/TORTOISEV4/bin/share/licenses/ITK /usr/local/tortoise/licenses/ITK
+
+
+FROM debian:bookworm-slim
+
+# ITK (as built into TORTOISE) needs the GNU OpenMP runtime at load time.
+RUN apt-get -qq update \
+    && apt-get install -yq --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/tortoise /usr/local/tortoise
+
+# Fail the build here (not downstream) if a linked library was missed, or if
+# either binary can't even get through its own argument parsing.
+RUN ! ldd /usr/local/tortoise/bin/CreateNonlinearityDisplacementMap | grep -q "not found" \
+    && ! ldd /usr/local/tortoise/bin/CreateGradientNonlinearityBMatrix | grep -q "not found"
+ENV PATH="/usr/local/tortoise/bin:$PATH"
+RUN CreateNonlinearityDisplacementMap 2>&1 | grep -q "path_to_coefficient" \
+    && CreateGradientNonlinearityBMatrix 2>&1 | grep -qi "gradient deviation tensor"

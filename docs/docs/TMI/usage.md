@@ -107,6 +107,11 @@ By default, if none of the below options are used, TMI will not estimate paramet
 - Units should be in ms/µm^2.
 - default maximum b-value for DKI estimation is 3.0 ms/µm^2
 
+### `-maxb_dti <b-value>`
+- Specify the maxmimum b-value to use during DTI estimation. 
+- Units should be in ms/µm^2.
+- default maximum b-value for DTI estimation is 1.5 ms/µm^2
+
 ## Other options for TMI
 
 ### `-mask <mask>`

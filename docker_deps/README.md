@@ -4,6 +4,7 @@ The following Docker files are included:
 - `Dockerfile_mrtrix`: MRtrix3 dependency
 - `Dockerfile_fsl`: FSL dependency
 - `Dockerfile_ants`: ANTs dependency
+- `Dockerfile_tortoise`: TORTOISE dependency (CreateNonlinearityDisplacementMap, CreateGradientNonlinearityBMatrix — gradient nonlinearity correction binaries)
 <br>
 
 All Docker images are tagged with dates in the `YYYY-MM-DD` format.
@@ -22,8 +23,9 @@ Dependency versions are listed in both the Docker files and the tables below.
 
 | Docker Tag | Commit Hash for Docker File | Dependency Version |
 | :--------: | :-------------------------: | :----------------: |
-| 2025-06-16 |           9abe8fa           | 205dd53ef (3.4.0)  |
-| 2024-02-09 |             N/A             | 205dd53ef (3.4.0)  |
+| 2026-01-13 |           faa88b0           | 3.0.8              |
+| 2025-06-16 |           9abe8fa           | 205dd53ef (3.0.4)  |
+| 2024-02-09 |             N/A             | 205dd53ef (3.0.4)  |
 
 
 Notes:
@@ -59,47 +61,107 @@ Notes:
 - The `2025-05-14` image is identical to [twom/ants:v2.5.4](https://hub.docker.com/layers/twom/ants/v2.5.4/images/sha256-eb186b9a6959c60e360a4c6d38f36adbfac6709e1cc464a63b4fef4635d5fbfc).
 
 
+## TORTOISE
+
+[Docker Hub Link](https://hub.docker.com/r/nyudiffusionmri/tortoise/tags)
+
+| Docker Tag | Commit Hash for Docker File | Dependency Version |
+| :--------: | :-------------------------: | :----------------: |
+| 2026-10-21 |           480dbd9           |    TORTOISE V4     |
+
+Notes:
+- The `2026-10-21` image uses TORTOISE V4 binaries from [`pennlinc/qsiprep-drbuddi:26.10.3`](https://hub.docker.com/r/pennlinc/qsiprep-drbuddi/tags).
+- Only two binaries (`CreateNonlinearityDisplacementMap`, `CreateGradientNonlinearityBMatrix`) are extracted from PennLINC's pre-built `pennlinc/qsiprep-drbuddi` image, not the full ~435 MB TORTOISE install — see `docker_deps/Dockerfile_tortoise`'s header comment for why, and PennLINC's [aslprep](https://github.com/PennLINC/aslprep)/[qsiprep](https://github.com/PennLINC/qsiprep) repos for the reference extraction approach this follows.
+- TORTOISE is GPL-3.0 licensed (license files are copied alongside the binaries into `/usr/local/tortoise/licenses`); keep this in mind for DESIGNER's own license/distribution terms.
+- The `26.10.3` tag pins PennLINC's DR-BUDDI base image, not TORTOISE's own version — update it the same way as the other tables whenever that upstream pin changes (edit the `FROM pennlinc/qsiprep-drbuddi:<tag>` line in `Dockerfile_tortoise`).
+
+
 ## Updating Dependencies
 
-When modifying a dependency's Docker file, follow these steps to update the image:
+When modifying a dependency's Docker file, follow these steps to update the image and run e2e tests with the updated dependency in dev container:
+
+Due to the issue that with dev container cannot  `COPY --from` local image built with `--platform=linux/amd64` flag, we first need to push the image to individual account's (not **nyudiffusionmri**) Docker Hub repository. New Docker Hub account registration is required if you don't have one.
 
 1. Build the image using:
 ```sh
-docker build --platform=linux/amd64 -f docker_deps/$DEPENDENCY_DOCKER_FILE_NAME -t nyudiffusionmri/$DEPENDENCY_DOCKER_HUB_REPO:$NEW_DATE_TAG .
+docker build --platform=linux/amd64 -f docker_deps/$DEPENDENCY_DOCKER_FILE_NAME -t $DOCKER_HUB_USERNAME/$DEPENDENCY_DOCKER_HUB_REPO:$NEW_TAG .
 ```
 
 For example:
 ```sh
-docker build --platform=linux/amd64 -f docker_deps/Dockerfile_mrtrix -t nyudiffusionmri/mrtrix3:2025-06-16 .
+docker build --platform=linux/amd64 -f docker_deps/Dockerfile_mrtrix -t ehddbs6425/mrtrix3:testing .
 ```
 <br>
 
-2. Update the `COPY` instruction in the main DESIGNER Dockerfile (located in the project root) with the new `$NEW_DATE_TAG`. Then build and test the DESIGNER image locally to ensure compatibility with the updated dependency. You can run tests similar to those in `.circleci/config.yml`:
 
+2. Push the image to Docker Hub, then update the `COPY` instruction in the dev container Dockerfile (`/.devcontainer/Dockerfile`) with the image just pushed.
+
+For example:
 ```sh
-# Build the test image with the updated dependency
+docker push ehddbs6425/mrtrix3:testing
+
+# Update the .devcontainer/Dockerfile
+...
+COPY --from=ehddbs6425/mrtrix3:testing /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+...
+```
+
+3. Rebuild the dev container and check if the new dependency is installed correctly. Then, run e2e tests to verify updated dependency doesn't break the existing functionality.
+
+For example:
+```sh
+# Inside dev container (cwd: PROJECT ROOT), check if mrtrix version is updated:
+mrinfo -version
+
+# Run e2e tests (Refer to the main README.md for more details on how to run e2e tests locally)
+```
+
+4. Once the e2e test passes and that we can confirm the new dependency is working correctly in dev container, rename the image with the `$NEW_DATE_TAG` (e.g., `2026-01-13`) so that we can push it to **nyudiffusionmri** Docker Hub later:
+
+For example:
+```sh
+# Tag the image with the new date tag
+docker tag ehddbs6425/mrtrix3:testing nyudiffusionmri/mrtrix3:2026-01-13
+```
+
+5. Update the `COPY` instruction of both dev container Dockerfile (`/.devcontainer/Dockerfile`) and main DESIGNER Dockerfile (located in the project root) with the new `$NEW_DATE_TAG`. Then, build the production (not dev container) DESIGNER image locally and perform bare minimum verification as shown below (these verifications are the same as in `.circleci/config.yml`):
+
+For example:
+```sh
+# .devcontainer/Dockerfile
+...
+COPY --from=nyudiffusionmri/mrtrix3:2026-01-13 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+...
+
+# Dockerfile (project root)
+...
+COPY --from=nyudiffusionmri/mrtrix3:2026-01-13 /usr/local/mrtrix3/build /usr/local/mrtrix3_build
+...
+
+# cwd: PROJECT ROOT
+# Build the test production image with the updated dependency
 docker build --platform=linux/amd64 --target production -t designer2:local .
 
-# Run the container and verify functionality
+# Run the container
 docker run --rm -it --platform=linux/amd64 designer2:local /bin/bash
 
 # Inside the container, run these commands to verify the installation:
 designer -version
-flirt -version  # verify FSL installation
+flirt -version  # Verify FSL installation
 mrinfo -version
 N4BiasFieldCorrection --help  # Verify ANTs command
 python -c "from lib import rpg; rpg.unring()"  # Verify function availability
+CreateNonlinearityDisplacementMap   # Verify TORTOISE GNC executables installation
+CreateGradientNonlinearityBMatrix
 ```
 <br>
 
-3. After successful local testing, push the new dependency image to Docker Hub:
-```sh
-docker push $IMAGE_NAME_WITH_TAG
-```
+
+6. Finally, push the new dependency image to **nyudiffusionmri** Docker Hub:
 
 For example:
 ```sh
-docker push nyudiffusionmri/mrtrix3:2025-06-16
+docker push nyudiffusionmri/mrtrix3:2026-01-13
 ```
 <br>
 
