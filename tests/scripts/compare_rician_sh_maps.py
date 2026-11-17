@@ -15,17 +15,32 @@ import nibabel as nib
 import numpy as np
 
 
+def mask_on_grid(mask_image, reference):
+    """Match voxel-axis order without interpolation; reject different grids."""
+    orientation=nib.orientations.ornt_transform(
+        nib.orientations.io_orientation(mask_image.affine),
+        nib.orientations.io_orientation(reference.affine))
+    aligned=mask_image.as_reoriented(orientation)
+    if aligned.shape!=reference.shape[:3] or not np.allclose(aligned.affine,reference.affine,atol=1e-4):
+        raise ValueError('Mask grid differs from output maps after voxel-axis reorientation')
+    return aligned
+
+
 def compare(lls, rician, mask_file, output, label="LLS", description=""):
     output.mkdir(parents=True,exist_ok=True)
-    mask_image=nib.load(mask_file)
-    mask=mask_image.get_fdata()>0
-    # Use the slice with the largest mask area in each native voxel plane.
-    planes=[(2,int(np.argmax(mask.sum(axis=(0,1)))),'axial'),
-            (1,int(np.argmax(mask.sum(axis=(0,2)))),'coronal')]
     left={p.name:p for p in lls.glob('*.nii*')}
     right={p.name:p for p in rician.glob('*.nii*')}
     if left.keys()!=right.keys():
         raise ValueError(f'Output maps differ: {left.keys() ^ right.keys()}')
+    if not left:
+        raise ValueError('No NIfTI output maps found')
+    reference=nib.load(left[sorted(left)[0]])
+    mask_image=mask_on_grid(nib.load(mask_file),reference)
+    mask=mask_image.get_fdata()>0
+    # MRtrix may write a different voxel-axis orientation than the input mask.
+    # Reorient by exact flips/permutations above, never by resampling.
+    planes=[(2,int(np.argmax(mask.sum(axis=(0,1)))),'axial'),
+            (1,int(np.argmax(mask.sum(axis=(0,2)))),'coronal')]
     rows=[]; figures=[]; scalar=[]; differences=output/'differences';differences.mkdir(exist_ok=True)
     for name in sorted(left):
         aimg=nib.load(left[name]);bimg=nib.load(right[name])
@@ -86,7 +101,7 @@ def compare(lls, rician, mask_file, output, label="LLS", description=""):
 <p>{html.escape(description)}</p>
 <p>Reference: {html.escape(label)}. Every output map and every 4D channel is included.
 Delta means RicianSH minus the reference. Statistics use all mask voxels; images use native
-voxel planes, common 1st–99th percentile limits for each pair, and a separate symmetric
+voxel planes (mask reoriented by exact axis flips/permutations if needed), common 1st–99th percentile limits for each pair, and a separate symmetric
 difference scale. Channel indices start at zero. Rotational invariants are ordered by
 SH band, then shell. No ground truth is available for these real data.</p>
 <p><a href="map_metrics.csv">All numerical metrics (CSV)</a> ·

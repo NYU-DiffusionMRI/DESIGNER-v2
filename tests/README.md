@@ -224,4 +224,6 @@ python tests/scripts/compare_rician_sh_maps.py lls_dir rician_dir mask.nii compa
 
 This saves differences as NIfTI, all-voxel metrics as CSV/JSON, axial and coronal
 figures for all channels, and a local HTML report. Both runs and the mask must
-have matching grids.
+have matching physical grids. A different mask voxel-axis order is aligned by
+exact flips/permutations without interpolation. Test this with
+`python -m pytest -q tests/test_rician_map_comparison.py`.
