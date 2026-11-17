@@ -2,6 +2,7 @@
 
 from lib.designer_input_utils import *
 from lib.designer_func_wrappers import *
+from lib.gnc import resolve_gnc_request, run_gnc_precorrection, strip_coeff_header
 
 def usage(cmdline): #pylint: disable=unused-variable
     from mrtrix3 import app #pylint: disable=no-name-in-module, import-outside-toplevel
@@ -76,7 +77,8 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-fslbvec',metavar=('<bvecs>'),help='specify bvec path if path is different from the path to the dwi or the file has an unusual extension')
     options.add_argument('-fslbval',metavar=('<bvals>'),help='specify bval path if path is different from the path to the dwi or the file has an unusual extension')
     options.add_argument('-bids',metavar=('<bids1,bids2,...>'),help='specify bids.json path if path is different from the path to the dwi or the file has an unusual extension')
-    options.add_argument('-n_cores',metavar=('<ncores>'),help='specify the number of cores to use in parallel tasks, by default designer will use available cores - 2', default=-3)
+    options.add_argument('-n_cores',type=int,metavar=('<ncores>'),help='specify the number of cores to use in parallel tasks, by default designer will use available cores - 2', default=-3)
+    options.add_argument('-bzero_threshold',type=float,metavar=('<threshold>'),help='b-value (s/mm^2) at or below which a volume is treated as b=0 when extracting b=0 reference volumes for eddy/topup. Useful for scanners that use a small nonzero nominal "b=0" (e.g. 10 or 15) instead of exactly 0. Default matches MRtrix3\'s own default of 10.0.', default=10.0)
 
     mp_options = cmdline.add_argument_group('Options for specifying denoising parameters')
     mp_options.add_argument('-patch2self', action='store_true', help='Perform patch2self')
@@ -90,6 +92,11 @@ def usage(cmdline): #pylint: disable=unused-variable
 
     rpe_options = cmdline.add_argument_group('Options for eddy and to specify the acquisition phase-encoding design')
     rpe_options.add_argument('-eddy', action='store_true', help='run fsl eddy (note that if you choose this command you must also choose a phase encoding option')
+    rpe_options.add_argument('-eddy_device', choices=['auto', 'cpu', 'cuda'], default='auto',
+        help='device used to run fsl eddy. "auto" (default) calls FSL\'s eddy wrapper, which uses '
+             'eddy_cuda when a compatible GPU is detected and falls back to eddy_cpu otherwise. '
+             '"cpu" forces eddy_cpu. "cuda" forces eddy_cuda and fails if no usable CUDA build/GPU is found '
+             '(an "eddy_cuda" soft-link in PATH takes precedence over the binaries in $FSLDIR/bin).')
     rpe_options.add_argument('-eddy_groups',metavar=('<index1,index2,...'),help='specify how input series should be grouped when running eddy, for use with variable TE or b-shape data. (Comma separated list of integers beginning with 1, i.e. 1,1,1,2,2,2 for 6 series where the first 3 series and second 3 series have different echo times).', default=None)
     rpe_options.add_argument('-eddy_fakeb',metavar=('<factor1,factor2,...'),help='specify how b-values of the input series should be scaled, for use with variable TE or b-shape data.', default=None)
     rpe_options.add_argument('-rpe_none', action='store_true', help='Specify that no reversed phase-encoding image data is being provided; eddy will perform eddy current and motion correction only')
@@ -100,26 +107,62 @@ def usage(cmdline): #pylint: disable=unused-variable
     rpe_options.add_argument('-eddy_quad_output', metavar=('<path>'), help='path to a not yet existing directory you want to save eddy_quad output to')
     rpe_options.add_argument('-eddy_quad_off', action='store_true', help='skip eddy_quad')
 
+    gnc_options = cmdline.add_argument_group('Options for gradient nonlinearity correction')
+    gnc_options.add_argument('-gnc_grad_coeff', metavar=('<coeff file>'),
+        help='Path to scanner gradient coefficient file for gradient nonlinearity '
+             'correction (spatial unwarping, backend chosen via -gnc_backend). Providing '
+             'this enables the step and also produces a per-voxel gradient-deviation '
+             '(L) tensor field, written to the scratch directory as gnc_graddev.nii.gz '
+             '(use -nocleanup to keep it), for use with designer2/tmi.py\'s -gnc option. '
+             'Currently only supported with -eddy combined with -rpe_pair or -rpe_none '
+             '(not -rpe_all, -rpe_header, -eddy_groups, -pre_align, or '
+             '-ants_motion_correction). Skipped if the BIDS sidecar(s) report '
+             'NonlinearGradientCorrection=true; errors if the DWI and RPE sidecars disagree.')
+    gnc_options.add_argument('-gnc_backend', choices=['gradunwarp', 'tortoise'], default='tortoise',
+        help='Backend used to compute the gradient nonlinearity correction warp and L '
+             'tensor. "tortoise" (default) uses TORTOISE\'s '
+             'CreateGradientNonlinearityBMatrix; "gradunwarp" uses gradient_unwarp.py '
+             'plus FSL\'s calc_grad_perc_dev. Both produce an equivalent corrected '
+             'warp and L tensor.')
+    gnc_options.add_argument('-gnc_scanner', choices=['siemens', 'ge'], default='siemens',
+        help='Scanner vendor. Passed through to gradient_unwarp for -gnc_backend '
+             'gradunwarp; mapped to TORTOISE\'s GE/non-GE --isGE flag for -gnc_backend '
+             'tortoise.')
+
     etc_options = cmdline.add_argument_group('Other options')
     etc_options.add_argument('-set_seed', action='store_true', help='set random seed and make eddy deterministic', default=False)
 
 def execute(): #pylint: disable=unused-variable
-    from mrtrix3 import app, fsl, run, path #pylint: disable=no-name-in-module, import-outside-toplevel
+    from mrtrix3 import app, fsl, run, path, MRtrixError #pylint: disable=no-name-in-module, import-outside-toplevel
     import pandas as pd
     import numpy as np
     import os
     import random
 
     from pathlib import Path
-    
+
     if app.ARGS.set_seed:
         seed = 42
         np.random.seed(seed)
-        random.seed(seed) 
+        random.seed(seed)
 
     # create a temporary directory to store processing files
     app.make_scratch_dir()
-    
+
+    # if a non-default b=0 threshold was requested, point every MRtrix3
+    # subprocess at a config file that overrides BZeroThreshold (the
+    # standard -config option only applies to the process it's passed to,
+    # not to subprocesses spawned via run.command()). run.command() reads
+    # the subprocess environment from run.shared.env, a dict snapshotted
+    # from os.environ when mrtrix3.run was first imported (well before this
+    # point) - mutating os.environ here would have no effect on it, so the
+    # dict itself must be updated directly.
+    if app.ARGS.bzero_threshold != 10.0:
+        bzero_config_path = os.path.join(app.SCRATCH_DIR, 'designer_mrtrix.conf')
+        with open(bzero_config_path, 'w') as bzero_config_file:
+            bzero_config_file.write(f'BZeroThreshold: {app.ARGS.bzero_threshold}\n')
+        run.shared.env['MRTRIX_CONFIGFILE'] = bzero_config_path
+
     # grab the fsl suffix stored in $FSLOUTPUTTYPLE
     fsl_suffix = fsl.suffix()
 
@@ -127,6 +170,57 @@ def execute(): #pylint: disable=unused-variable
     dwi_metadata = get_input_info(
         app.ARGS.input, app.ARGS.fslbval, app.ARGS.fslbvec, app.ARGS.bids)
     
+    # if rpe_pair is selected then get metadata for the rpe_data
+    rpe_json = None
+    if getattr(app.ARGS, "rpe_pair", None):
+        # resolve to absolute now - run_gnc_precorrection() re-reads
+        # app.ARGS.rpe_pair later, after app.goto_scratch_dir() has already
+        # changed the cwd.
+        app.ARGS.rpe_pair = str(Path(app.ARGS.rpe_pair).resolve())
+        rpe_path = app.ARGS.rpe_pair
+        # Strip off .gz if present, then .nii
+        if rpe_path.endswith(".nii.gz"):
+            base = rpe_path[:-7]   # remove .nii.gz
+        elif rpe_path.endswith(".nii"):
+            base = rpe_path[:-4]   # remove .nii
+        else:
+            base, _ = os.path.splitext(rpe_path)
+
+        rpe_bval = base + ".bval"
+        rpe_bvec = base + ".bvec"
+        rpe_json = base + ".json"
+
+        rpe_metadata = get_input_info(
+            rpe_path, rpe_bval, rpe_bvec, rpe_json
+        )
+
+    # skip a requested gradient nonlinearity correction if the BIDS sidecars of
+    # the inputs it would warp report it was already applied on the scanner
+    gnc_enabled = False
+    gnc_grad_coeff = None
+    if app.ARGS.gnc_grad_coeff:
+        # resolve to absolute and strip any scanner header now, before
+        # app.goto_scratch_dir() changes the cwd - run_gnc_precorrection() is
+        # only called later, well after that cwd change. Kept in a local
+        # rather than written back to app.ARGS.gnc_grad_coeff, since that
+        # should keep reflecting what the user actually passed in.
+        gnc_grad_coeff = str(Path(app.ARGS.gnc_grad_coeff).resolve())
+        # accept either the raw scanner export (with its '#' header comments)
+        # or an already-stripped file - the GNC backends only understand the latter
+        gnc_grad_coeff = strip_coeff_header(gnc_grad_coeff, app.SCRATCH_DIR)
+        gnc_sidecars = list(dwi_metadata['bidslist'])
+        if app.ARGS.eddy and rpe_json:
+            gnc_sidecars.append(rpe_json)
+        gnc_enabled = resolve_gnc_request(gnc_sidecars)
+
+    if gnc_enabled and app.ARGS.eddy:
+        gnc_unsupported = (app.ARGS.rpe_all or app.ARGS.rpe_header or app.ARGS.eddy_groups
+                            or app.ARGS.pre_align or app.ARGS.ants_motion_correction)
+        if gnc_unsupported or not (app.ARGS.rpe_pair or app.ARGS.rpe_none):
+            raise MRtrixError('-gnc_grad_coeff currently only supports -eddy combined '
+                               'with -rpe_pair or -rpe_none (no -rpe_all, -rpe_header, '
+                               '-eddy_groups, -pre_align, or -ants_motion_correction).')
+
     # ensure inputs are reasonable for subsequent dwi processing
     # assert_inputs(dwi_metadata, app.ARGS.pe_dir, app.ARGS.pf)
 
@@ -167,8 +261,20 @@ def execute(): #pylint: disable=unused-variable
         run_patch2self()
 
     # rpg gibbs artifact correction
-    if app.ARGS.degibbs:
-        run_degibbs(dwi_metadata['pf'], dwi_metadata['pe_dir'],dwi_metadata['stride'])
+    # if app.ARGS.degibbs:
+    #     run_degibbs(dwi_metadata['pf'], dwi_metadata['pe_dir'],dwi_metadata['stride'])
+
+    # Always run degibbs on main input if --degibbs is set
+    if getattr(app.ARGS, "degibbs", False):
+        run_degibbs_flexible("working.mif", dwi_metadata['pf'], dwi_metadata['pe_dir'], dwi_metadata['stride'], output_prefix="working")
+
+    # gradient nonlinearity correction (spatial unwarping) - must run before any
+    # other spatial transform (pre_align/ants_motion_correction/eddy) so its warp
+    # can later be composed with eddy's per-volume displacement field
+    gnc_rpe_pair = None
+    if gnc_enabled:
+        assert gnc_grad_coeff is not None  # gnc_enabled can only be set inside the -gnc_grad_coeff branch above
+        gnc_rpe_pair = run_gnc_precorrection(dwi_metadata, gnc_grad_coeff)
 
     # rigid alignment of b0s from separate input series
     if app.ARGS.pre_align:
@@ -180,12 +286,12 @@ def execute(): #pylint: disable=unused-variable
 
     # eddy current, succeptibility, motion correction
     if app.ARGS.eddy:
-        run_eddy(shell_table, dwi_metadata)
+        run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=gnc_rpe_pair, gnc_enabled=gnc_enabled)
 
     # if app.ARGS.denoise_after_eddy:
     #     run_sigma_denoiser(dwi_metadata)
 
-    # b1 bias correction
+    # b1 bias correction and b0 normalization - added by omnia (enable)
     if app.ARGS.b1correct:
         run_b1correct(dwi_metadata)
 
@@ -193,15 +299,20 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.mask or app.ARGS.normalize:
         create_brainmask(fsl_suffix,dwi_metadata)    
 
+
+    # Forced after b1 correction and moved before rician bias correction - added by omnia (enable)
+    # normalize separate input series (voxelwise) such that b0 images are properly scaled
+    if app.ARGS.normalize or app.ARGS.b1correct:
+        if app.ARGS.b1correct: 
+            print("running b0 normalization because -b1correct was requested.")
+        run_normalization(dwi_metadata)  
+
     # rician bias correction
     if app.ARGS.phase and app.ARGS.rician:
         print('phase included, skipping approximated bias correction')
     elif app.ARGS.rician and not app.ARGS.phase:
         run_rice_bias_correct(dwi_metadata)
 
-    # normalize separate input series (voxelwise) such that b0 images are properly scaled
-    if app.ARGS.normalize:
-        run_normalization(dwi_metadata)
 
     run.command('mrinfo -export_grad_fsl dwi_designer.bvec dwi_designer.bval working.mif', show=False)
 

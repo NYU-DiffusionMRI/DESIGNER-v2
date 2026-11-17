@@ -113,9 +113,9 @@ For more details about the development environment:
 - Official VS Code Dev Containers documentation: [Developing inside a Container](https://code.visualstudio.com/docs/devcontainers/containers)
 
 
-## Run End-to-End Tests Locally
+## Running End-to-End Tests Locally
 
-Run below command in the project root. It automatically finds all test files (prefixed with `test_`) in the `tests/` directory and runs them in parallel. `--no-cleanup` option skips the cleanup of the scratch directories, which is useful for debugging.
+Run below command in the project root. It automatically finds all test files (prefixed with `test_`) in the `tests/` directory and runs them in parallel. `--no-cleanup` option skips the cleanup of the scratch directories, which is useful for debugging. Note that **some e2e tests may fail** if running on platform other than Linux since the ground truth benchmarks are generated on Linux x86_64. 
 ```bash
 pytest -s -v --dist loadscope -n auto [--no-cleanup] tests/
 ```

@@ -59,5 +59,12 @@
         "algorithm": "cpp"
     },
     "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": []
+    "files.watcherExclude": {
+        "**/data/novikd01lab/**": true,
+        "**/data/fieree01lab/**": true
+    },
+    "search.exclude": {
+        "**/data/novikd01lab/**": true,
+        "**/data/fieree01lab/**": true
+    },
 }

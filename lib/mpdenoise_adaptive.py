@@ -56,10 +56,17 @@ from joblib import Parallel, delayed
 import scipy.linalg
 import warnings
 
+try:
+    from threadpoolctl import threadpool_limits
+except Exception:
+    threadpool_limits = None
+
 warnings.filterwarnings('ignore')
 
 class MP(object):
-    def __init__(self, dwi, kernel, patchtype, patchsize, shrinkage, algorithm, crop):
+    def __init__(self, dwi, kernel, patchtype, patchsize, shrinkage, algorithm, crop, n_cores=-1):
+        self.n_cores = n_cores
+
         if dwi.ndim > 4:
             self.coil = True
         else:
@@ -238,6 +245,12 @@ class MP(object):
         return np.diag(s)
     
     def denoise(self, coords, max_retries=3):
+        if threadpool_limits is not None:
+            with threadpool_limits(limits=1):
+                return self._denoise_impl(coords, max_retries=max_retries)
+        return self._denoise_impl(coords, max_retries=max_retries)
+
+    def _denoise_impl(self, coords, max_retries=3):
         X = self.box_patch(self.dwi, coords)
 
         if self.coil:
@@ -350,7 +363,7 @@ class MP(object):
         coords = np.vstack((x,y,z))
         
         inputs = range(0, xsize)
-        num_cores = multiprocessing.cpu_count()
+        num_cores = self.n_cores
         
         # # parallel
         signal, sigma, npars = zip(*Parallel(n_jobs=num_cores, prefer='processes')\
@@ -370,7 +383,7 @@ class MP(object):
         Sigma = self.unpad(Sigma, self.pwidth[:][:-1])
         return Signal, Sigma, Npars
 
-def denoise(img, kernel=None, patchtype=None, patchsize=None, shrinkage=None, algorithm=None, phase=None):
+def denoise(img, kernel=None, patchtype=None, patchsize=None, shrinkage=None, algorithm=None, phase=None, n_cores=-1):
 
     import ants
     if phase is not None:
@@ -389,7 +402,7 @@ def denoise(img, kernel=None, patchtype=None, patchsize=None, shrinkage=None, al
         
         print('phase denoising - square 2D patching')
         img = mag * np.exp(1j*phi)
-        mp_phase = MP(img, kernel_phase, patchtype='box', patchsize=None, shrinkage='threshold', algorithm='cordero-grande', crop=phi.shape[-1]//2)
+        mp_phase = MP(img, kernel_phase, patchtype='box', patchsize=None, shrinkage='threshold', algorithm='cordero-grande', crop=phi.shape[-1]//2, n_cores=n_cores)
         img_dn1, sigma1, npars1 = mp_phase.process()
         phi_dn = np.angle(img_dn1)
 
@@ -403,14 +416,14 @@ def denoise(img, kernel=None, patchtype=None, patchsize=None, shrinkage=None, al
 
         print('magnitude denoising - adaptive patching')
         img_np = np.real(img*np.exp(-1j*phi_dn))
-        mp = MP(img_np, kernel, patchtype='adaptive', patchsize=patchsize, shrinkage=shrinkage, algorithm=algorithm, crop=0)
+        mp = MP(img_np, kernel, patchtype='adaptive', patchsize=patchsize, shrinkage=shrinkage, algorithm=algorithm, crop=0, n_cores=n_cores)
         Signal, Sigma, Npars = mp.process()
         
     else:
         zeroinds = np.where(img==0)
         img[zeroinds] = np.finfo(img.dtype).eps
 
-        mp = MP(img.copy(), kernel, patchtype='adaptive', patchsize=patchsize, shrinkage=shrinkage, algorithm=algorithm, crop=0)
+        mp = MP(img.copy(), kernel, patchtype='adaptive', patchsize=patchsize, shrinkage=shrinkage, algorithm=algorithm, crop=0, n_cores=n_cores)
         Signal, Sigma, Npars = mp.process()
         Signal[zeroinds] = 0
 

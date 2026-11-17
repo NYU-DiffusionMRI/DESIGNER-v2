@@ -50,6 +50,7 @@ def prepare_meso_eddy_e2e_runner(scratch_dir: Path, data_dir: Path, *, without_b
     designer_config = [
         "-set_seed", 
         "-eddy", 
+        "-eddy_device", "cpu",
         # TODO: passing relative path doesn't work. need to fix it in DESIGNER code.
         "-rpe_pair", str(rpe_image_path.resolve()),
     ]
@@ -148,6 +149,7 @@ def prepare_complex_data_e2e_runner(scratch_dir: Path, data_dir: Path) -> E2ERun
         "-phase", phase_args,
         "-degibbs", 
         "-eddy", 
+        "-eddy_device", "cpu",
         "-rpe_pair", str(rpe_image_path.resolve()), 
         "-eddy_fakeb", "0.85,1.2", 
         "-rpe_te", "60", 
