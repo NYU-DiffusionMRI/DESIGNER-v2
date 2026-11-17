@@ -7,15 +7,10 @@ coefficient file and applies it either as a standalone pre-eddy correction
 eddy's own per-volume displacement fields so the combined GNC+eddy correction
 is resampled in a single interpolation pass.
 
-Both backends also produce a per-voxel gradient-deviation ("L") tensor field
-(see derive_gnc_graddev), consumed by designer2/tmi.py's -gnc option to
-correct the b-matrix itself for gradient nonlinearity, not just image
-geometry. Each backend (lib/gnc/backends/) only has to satisfy two contracts
-so the rest of this package (and eddy composition in
-finalize_single_interpolation) never needs to know which one ran:
-compute_warp() returns an FSL relative-warp file, and derive_graddev()
-returns a NIfTI with last dimension 9 (a flattened 3x3 matrix per voxel,
-L ~= Identity at undistorted voxels).
+Each backend returns an FSL relative warp from compute_warp() and a native
+gradient Jacobian from derive_graddev(). derive_gnc_graddev() exports the
+nine row-ordered components and tags the NIfTI with the backend convention.
+TMI converts this field to the scanner-frame coil tensor before fitting.
 """
 
 from lib.gnc.backends import compute_gnc_warp, derive_gnc_graddev

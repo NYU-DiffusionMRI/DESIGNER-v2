@@ -255,15 +255,20 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument(
         '-bmat', metavar=('<bmat>'),
         help='Path to .bmat text file (6xN): rows/entries are [Bxx,Bxy,Bxz,Byy,Byz,Bzz] per DWI column. '
-            'If provided, overrides bval/bvec in the input header.'
+            'Use scanner-frame components. If provided, overrides bval/bvec in the input header.'
     )
 
-    # GNC correction - this only supports LTE
+    # GNC correction for linear tensor encoding
     options.add_argument(
-        '-gnc', metavar=('<Lfile>'),
-        help='Path to gradient nonlinearity tensor field L (per-voxel 3x3). '
-            'Will apply voxelwise correction: Bcorr = L B L^T (equivalently qcorr=L q). '
-            'Expected as nifti/mif with last dim = 9 (flattened 3x3) or (...,3,3).'
+        '-gnc', metavar='<field>',
+        help='Gradient nonlinearity field on the DWI grid. Supply a native TORTOISE or DESIGNER '
+             'graddev NIfTI (9 entries per voxel or 3x3). TMI computes Bcorr = L B L^T in scanner axes.'
+    )
+    options.add_argument(
+        '-gnc_format', choices=['tortoise', 'gradunwarp', 'scanner'],
+        help='Convention of the -gnc input. By default TMI reads the DESIGNER backend tag, '
+             'assumes TORTOISE for untagged NIfTI, and assumes scanner-frame L for MIF. '
+             'Use gradunwarp for an untagged full Jacobian in FSL axes, or scanner for a preconverted L.'
     )
 
 
@@ -277,6 +282,9 @@ def execute(): #pylint: disable=unused-variable
     import lib.tensor as tensor
     import numpy as np
     import pandas as pd
+
+    if app.ARGS.gnc_format and not app.ARGS.gnc:
+        raise MRtrixError("-gnc_format requires -gnc <field>")
 
     outdir = path.from_user(app.ARGS.output, True)
     if outdir[0]=="'" and outdir[-1]=="'":
@@ -316,33 +324,14 @@ def execute(): #pylint: disable=unused-variable
     # bval = grad_mif[:,3]
     # bvec = grad_mif[:,:3].T
 
-    # GNC: load L tensor field 
     L_field = None
     if app.ARGS.gnc:
-
-        L_in = path.from_user(app.ARGS.gnc)
-        run.command(f"mrconvert {L_in} L_gnc.mif -force", show=False)
-        Lmif = load_mrtrix("L_gnc.mif")
-        Ldat = Lmif.data
-
-        # Accept either (...,9) or (...,3,3)
-        if Ldat.ndim == 4 and Ldat.shape[-1] == 9:
-            L_field = Ldat.reshape(Ldat.shape[0], Ldat.shape[1], Ldat.shape[2], 3, 3)
-        elif Ldat.ndim == 5 and Ldat.shape[-2:] == (3, 3):
-            L_field = Ldat
-        else:
-            raise MRtrixError(f"-gnc L must be (...,9) or (...,3,3); got {Ldat.shape}")
-
-        # DEBUG: prove it isn't identity
-        app.console(f"GNC: L_field shape = {L_field.shape}")
-        app.console(f"GNC: sample L[0,0,0]=\n{L_field[0,0,0,:,:]}")
-
-
-
+        from lib.gnc.graddev import load_gnc_field
+        L_field = load_gnc_field(path.from_user(app.ARGS.gnc, False), mif, app.ARGS.gnc_format)
 
     if app.ARGS.bmat:
         grad = None   # will be filled from bmat
-        app.console(f"Using B-matrix from {app.ARGS.bmat} (ignoring header bval/bvec) - bmat should be in image voxel coordinate frame just like .mif header")
+        app.console(f"Using B-matrix from {app.ARGS.bmat} (ignoring header bval/bvec) - bmat must use the same scanner axes as the .mif gradient table")
     else:
         grad_mif = mif.grad
         bval = grad_mif[:,3]

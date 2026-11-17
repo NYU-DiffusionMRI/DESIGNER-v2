@@ -9,7 +9,7 @@ import numpy as np
 import nibabel as nib
 import pytest
 
-from lib.gnc.backends import _sanitize_graddev_matrix
+from lib.gnc.graddev import sanitize_graddev_matrix
 from lib.gnc.backends.tortoise import _lps_disp_to_fsl_rel, resolve_is_ge
 from lib.gnc.coeff import strip_coeff_header
 
@@ -45,7 +45,7 @@ def test_lps_to_fsl_positive_determinant_negates_x():
 def test_sanitize_graddev_matrix_replaces_full_block_3x3():
     mat = np.arange(2 * 2 * 2 * 9, dtype=float).reshape(2, 2, 2, 3, 3)
     mat[1, 0, 1] = np.nan
-    out = _sanitize_graddev_matrix(mat)
+    out = sanitize_graddev_matrix(mat)
     assert np.array_equal(out[1, 0, 1], np.eye(3))
     # every other voxel is untouched
     untouched = mat.copy()
@@ -56,7 +56,7 @@ def test_sanitize_graddev_matrix_replaces_full_block_3x3():
 def test_sanitize_graddev_matrix_partial_nan_zeroes_whole_block():
     mat = np.ones((1, 1, 1, 3, 3))
     mat[0, 0, 0, 1, 2] = np.nan  # only one entry is NaN, rest are valid
-    out = _sanitize_graddev_matrix(mat)
+    out = sanitize_graddev_matrix(mat)
     assert np.array_equal(out[0, 0, 0], np.eye(3))
 
 
@@ -64,8 +64,8 @@ def test_sanitize_graddev_matrix_accepts_flat_and_square_shapes():
     rng = np.random.default_rng(0)
     square = rng.random((2, 2, 2, 3, 3))
     flat = square.reshape(2, 2, 2, 9)
-    out_square = _sanitize_graddev_matrix(square)
-    out_flat = _sanitize_graddev_matrix(flat).reshape(2, 2, 2, 3, 3)
+    out_square = sanitize_graddev_matrix(square)
+    out_flat = sanitize_graddev_matrix(flat).reshape(2, 2, 2, 3, 3)
     assert np.array_equal(out_square, out_flat)
 
 
