@@ -89,7 +89,7 @@ This can be extended to a sliding median filter, or an adaptive filtering method
 
 Gradient nonlinearity can change both the diffusion weighting and the gradient direction across the image. For DTI and DKI with linear tensor encoding (LTE), `tmi -gnc` uses a gradient coil tensor field `L` to compute the effective b-matrix at each voxel as `L B Lᵀ`, where `B` is the nominal b-matrix for a DWI volume.
 
-These examples use a version of TMI that lists `-gnc_format` in `tmi -help`. Use `-gnc_format` to tell TMI where `preproc_graddev.nii` came from. An explicit choice overrides the header. If you omit the option, TMI reads the backend name that DESIGNER records in the NIfTI header’s `descrip` field. An empty or unrecognized description defaults to **gradunwarp/FSL**. Renaming the file has no effect on this choice.
+These examples use a version of TMI that lists `-gnc_format` in `tmi -help`. Use `-gnc_format` to tell TMI where `preproc_graddev.nii` came from. An explicit choice overrides the header. If you omit the option, TMI reads the backend name that DESIGNER records in the NIfTI header’s `descrip` field. For an empty or unrecognized description, TMI checks the determinant of the NIfTI affine’s 3 × 3 spatial part. A negative determinant allows the **gradunwarp/FSL** default because its axes agree with TORTOISE on that grid. A positive determinant requires an explicit `-gnc_format` because the two conventions differ in the signs of four tensor entries. Renaming the file has no effect on this choice.
 
 Use the preprocessed DWI and a field on the same spatial grid. For `dwi_designer.nii`, keep `dwi_designer.bval` and `dwi_designer.bvec` alongside the image. You can also use a `.mif` DWI with an embedded gradient table. The final argument names the output directory.
 
@@ -109,13 +109,15 @@ tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format tortoise dwi_designer.nii par
 tmi -DTI -DKI -gnc gnc_graddev.nii.gz dwi_designer.nii parameters_gnc
 ```
 
-**If you already have a gradunwarp/FSL Jacobian**, pass the full, dimensionless 3 × 3 Jacobian at each voxel. An ideal coil has ones on the diagonal and zeros elsewhere. For a file without a DESIGNER backend tag, these two commands produce the same fit.
+**If you already have a gradunwarp/FSL Jacobian**, pass the full, dimensionless 3 × 3 Jacobian at each voxel. An ideal coil has ones on the diagonal and zeros elsewhere. Specify `-gnc_format gradunwarp` to use this convention on any grid.
 
 ```bash
-# Specify the source explicitly
 tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format gradunwarp dwi_designer.nii parameters_gradunwarp
+```
 
-# Use the gradunwarp default for an untagged NIfTI
+On a negative-determinant grid, such as LAS storage, an untagged native field can also use the default.
+
+```bash
 tmi -DTI -DKI -gnc preproc_graddev.nii dwi_designer.nii parameters_default
 ```
 

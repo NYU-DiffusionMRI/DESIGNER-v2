@@ -56,19 +56,28 @@ def test_native_graddev_maps_coil_to_spatial_direction(tmp_path, monkeypatch, ha
     ("preproc_graddev.nii", b""),
     ("tortoise_graddev.nii.gz", b"TORTOISE"),
 ])
-def test_nifti_with_unrecognized_tag_defaults_to_gradunwarp(tmp_path, monkeypatch, filename, description):
+@pytest.mark.parametrize("x_spacing", [-2., 2.])
+def test_untagged_nifti_default_depends_on_grid(tmp_path, monkeypatch, filename, description, x_spacing):
     monkeypatch.chdir(tmp_path)
-    dwi = read_dwi((3, 4, 5), np.eye(4))
-    # An x/y shear on a positive-determinant grid distinguishes the FSL basis.
+    affine = np.diag([x_spacing, 2., 2., 1.])
+    dwi = read_dwi((3, 4, 5), affine)
+    # Asymmetric entries expose a wrong transpose or frame.
     J = np.eye(3)
     J[0, 1] = 0.25
-    field = nib.Nifti1Image(np.broadcast_to(J.ravel(), dwi.shape + (9,)), np.eye(4))
+    J[2, 0] = -0.1
+    field = nib.Nifti1Image(np.broadcast_to(J.ravel(), dwi.shape + (9,)), affine)
     field.header["descrip"] = description
     nib.save(field, filename)
-    default = load_gnc_field(filename, dwi)
-    np.testing.assert_array_equal(default, load_gnc_field(filename, dwi, "gradunwarp"))
-    assert default[0, 0, 0, 1, 0] == -0.25
-    assert load_gnc_field(filename, dwi, "tortoise")[0, 0, 0, 1, 0] == 0.25
+    tortoise = load_gnc_field(filename, dwi, "tortoise")
+    gradunwarp = load_gnc_field(filename, dwi, "gradunwarp")
+    if x_spacing < 0:
+        np.testing.assert_array_equal(load_gnc_field(filename, dwi), gradunwarp)
+        np.testing.assert_array_equal(tortoise, gradunwarp)
+    else:
+        with pytest.raises(MRtrixError, match="Supply -gnc_format tortoise"):
+            load_gnc_field(filename, dwi)
+        assert tortoise[0, 0, 0, 1, 0] == 0.25
+        assert gradunwarp[0, 0, 0, 1, 0] == -0.25
 
 
 def test_explicit_format_overrides_header_tag(tmp_path, monkeypatch):

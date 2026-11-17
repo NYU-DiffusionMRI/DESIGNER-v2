@@ -53,7 +53,7 @@ Use a voxelwise gradient field on the DWI grid for DTI/DKI fitting. Pass the ori
 
 ### `-gnc_format <convention>`
 
-Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FSL axes, or `scanner` for a coil tensor already expressed in scanner axes. An explicit choice overrides the header. If omitted, TMI uses the DESIGNER backend name in the NIfTI header’s `descrip` field when recognized and otherwise assumes `gradunwarp`. MIF fields default to `scanner`.
+Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FSL axes, or `scanner` for a coil tensor already expressed in scanner axes. An explicit choice overrides the header. If omitted, TMI uses the DESIGNER backend name in the NIfTI header’s `descrip` field when recognized. For an empty or unrecognized description, a negative-determinant grid defaults to `gradunwarp`, while a positive-determinant grid requires an explicit choice. The determinant is taken from the 3 × 3 spatial part of the NIfTI affine. MIF fields default to `scanner`.
 
 ### `-fit_constraints <0,0,0>`
 - For use with `-DKI` or `-WDKI`

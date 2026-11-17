@@ -44,8 +44,21 @@ def load_gnc_field(filename, dwi, gnc_format=None):
     if gnc_format is None:
         desc = field.header["descrip"].item()
         backend_by_tag = {tag: backend for backend, tag in GRADDEV_DESCRIPTIONS.items()}
-        gnc_format = backend_by_tag.get(desc, "gradunwarp")
-        convention_source = "DESIGNER NIfTI header" if desc in backend_by_tag else "untagged NIfTI default"
+        if desc in backend_by_tag:
+            gnc_format = backend_by_tag[desc]
+            convention_source = "DESIGNER NIfTI header"
+        elif np.linalg.det(field.affine[:3, :3]) < 0:
+            # TORTOISE and FSL axes agree on negative-determinant grids.
+            gnc_format = "gradunwarp"
+            convention_source = "untagged NIfTI default"
+        else:
+            raise MRtrixError(
+                f"{filename} has no recognized DESIGNER backend tag. An untagged NIfTI default "
+                "requires a negative-determinant grid. On a positive-determinant grid the TORTOISE "
+                "and FSL axes differ. Supply -gnc_format tortoise for a TORTOISE graddev, "
+                "-gnc_format gradunwarp for a full Jacobian in FSL axes, or "
+                "-gnc_format scanner for a coil tensor already expressed in scanner axes."
+            )
 
     # MRtrix may permute or reverse the DWI's spatial axes during import.
     # Arrange the scalar component volumes on that grid without interpolation.
