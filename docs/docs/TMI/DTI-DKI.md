@@ -89,14 +89,16 @@ This can be extended to a sliding median filter, or an adaptive filtering method
 
 Gradient nonlinearity can change both the diffusion weighting and the gradient direction across the image. For DTI and DKI with linear tensor encoding (LTE), `tmi -gnc` uses a gradient coil tensor field `L` to compute the effective b-matrix at each voxel as `L B Lᵀ`, where `B` is the nominal b-matrix for a DWI volume.
 
-These examples use a version of TMI that lists `-gnc_format` in `tmi -help`. Use the preprocessed DWI and a field on the same spatial grid. For `dwi_designer.nii`, keep `dwi_designer.bval` and `dwi_designer.bvec` alongside the image. You can also use a `.mif` DWI with an embedded gradient table. The final argument names the output directory.
+These examples use a version of TMI that lists `-gnc_format` in `tmi -help`. Specify the format when the NIfTI lacks a recognized DESIGNER backend tag. An explicit format takes precedence over the tag, and the filename plays no role in selecting the backend.
+
+Use the preprocessed DWI and a field on the same spatial grid. For `dwi_designer.nii`, keep `dwi_designer.bval` and `dwi_designer.bvec` alongside the image. You can also use a `.mif` DWI with an embedded gradient table. The final argument names the output directory.
 
 ### TORTOISE
 
-Pass the original `preproc_graddev.nii` directly. TMI treats an untagged NIfTI as TORTOISE output and uses its affine to interpret the nine components. The tensor is already sampled at voxel centers.
+Pass the original `preproc_graddev.nii` with `-gnc_format tortoise`. TMI uses its affine to interpret the nine components. The tensor is already sampled at voxel centers.
 
 ```bash
-tmi -DTI -DKI -gnc preproc_graddev.nii dwi_designer.nii parameters_tortoise
+tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format tortoise dwi_designer.nii parameters_tortoise
 ```
 
 ### gradunwarp and FSL
@@ -136,7 +138,7 @@ TMI transposes the native Jacobian and changes its basis using `L = R Jᵀ Rᵀ`
 **Using an external b-matrix.** If you have a nominal b-matrix for each volume, add `-bmat` to override the gradient table during fitting. To use the external b-matrix alone, omit `-gnc`.
 
 ```bash
-tmi -DTI -DKI -bmat dwi.bmat -gnc preproc_graddev.nii dwi.mif parameters_bmat_gnc
+tmi -DTI -DKI -bmat dwi.bmat -gnc preproc_graddev.nii -gnc_format tortoise dwi.mif parameters_bmat_gnc
 ```
 
 Use a whitespace-delimited text file with six rows and one column per DWI volume, in the same order as the input volumes. The rows are `Bxx, Bxy, Bxz, Byy, Byz, Bzz` in s/mm², expressed in scanner axes (the MRtrix gradient-table frame). Use the unscaled off-diagonal elements and six zeros for a b = 0 volume. TMI also accepts the transposed layout.
@@ -144,5 +146,5 @@ Use a whitespace-delimited text file with six rows and one column per DWI volume
 **Outlier replacement and smoothing.** You can use `-gnc` with `-akc_outliers`, `-fit_smoothing`, or both. When `-akc_outliers` replaces the signal at a flagged voxel, TMI refits its kurtosis tensor using that voxel's corrected b-matrix for each volume. With `-fit_smoothing`, TMI also uses the corrected b-matrices when fitting the diffusion and kurtosis tensors to the smoothed signal. This applies to both single- and multi-echo fits.
 
 ```bash
-tmi -DTI -DKI -gnc preproc_graddev.nii -akc_outliers -fit_smoothing 10 dwi.mif parameters_gnc_smoothed
+tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format tortoise -akc_outliers -fit_smoothing 10 dwi.mif parameters_gnc_smoothed
 ```

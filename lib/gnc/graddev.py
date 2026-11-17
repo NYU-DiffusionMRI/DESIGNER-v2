@@ -28,19 +28,30 @@ def load_gnc_field(filename, dwi, gnc_format=None):
     """Return L on the DWI grid, with L @ g mapping nominal to actual gradients."""
     from mrtrix3 import MRtrixError, app, run
 
+    convention_source = "-gnc_format"
     if not filename.lower().endswith((".nii", ".nii.gz")):
         if gnc_format in ("gradunwarp", "tortoise"):
             raise MRtrixError("For a native graddev field, supply the original NIfTI with its voxel axes.")
         run.command(["mrconvert", filename, "L_gnc.nii", "-force"], show=False)
         filename = "L_gnc.nii"
-        gnc_format = "scanner"
+        if gnc_format is None:
+            gnc_format = "scanner"
+            convention_source = "scanner-frame default"
 
     field = nib.load(filename)
     if field.shape[3:] not in ((9,), (3, 3)):
         raise MRtrixError(f"-gnc field must be (X,Y,Z,9) or (X,Y,Z,3,3); got {field.shape}")
     if gnc_format is None:
         desc = field.header["descrip"].item()
-        gnc_format = "gradunwarp" if desc == GRADDEV_DESCRIPTIONS["gradunwarp"] else "tortoise"
+        backend_by_tag = {tag: backend for backend, tag in GRADDEV_DESCRIPTIONS.items()}
+        gnc_format = backend_by_tag.get(desc)
+        if gnc_format is None:
+            raise MRtrixError(
+                f"{filename} has no recognized DESIGNER backend tag. Supply -gnc_format tortoise "
+                "for a TORTOISE graddev, -gnc_format gradunwarp for a full Jacobian in FSL axes, "
+                "or -gnc_format scanner for a coil tensor already expressed in scanner axes."
+            )
+        convention_source = "DESIGNER NIfTI header"
 
     # MRtrix may permute or reverse the DWI's spatial axes during import.
     # Arrange the scalar component volumes on that grid without interpolation.
@@ -54,7 +65,7 @@ def load_gnc_field(filename, dwi, gnc_format=None):
         raise MRtrixError("-gnc field must be on the same spatial grid as the input DWI.")
 
     blocks = np.asanyarray(aligned.dataobj).reshape(*aligned.shape[:3], 3, 3)
-    app.console(f"Reading -gnc field in {gnc_format} convention")
+    app.console(f"Reading -gnc field in {gnc_format} convention ({convention_source})")
     if gnc_format == "scanner":
         return blocks
 

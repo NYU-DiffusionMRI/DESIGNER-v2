@@ -41,7 +41,7 @@ def test_gnc_survives_tensor_refits(tmp_path, echo_times, monkeypatch):
 
     command = ["tmi", "-DTI", "-DKI", "-akc_outliers", "-fit_smoothing", "10",
                "-fit_constraints", "0,0,0", "-n_cores", "1"]
-    for output, options in [("nominal", []), ("corrected", ["-gnc", "L.nii"])]:
+    for output, options in [("nominal", []), ("corrected", ["-gnc", "L.nii", "-gnc_format", "scanner"])]:
         subprocess.run(command + options + ["dwi.nii", output], cwd=tmp_path, check=True)
 
     suffixes = [""] if len(echo_times) == 1 else [f"_te{te:.1f}" for te in echo_times]

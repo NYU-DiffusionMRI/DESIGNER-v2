@@ -261,14 +261,14 @@ def usage(cmdline): #pylint: disable=unused-variable
     # GNC correction for linear tensor encoding
     options.add_argument(
         '-gnc', metavar='<field>',
-        help='Gradient nonlinearity field on the DWI grid. Supply a native TORTOISE or DESIGNER '
+        help='Gradient nonlinearity field on the DWI grid. Supply a TORTOISE or gradunwarp/FSL '
              'graddev NIfTI (9 entries per voxel or 3x3). TMI computes Bcorr = L B L^T in scanner axes.'
     )
     options.add_argument(
         '-gnc_format', choices=['tortoise', 'gradunwarp', 'scanner'],
-        help='Convention of the -gnc input. By default TMI reads the DESIGNER backend tag, '
-             'assumes TORTOISE for untagged NIfTI, and assumes scanner-frame L for MIF. '
-             'Use gradunwarp for an untagged full Jacobian in FSL axes, or scanner for a preconverted L.'
+        help='Convention of the -gnc input. Required for NIfTI without a recognized DESIGNER backend tag. '
+             'Use tortoise for a TORTOISE graddev, gradunwarp for a full Jacobian in FSL axes, or scanner '
+             'for a preconverted coil tensor. An explicit choice overrides the header tag. MIF defaults to scanner.'
     )
 
 
