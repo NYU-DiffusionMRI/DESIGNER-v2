@@ -208,8 +208,10 @@ single- and multi-echo data, check input errors, and compare the nonlinear fit
 against an independent SciPy optimizer. The experiment directly integrates
 three Standard Model tissues with Watson orientation distributions, generates
 128 independent Rician noise realizations at each of four b0 SNRs, and runs
-noiseless LLS, noisy LLS, corrected noisy LLS (`sqrt(abs(S**2 - sigma**2))`),
-and noisy RicianSH through `tmi`. It saves all maps,
+noiseless LLS, noisy LLS, clipped corrected noisy LLS (`sqrt(max(0, S**2 - sigma**2))`),
+and noisy RicianSH through `tmi`. RicianSH uses the linear fit to the clipped
+corrected signal as its initialization, then fits the original magnitude data
+with nonnegative signal constraints. It saves all maps,
 commands, logs, truth maps, per-map bias/RMSE/MAE tables, and figures. The normal
 SMI training priors and seed are identical across runs. Errors relative to the
 known SM parameters and to noiseless `tmi` are reported separately, since the
@@ -219,7 +221,7 @@ To compare every map and channel from two real-data runs:
 
 ```bash
 python tests/scripts/compare_rician_sh_maps.py lls_dir rician_dir mask.nii comparison_dir \
-  --label "Corrected LLS" --description "LLS input: sqrt(abs(S**2 - sigma**2)); RicianSH input: original magnitude."
+  --label "Clipped corrected LLS" --description "LLS input: sqrt(max(0, S**2 - sigma**2)); RicianSH input: original magnitude."
 ```
 
 This saves differences as NIfTI, all-voxel metrics as CSV/JSON, axial and coronal
