@@ -70,14 +70,14 @@ def experiment(root, repeats=128, reuse=False):
     rng = np.random.default_rng(20261117)
     noisy = np.hypot(clean+sigma[...,None]*rng.standard_normal(clean.shape),
                      sigma[...,None]*rng.standard_normal(clean.shape))
-    corrected = np.sqrt(np.abs(noisy**2 - sigma[...,None]**2))
+    corrected = np.sqrt(np.maximum(0., noisy**2 - sigma[...,None]**2))
     metadata = {'seed':20261117, 'snr_definition':'noise-free b0 / complex-component sigma',
                 'snrs':snrs.tolist(), 'repeats_per_tissue_per_snr':repeats,
                 'tissues':params, 'truth':truth, 'directions_per_diffusion_shell':60,
                 'b_s_per_mm2':[0,1000,2000,3000], 'odf':'Watson about z; 4096-point sphere quadrature',
                 'S0':s0, 'training':'unmodified default SMI prior and seed; IAS,EAS',
                 'noise':'sqrt((S+sigma*N1)^2+(sigma*N2)^2); independent standard Gaussian N1,N2',
-                'corrected_lls':'sqrt(abs(magnitude**2 - sigma**2)) before the default LLS tmi fit'}
+                'corrected_lls':'sqrt(max(0, magnitude**2 - sigma**2)) before the default LLS tmi fit'}
     if reuse and (root/'experiment.json').exists():
         previous=json.loads((root/'experiment.json').read_text())
         for key in ['seed','snrs','repeats_per_tissue_per_snr','tissues','S0']:

@@ -94,7 +94,8 @@ class SMI(object):
         Setting some default values and initialization required for class functions.
 
         rician_sh : bool, optional
-            Use Rician-expectation nonlinear SH fitting (default False). Requires
+            Use Rician-expectation nonlinear SH fitting with nonnegative signal
+            constraints on acquired directions and a dense sphere grid (default False). Requires
             an explicit sigma map in fit(), in the same intensity units as dwi.
             Cannot be combined with the separate noise_bias pre-correction.
         """
@@ -521,7 +522,7 @@ class SMI(object):
             dwi_2D = dwi
 
         if self.rician_sh:
-            from lib.rician_sh import fit_rician_sh
+            from lib.rician_sh import fit_rician_sh, nonnegative_directions
             if sigma is None:
                 raise ValueError("Rician SH fitting requires an explicit sigma noise map")
             sigma = np.asarray(sigma, dtype=float)
@@ -565,6 +566,8 @@ class SMI(object):
         n_l_unique = np.sqrt((2 * l + 1) * (4 * np.pi))
 
         y_lm_matrix = self.get_even_sh(self.dirs, np.max(l_max))
+        if self.rician_sh:
+            nonnegative_basis = self.get_even_sh(nonnegative_directions(), np.max(l_max))
 
         s_l_clusters_all = np.zeros((int(np.max(l_max) / 2 + 1), n_voxels, n_shells))
         s_lm_clusters_all = np.zeros((int(np.max(n_sh_coeffs)), n_voxels, n_shells))
@@ -590,7 +593,8 @@ class SMI(object):
                     s_lm_current_cluster = fit_rician_sh(
                         y_lm_current_cluster[:, ids_current_lm],
                         dwi_2D[ids_current_cluster, :], sigma_1d,
-                        s_lm_current_cluster)
+                        s_lm_current_cluster,
+                        constraint_basis=nonnegative_basis[:, ids_current_lm])
                 s_l_current_cluster = np.zeros((int(l_max[i]/2+1), n_voxels))
                 s_l_current_cluster[0,:] = abs(s_lm_current_cluster[0,:])
                 for j in range(2, int(l_max[i]) + 2, 2):

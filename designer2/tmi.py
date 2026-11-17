@@ -245,7 +245,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options = cmdline.add_argument_group('tensor options for the TMI script')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
-    smi_options.add_argument('-RicianSH', action='store_true', help='Fit SMI spherical harmonics with the Rician expected magnitude (requires -SMI and -sigma). Default: linear least squares.')
+    smi_options.add_argument('-RicianSH', action='store_true', help='Fit SMI spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SMI and -sigma). Default: linear least squares.')
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
     smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for SMI polynomial regression. must be 0,2,4, or 6.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
@@ -1677,7 +1677,7 @@ def execute(): #pylint: disable=unused-variable
                     or not np.allclose(sigma_image.transform, mif.transform, rtol=1e-5, atol=1e-4)):
                     raise MRtrixError("-RicianSH sigma map must be aligned to the DWI grid")
                 sigma = _ensure_spatial_map_3d(sigma, mask.shape, name="sigma")
-            logger.info("SMI SH estimator: %s", "Rician expectation NLS" if app.ARGS.RicianSH else "linear least squares")
+            logger.info("SMI SH estimator: %s", "Rician expectation NLS with nonnegative signal constraints" if app.ARGS.RicianSH else "linear least squares")
 
             if app.ARGS.compartments:
                 compartments = app.ARGS.compartments

@@ -4,7 +4,7 @@ import pytest
 from scipy.optimize import least_squares
 from scipy.stats import rice
 
-from lib.rician_sh import fit_rician_sh, rician_mean_and_derivative
+from lib.rician_sh import fit_rician_sh, rician_mean_and_derivative, nonnegative_directions
 from lib.smi import SMI
 
 
@@ -157,3 +157,81 @@ def test_default_float32_data_keep_double_precision_shell_means():
     actual=obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi,obj.mask)
     expected=dwi[...,:6].astype(float).mean(axis=-1)
     np.testing.assert_allclose(actual[...,0],expected,rtol=1e-15)
+
+
+@pytest.mark.parametrize('scale', [1e-6, 1., 1e6])
+def test_nonnegative_zero_noise_has_known_constrained_linear_solution(scale):
+    # Minimize 3*(c0-1)^2 + 2*(c1-1)^2 subject to c0 >= 2*abs(c1).
+    # The solution is c0=8/7, c1=4/7; ordinary LLS is [1,1].
+    basis = np.array([[1., -1.], [1., 0.], [1., 1.]])
+    constraints = np.array([[1., -2.], [1., 2.]])
+    measured = np.array([[0.], [1.], [2.]])*scale
+    initial = np.array([[1.], [1.]])*scale
+    result = fit_rician_sh(basis, measured, np.zeros(1), initial,
+                           constraint_basis=constraints)/scale
+    np.testing.assert_allclose(result[:,0], [8/7, 4/7], atol=1e-7)
+    assert np.min(constraints @ result) >= -1e-12
+    # Default unconstrained zero-noise behavior is preserved for diagnostics.
+    np.testing.assert_array_equal(fit_rician_sh(basis, measured, np.zeros(1), initial), initial)
+
+
+def test_nonnegative_low_snr_signal_on_acquired_and_dense_grid():
+    rng = np.random.default_rng(20261120)
+    obj = model()
+    basis = obj.get_even_sh(obj.dirs[6:66], 4)
+    grid = obj.get_even_sh(nonnegative_directions(4096), 4)
+    sigma = np.full(12, .4)
+    measured = np.hypot(.3 + .4*rng.normal(size=(60,12)),
+                        .4*rng.normal(size=(60,12)))
+    initial = np.linalg.lstsq(basis, measured, rcond=None)[0]
+    old = fit_rician_sh(basis, measured, sigma, initial)
+    assert (grid @ old).min() < -.1
+    result = fit_rician_sh(basis, measured, sigma, initial,
+                           constraint_basis=grid, chunk_size=3)
+    assert (grid @ result).min() >= -1e-10
+    assert (basis @ result).min() >= -1e-10
+    assert np.isfinite(result).all()
+
+
+def test_nonnegative_constraint_does_not_change_feasible_fit():
+    obj = model()
+    basis = obj.get_even_sh(obj.dirs[6:96], 4)
+    grid = obj.get_even_sh(nonnegative_directions(1024), 4)
+    true = np.zeros((15,2)); true[0] = 3; true[2] = .1
+    measured = rician_mean_and_derivative(basis @ true, .1)[0]
+    initial = np.linalg.lstsq(basis, measured, rcond=None)[0]
+    old = fit_rician_sh(basis, measured, np.full(2,.1), initial)
+    result = fit_rician_sh(basis, measured, np.full(2,.1), initial, constraint_basis=grid)
+    np.testing.assert_array_equal(result, old)
+    np.testing.assert_allclose(result, true, atol=1e-7)
+
+
+def test_nonnegative_failed_solver_returns_feasible_result_with_warning(monkeypatch):
+    from types import SimpleNamespace
+    import lib.rician_sh as module
+    basis = np.array([[1.,-1.],[1.,0.],[1.,1.]])
+    grid = np.array([[1.,-2.],[1.,2.]])
+    monkeypatch.setattr(module, 'minimize', lambda fun, x, **kwargs:
+                        SimpleNamespace(x=np.array([1.,1.]), success=False))
+    with pytest.warns(RuntimeWarning, match='grid-feasible'):
+        result = fit_rician_sh(basis, np.array([[0.],[1.],[2.]]), np.zeros(1),
+                               np.array([[1.],[1.]]), constraint_basis=grid)
+    assert (grid @ result).min() >= -1e-12
+
+
+def test_smi_uses_nonnegative_signal_constraints_in_forward_projection():
+    obj = model(True)
+    obj.mask = np.ones((2,2,1), bool)
+    obj.project_forward_SH = True
+    rng = np.random.default_rng(31)
+    data = np.hypot(.3 + .4*rng.normal(size=(2,2,1,186)),
+                    .4*rng.normal(size=(2,2,1,186)))
+    basis = obj.get_even_sh(obj.dirs[96:],4)
+    raw = data[...,96:].reshape(-1,90).T
+    initial = np.linalg.lstsq(basis,raw,rcond=None)[0]
+    unconstrained = fit_rician_sh(basis,raw,np.full(4,.4),initial)
+    assert (basis @ unconstrained).min() < -.01
+    obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(
+        data,obj.mask,rank1sl=False,sigma=np.full(obj.mask.shape,.4))
+    assert np.isfinite(obj.signal_4d).all()
+    assert obj.signal_4d[...,6:].min() >= -1e-10

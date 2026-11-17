@@ -48,7 +48,8 @@ designer2_test.mif designer2_params_test
 ```
 
 For magnitude data with a retained Rician noise floor, `tmi -SMI -RicianSH
--sigma sigma.nii dwi.nii output_dir` enables Rician-expectation SH fitting.
+-sigma sigma.nii dwi.nii output_dir` enables Rician-expectation SH fitting with
+nonnegative signal constraints at acquired directions and on a dense sphere grid.
 The noise map must match the DWI grid and intensity scale. Omitting `-RicianSH`
 keeps linear least squares. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
 for assumptions and limitations.

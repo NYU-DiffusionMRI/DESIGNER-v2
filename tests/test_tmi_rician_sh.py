@@ -53,6 +53,8 @@ def test_cli_both_estimators(inputs, multi_te):
         result=run_cli(inputs,name,common+extra)
         assert result.returncode == 0, result.stdout
         assert ('Rician expectation NLS' if extra else 'linear least squares') in result.stdout
+        if extra:
+            assert 'nonnegative signal constraints' in result.stdout
     lls_files=sorted((inputs/'lls').glob('*.nii'))
     assert {p.name for p in lls_files} == {p.name for p in (inputs/'rician').glob('*.nii')}
     for p in lls_files:

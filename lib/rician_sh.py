@@ -7,7 +7,19 @@ import warnings
 
 import numpy as np
 from scipy.special import i0e, i1e
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares, minimize, LinearConstraint
+
+
+def nonnegative_directions(count=65536):
+    """Deterministic sphere grid used to constrain the underlying SH signal.
+
+    A finite grid is not a continuous-sphere nonnegativity certificate.
+    Acquired directions are included separately by the constrained fitter.
+    """
+    z = 1 - 2 * (np.arange(count) + .5) / count
+    phi = np.arange(count) * np.pi * (3 - np.sqrt(5))
+    radius = np.sqrt(1 - z*z)
+    return np.column_stack((radius*np.cos(phi), radius*np.sin(phi), z))
 
 
 def rician_mean_and_derivative(signal, sigma):
@@ -35,12 +47,17 @@ def rician_mean_and_derivative(signal, sigma):
     return mean, deriv
 
 
-def fit_rician_sh(basis, measurements, sigma, initial, chunk_size=256):
+def fit_rician_sh(basis, measurements, sigma, initial, chunk_size=256,
+                  constraint_basis=None):
     """Refine an LLS fit with bounded-memory batched Levenberg--Marquardt.
 
     Shapes: basis (directions, coefficients), measurements (directions, voxels),
-    sigma (voxels,), initial (coefficients, voxels). Zero-noise voxels retain
-    their LLS coefficients exactly. Fits are scaled per voxel so tolerances do
+    sigma (voxels,), initial (coefficients, voxels). With constraint_basis,
+    require nonnegative signal at its rows and all acquired directions using
+    linear constraints in coefficient space. The unconstrained fit is used
+    when already feasible; otherwise solve constrained mean least squares.
+    Zero-noise fits reduce to constrained LLS. Without constraints, zero-noise
+    voxels retain their LLS coefficients exactly. Fits are scaled so tolerances do
     not depend on signal units. No spatial smoothing or intensity correction
     is applied to the input data.
     """
@@ -58,7 +75,95 @@ def fit_rician_sh(basis, measurements, sigma, initial, chunk_size=256):
             f"Rician SH fit reached the iteration limit in {unfinished} voxel(s) "
             "in this shell; returning the best accepted coefficients.",
             RuntimeWarning, stacklevel=2)
+    if constraint_basis is not None:
+        result = _enforce_nonnegative(basis, measurements, sigma, initial,
+                                      result, constraint_basis, chunk_size)
     return result
+
+
+def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
+                         constraint_basis, chunk_size):
+    """Constraint generation avoids passing 65k inequalities to every QP.
+
+    Each subproblem contains all acquired directions, an initial sphere
+    subset, and its worst violated grid constraints. Stop only after checking
+    the entire supplied grid. Unfinished fits return the best feasible point
+    with a warning, never an unconstrained fallback.
+    """
+    constraint_basis = np.asarray(constraint_basis, dtype=float)
+    if (constraint_basis.ndim != 2 or constraint_basis.shape[1] != basis.shape[1]
+            or not np.all(np.isfinite(constraint_basis))):
+        raise ValueError('constraint_basis must be finite with one column per SH coefficient')
+    grid = np.vstack((basis, constraint_basis))
+    # Feasibility restoration adjusts only the constant SH coefficient.
+    if not np.allclose(grid[:, 0], grid[0, 0], rtol=1e-12, atol=0) or grid[0, 0] <= 0:
+        raise ValueError('Nonnegative SH fitting requires a positive constant first basis column')
+    constant = grid[0, 0]
+    seed = np.unique(np.r_[np.arange(len(basis)),
+                           np.linspace(len(basis), len(grid)-1,
+                                       min(256, len(constraint_basis)), dtype=int)])
+    unfinished = 0
+    for start in range(0, fitted.shape[1], chunk_size):
+        stop = min(start + chunk_size, fitted.shape[1])
+        minima = np.min(grid @ fitted[:, start:stop], axis=0)
+        for voxel in start + np.flatnonzero(minima < 0):
+            scale = max(np.max(np.abs(measurements[:, voxel])), sigma[voxel], np.finfo(float).tiny)
+            observed = measurements[:, voxel] / scale
+            noise = sigma[voxel] / scale
+
+            def objective(coef):
+                signal = basis @ coef
+                if noise == 0:
+                    # On the feasible domain, the zero-noise model is linear.
+                    mean, derivative = signal, np.ones_like(signal)
+                else:
+                    mean, derivative = rician_mean_and_derivative(signal, noise)
+                residual = mean - observed
+                return .5*(residual @ residual), basis.T @ (residual*derivative)
+
+            def feasible(coef, minimum=None):
+                coef = np.array(coef, copy=True)
+                if minimum is None:
+                    minimum = np.min(grid @ coef)
+                if minimum < 0:
+                    coef[0] += (-minimum + 32*np.finfo(float).eps) / constant
+                return coef
+
+            # Start from feasible LLS, not a folded negative-signal solution.
+            best = feasible(initial[:, voxel] / scale)
+            best_cost = objective(best)[0]
+            active = seed.copy()
+            current = best.copy()
+            converged = False
+            for _ in range(24):
+                fit = minimize(objective, current, jac=True, method='SLSQP',
+                               constraints=[LinearConstraint(grid[active], 0, np.inf)],
+                               options={'maxiter':500, 'ftol':1e-11})
+                if not np.all(np.isfinite(fit.x)):
+                    break
+                signal = grid @ fit.x
+                minimum = signal.min()
+                candidate = feasible(fit.x, minimum)
+                cost = objective(candidate)[0]
+                if np.isfinite(cost) and cost < best_cost:
+                    best, best_cost = candidate, cost
+                if fit.success and minimum >= -1e-10:
+                    converged = True
+                    break
+                # Keep the most violated rows. A failed SLSQP solve without
+                # violations gets another attempt from its feasible result.
+                violated = np.flatnonzero(signal < -1e-10)
+                if violated.size:
+                    worst = violated[np.argsort(signal[violated])[:32]]
+                    active = np.union1d(active, worst)
+                current = candidate
+            fitted[:, voxel] = best * scale
+            unfinished += not converged
+    if unfinished:
+        warnings.warn(f'Nonnegative Rician SH fit did not converge in {unfinished} voxel(s) '
+                      'in this shell; returning the best grid-feasible coefficients.',
+                      RuntimeWarning, stacklevel=2)
+    return fitted
 
 
 def _fit_batch(basis, measurements, sigma, initial, max_iter=200):
