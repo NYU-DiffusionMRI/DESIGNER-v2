@@ -245,6 +245,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options = cmdline.add_argument_group('tensor options for the TMI script')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
+    smi_options.add_argument('-RicianSH', action='store_true', help='Fit SMI spherical harmonics with the Rician expected magnitude (requires -SMI and -sigma). Default: linear least squares.')
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
     smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for SMI polynomial regression. must be 0,2,4, or 6.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
@@ -278,6 +279,12 @@ def execute(): #pylint: disable=unused-variable
     import numpy as np
     import pandas as pd
 
+    if app.ARGS.RicianSH:
+        if not app.ARGS.SMI:
+            raise MRtrixError("-RicianSH requires -SMI")
+        if not app.ARGS.sigma:
+            raise MRtrixError("-RicianSH requires an explicit noise map via -sigma")
+
     outdir = path.from_user(app.ARGS.output, True)
     if outdir[0]=="'" and outdir[-1]=="'":
         outdir= outdir.replace("'","")
@@ -310,6 +317,9 @@ def execute(): #pylint: disable=unused-variable
     app.goto_scratch_dir()
 
     mif = load_mrtrix('dwi.mif')
+    # Image.load mutates its transform array; keep the DWI geometry independent
+    # of subsequently loaded spatial maps (including sigma).
+    mif.transform = mif.transform.copy()
     dwi = mif.data
     dwi=abs(dwi)
     # grad_mif = mif.grad
@@ -1656,9 +1666,18 @@ def execute(): #pylint: disable=unused-variable
             else:
                 if not path.from_user(app.ARGS.sigma).endswith('.mif'):
                     run.command('mrconvert %s sigma.mif -force' % path.from_user(app.ARGS.sigma), show=False) 
-                    sigma = load_mrtrix('sigma.mif').data
+                    sigma_image = load_mrtrix('sigma.mif')
+                    sigma = sigma_image.data
                 else:
-                    sigma = load_mrtrix(path.from_user(app.ARGS.sigma)).data
+                    sigma_image = load_mrtrix(path.from_user(app.ARGS.sigma))
+                    sigma = sigma_image.data
+
+            if app.ARGS.RicianSH:
+                if (not np.allclose(sigma_image.vox[:3], mif.vox[:3], rtol=1e-5, atol=1e-5)
+                    or not np.allclose(sigma_image.transform, mif.transform, rtol=1e-5, atol=1e-4)):
+                    raise MRtrixError("-RicianSH sigma map must be aligned to the DWI grid")
+                sigma = _ensure_spatial_map_3d(sigma, mask.shape, name="sigma")
+            logger.info("SMI SH estimator: %s", "Rician expectation NLS" if app.ARGS.RicianSH else "linear least squares")
 
             if app.ARGS.compartments:
                 compartments = app.ARGS.compartments
@@ -1719,7 +1738,8 @@ def execute(): #pylint: disable=unused-variable
                 prior = mat[array_name[-1]]
                 smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres))
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
+                            rician_sh=app.ARGS.RicianSH)
                 
 
                 logger.info("SMI model initialized for multi-TE/beta data.")
@@ -1760,7 +1780,8 @@ def execute(): #pylint: disable=unused-variable
                 
                 smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
-                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres))
+                            beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
+                            rician_sh=app.ARGS.RicianSH)
 
                 # else:
                 #     smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,

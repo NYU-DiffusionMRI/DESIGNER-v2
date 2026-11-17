@@ -119,3 +119,24 @@ designer2_<tag>.sif tmi \
 ```
 
 ---
+
+
+### Rician-aware SH estimation
+
+For magnitude data with an appropriate noise map and a retained Rician noise floor:
+
+```bash
+tmi dwi.nii smi_rician \
+  -SMI -RicianSH \
+  -sigma sigma.nii -mask brain_mask.nii
+```
+
+Omit `-RicianSH` to use the existing linear SH fit:
+
+```bash
+tmi dwi.nii smi_linear -SMI -sigma sigma.nii -mask brain_mask.nii
+```
+
+Both commands produce the same named SMI parameter and rotational-invariant maps.
+The flag changes only SMI's SH estimation, including the multi-TE/b-shape path;
+it does not change DTI/DKI fits requested in the same command.

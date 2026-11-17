@@ -191,3 +191,37 @@ Helper scripts in `scripts/` (in the project root):
 ## Notes
 
 - Sythnstrip model (`tests/models/synthstrip_v7.3.2.pt`), which is used for D6 skull stripping, is downloaded by running `bash scripts/download_freesurfer_synthstrip.sh`
+
+
+## Rician SH tests and synthetic experiment
+
+Run inside the dev container from `/workspace`:
+
+```bash
+OPENBLAS_NUM_THREADS=1 SMI_BLAS_THREADS=1 python -m pytest -q \
+  tests/test_rician_sh.py tests/test_tmi_rician_sh.py
+python tests/scripts/rician_sh_experiment.py /path/to/results
+```
+
+The tests generate their own images, exercise the installed `tmi` command for
+single- and multi-echo data, check input errors, and compare the nonlinear fit
+against an independent SciPy optimizer. The experiment directly integrates
+three Standard Model tissues with Watson orientation distributions, generates
+128 independent Rician noise realizations at each of four b0 SNRs, and runs
+noiseless LLS, noisy LLS, corrected noisy LLS (`sqrt(abs(S**2 - sigma**2))`),
+and noisy RicianSH through `tmi`. It saves all maps,
+commands, logs, truth maps, per-map bias/RMSE/MAE tables, and figures. The normal
+SMI training priors and seed are identical across runs. Errors relative to the
+known SM parameters and to noiseless `tmi` are reported separately, since the
+SH correction does not remove regression bias or finite-sample invariant bias.
+
+To compare every map and channel from two real-data runs:
+
+```bash
+python tests/scripts/compare_rician_sh_maps.py lls_dir rician_dir mask.nii comparison_dir \
+  --label "Corrected LLS" --description "LLS input: sqrt(abs(S**2 - sigma**2)); RicianSH input: original magnitude."
+```
+
+This saves differences as NIfTI, all-voxel metrics as CSV/JSON, axial and coronal
+figures for all channels, and a local HTML report. Both runs and the mask must
+have matching grids.

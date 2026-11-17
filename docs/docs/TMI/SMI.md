@@ -83,7 +83,17 @@ Standard Model parameters (diffusion) + compartmental T2 values (only if multipl
 ---
 
 ## Parameter estimation
-First, the rotational invariants of the diffusion signal are estimated. This is done using a least squares estimator. 
+First, the rotational invariants of the diffusion signal are estimated. By default, SH coefficients are fit with ordinary linear least squares. Supplying a noise map alone does not change this estimator.
+
+With `tmi -SMI -RicianSH -sigma sigma.nii`, the SH fit instead minimizes
+
+$$\sum_i \left(\mathbb{E}[M_i \mid (Yc)_i,\sigma] - M_i\right)^2,$$
+
+where `Yc` is the underlying SH signal, `M` is the measured magnitude, and `sigma` is the standard deviation of each Gaussian component before magnitude reconstruction. The Rician mean is evaluated using scaled modified Bessel functions; an analytic Jacobian and a batched Levenberg–Marquardt solver refine the linear fit. Each voxel is scaled internally for numerical stability, and fitting uses bounded-size chunks. Difficult voxels receive a per-voxel SciPy least-squares refinement. A warning reports any remaining fits that reach the iteration limit; their best accepted coefficients are retained.
+
+This implements the Rician-expectation approach from S. Coelho's SHestimation, retaining TMI's SH normalization, phase, shell grouping, and rank-one processing of invariants. As in that reference, b=0 and isotropic-shell means remain unchanged. This is a fit of the expected magnitude, not a maximum-likelihood estimator or an unbiasedness guarantee. The downstream SMI regression and its noise training model remain unchanged; their statistical bias may persist, especially at low SNR.
+
+Use a finite, nonnegative noise map aligned to the DWI in the same intensity units. A zero noise value selects the linear coefficients for that voxel. The option is intended for magnitude data that retain a Rician noise floor, not data already corrected with `designer -rician` or complex/phase-unwound denoising. A noise map estimated before operations that change the noise distribution or signal scale may not be appropriate.
 
 Then, the SM parameters are estimated from the rotational invariants of the signal (up to L=4 as default option). Unlike conventional parameter estimation approaches which rely on an analytical forward model, e.g. maximum likelihood, here we use data-driven machine learning (ML) regression. This is done by applying a sufficiently flexible nonlinear regression to _training data_ generated with the forward model of interest, considering a wide distribution of model parameters, the noise level, and the protocol that was used. Then, such regression is applied to the data of interest.
 
