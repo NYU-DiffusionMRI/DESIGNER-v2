@@ -44,14 +44,8 @@ def load_gnc_field(filename, dwi, gnc_format=None):
     if gnc_format is None:
         desc = field.header["descrip"].item()
         backend_by_tag = {tag: backend for backend, tag in GRADDEV_DESCRIPTIONS.items()}
-        gnc_format = backend_by_tag.get(desc)
-        if gnc_format is None:
-            raise MRtrixError(
-                f"{filename} has no recognized DESIGNER backend tag. Supply -gnc_format tortoise "
-                "for a TORTOISE graddev, -gnc_format gradunwarp for a full Jacobian in FSL axes, "
-                "or -gnc_format scanner for a coil tensor already expressed in scanner axes."
-            )
-        convention_source = "DESIGNER NIfTI header"
+        gnc_format = backend_by_tag.get(desc, "gradunwarp")
+        convention_source = "DESIGNER NIfTI header" if desc in backend_by_tag else "untagged NIfTI default"
 
     # MRtrix may permute or reverse the DWI's spatial axes during import.
     # Arrange the scalar component volumes on that grid without interpolation.

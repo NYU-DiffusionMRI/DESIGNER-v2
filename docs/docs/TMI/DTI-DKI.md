@@ -89,13 +89,13 @@ This can be extended to a sliding median filter, or an adaptive filtering method
 
 Gradient nonlinearity can change both the diffusion weighting and the gradient direction across the image. For DTI and DKI with linear tensor encoding (LTE), `tmi -gnc` uses a gradient coil tensor field `L` to compute the effective b-matrix at each voxel as `L B Lᵀ`, where `B` is the nominal b-matrix for a DWI volume.
 
-These examples use a version of TMI that lists `-gnc_format` in `tmi -help`. Specify the format when the NIfTI lacks a recognized DESIGNER backend tag. An explicit format takes precedence over the tag, and the filename plays no role in selecting the backend.
+These examples use a version of TMI that lists `-gnc_format` in `tmi -help`. Use `-gnc_format` to tell TMI where `preproc_graddev.nii` came from. An explicit choice overrides the header. If you omit the option, TMI reads the backend name that DESIGNER records in the NIfTI header’s `descrip` field. An empty or unrecognized description defaults to **gradunwarp/FSL**. Renaming the file has no effect on this choice.
 
 Use the preprocessed DWI and a field on the same spatial grid. For `dwi_designer.nii`, keep `dwi_designer.bval` and `dwi_designer.bvec` alongside the image. You can also use a `.mif` DWI with an embedded gradient table. The final argument names the output directory.
 
 ### TORTOISE
 
-Pass the original `preproc_graddev.nii` with `-gnc_format tortoise`. TMI uses its affine to interpret the nine components. The tensor is already sampled at voxel centers.
+For a native TORTOISE export, pass the original `preproc_graddev.nii` with `-gnc_format tortoise`. TMI uses its affine to interpret the nine components. The tensor is already sampled at voxel centers.
 
 ```bash
 tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format tortoise dwi_designer.nii parameters_tortoise
@@ -109,10 +109,14 @@ tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format tortoise dwi_designer.nii par
 tmi -DTI -DKI -gnc gnc_graddev.nii.gz dwi_designer.nii parameters_gnc
 ```
 
-**If you already have an untagged gradunwarp/FSL Jacobian**, specify `-gnc_format gradunwarp` even if the file is named `preproc_graddev.nii`. It must contain the full, dimensionless 3 × 3 Jacobian at each voxel. An ideal coil has ones on the diagonal and zeros elsewhere.
+**If you already have a gradunwarp/FSL Jacobian**, pass the full, dimensionless 3 × 3 Jacobian at each voxel. An ideal coil has ones on the diagonal and zeros elsewhere. For a file without a DESIGNER backend tag, these two commands produce the same fit.
 
 ```bash
+# Specify the source explicitly
 tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format gradunwarp dwi_designer.nii parameters_gradunwarp
+
+# Use the gradunwarp default for an untagged NIfTI
+tmi -DTI -DKI -gnc preproc_graddev.nii dwi_designer.nii parameters_default
 ```
 
 **If you have only `fullWarp_abs.nii.gz` from `gradient_unwarp.py`**, first convert this three-component absolute warp to a nine-component Jacobian. The example below starts with a warp on the DWI grid and a brain mask that excludes its outermost voxel layer. FSL estimates spatial derivatives using neighboring voxels, so values on the outermost layer are unreliable. To retain those voxels, generate the warp from the coil coefficients on a reference padded by one voxel on each side, compute the Jacobian there, and crop it back to the DWI grid. DESIGNER's gradunwarp backend performs that padding and cropping automatically.

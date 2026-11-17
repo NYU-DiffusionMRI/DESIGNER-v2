@@ -54,16 +54,21 @@ def test_native_graddev_maps_coil_to_spatial_direction(tmp_path, monkeypatch, ha
 
 @pytest.mark.parametrize("filename,description", [
     ("preproc_graddev.nii", b""),
-    ("tortoise_gradunwarp.nii.gz", b"gradunwarp"),
+    ("tortoise_graddev.nii.gz", b"TORTOISE"),
 ])
-def test_nifti_with_unrecognized_tag_requires_format(tmp_path, monkeypatch, filename, description):
+def test_nifti_with_unrecognized_tag_defaults_to_gradunwarp(tmp_path, monkeypatch, filename, description):
     monkeypatch.chdir(tmp_path)
     dwi = read_dwi((3, 4, 5), np.eye(4))
-    field = nib.Nifti1Image(np.broadcast_to(np.eye(3).ravel(), dwi.shape + (9,)), np.eye(4))
+    # An x/y shear on a positive-determinant grid distinguishes the FSL basis.
+    J = np.eye(3)
+    J[0, 1] = 0.25
+    field = nib.Nifti1Image(np.broadcast_to(J.ravel(), dwi.shape + (9,)), np.eye(4))
     field.header["descrip"] = description
     nib.save(field, filename)
-    with pytest.raises(MRtrixError, match="Supply -gnc_format tortoise"):
-        load_gnc_field(filename, dwi)
+    default = load_gnc_field(filename, dwi)
+    np.testing.assert_array_equal(default, load_gnc_field(filename, dwi, "gradunwarp"))
+    assert default[0, 0, 0, 1, 0] == -0.25
+    assert load_gnc_field(filename, dwi, "tortoise")[0, 0, 0, 1, 0] == 0.25
 
 
 def test_explicit_format_overrides_header_tag(tmp_path, monkeypatch):

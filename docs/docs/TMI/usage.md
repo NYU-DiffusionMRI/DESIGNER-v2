@@ -49,11 +49,11 @@ By default, if none of the below options are used, TMI will not estimate paramet
 
 ### `-gnc <field>`
 
-Use a voxelwise gradient field on the DWI grid for DTI/DKI fitting. Pass the original graddev NIfTI and specify its convention with `-gnc_format`, or supply a backend-tagged DESIGNER graddev NIfTI directly. See the [TORTOISE and gradunwarp examples]({{ site.baseurl }}{% link docs/TMI/DTI-DKI.md %}#gradient-nonlinearity-correction).
+Use a voxelwise gradient field on the DWI grid for DTI/DKI fitting. Pass the original graddev NIfTI. Set `-gnc_format` to specify its source. See the [TORTOISE and gradunwarp examples]({{ site.baseurl }}{% link docs/TMI/DTI-DKI.md %}#gradient-nonlinearity-correction).
 
 ### `-gnc_format <convention>`
 
-Required for NIfTI inputs without a recognized DESIGNER backend tag. Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FSL axes, or `scanner` for an already converted coil tensor. An explicit choice overrides the header tag. MIF fields default to `scanner`.
+Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FSL axes, or `scanner` for a coil tensor already expressed in scanner axes. An explicit choice overrides the header. If omitted, TMI uses the DESIGNER backend name in the NIfTI header’s `descrip` field when recognized and otherwise assumes `gradunwarp`. MIF fields default to `scanner`.
 
 ### `-fit_constraints <0,0,0>`
 - For use with `-DKI` or `-WDKI`

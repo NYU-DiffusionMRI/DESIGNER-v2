@@ -266,7 +266,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     )
     options.add_argument(
         '-gnc_format', choices=['tortoise', 'gradunwarp', 'scanner'],
-        help='Convention of the -gnc input. Required for NIfTI without a recognized DESIGNER backend tag. '
+        help='Convention of the -gnc input. NIfTI defaults to gradunwarp when the DESIGNER backend tag is absent or unrecognized. '
              'Use tortoise for a TORTOISE graddev, gradunwarp for a full Jacobian in FSL axes, or scanner '
              'for a preconverted coil tensor. An explicit choice overrides the header tag. MIF defaults to scanner.'
     )
