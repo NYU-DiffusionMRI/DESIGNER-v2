@@ -169,11 +169,14 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                 if np.isfinite(cost) and cost < best_cost:
                     best, best_cost = candidate, cost
                 if fit.success and minimum >= -1e-10:
-                    if (noise > 0 and best[0]*constant < 1e-8
+                    if (noise > 0 and (best[0]*constant < 1e-8
+                                      or abs(fit.x[0]*constant) < 1e-8)
                             and np.any(corrected_initial) and not restarted_zero):
                         # mu'(0)=0 makes the all-zero signal a stationary point
                         # even when it is not a minimum. Retry from the same
                         # corrected-LLS coefficients with a trust-region solve.
+                        # Inspect the solver iterate too: a nonzero backup can
+                        # otherwise hide a spurious zero stationary solution.
                         current = corrected_initial.copy()
                         restarted_zero = True
                         continue

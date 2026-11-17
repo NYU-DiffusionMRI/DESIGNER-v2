@@ -275,7 +275,8 @@ def test_smi_uses_nonnegative_signal_constraints_in_forward_projection():
     assert obj.signal_4d[...,6:].min() >= -1e-10
 
 
-def test_nonnegative_fit_restarts_spurious_zero_stationary_point(monkeypatch):
+@pytest.mark.parametrize('amplitude', [.4, 2.])
+def test_nonnegative_fit_restarts_spurious_zero_stationary_point(monkeypatch, amplitude):
     from types import SimpleNamespace
     import lib.rician_sh as module
     original = module.minimize
@@ -288,11 +289,13 @@ def test_nonnegative_fit_restarts_spurious_zero_stationary_point(monkeypatch):
     monkeypatch.setattr(module, 'minimize', stationary_first)
     basis = np.array([[1.,-1.],[1.,0.],[1.,1.]])
     grid = np.array([[1.,-2.],[1.,2.]])
-    measured = np.full((3,1), rician_mean_and_derivative(.4,1.)[0])
+    measured = np.full((3,1), rician_mean_and_derivative(amplitude,1.)[0])
     corrected_initial = lstsq(basis, np.sqrt(np.maximum(0, measured**2-1)))[0]
+    # At amplitude=2 the corrected-LLS backup costs less than zero. Checking
+    # only the saved best coefficients would miss the solver's zero iterate.
     result = module._enforce_nonnegative(basis, measured, np.ones(1),
                                          corrected_initial, np.array([[1.],[1.]]),grid,1)
     assert len(calls) >= 2
     np.testing.assert_allclose(calls[0][0], calls[1][0], atol=0)
     assert calls[1][1] == 'trust-constr'
-    np.testing.assert_allclose(result[:,0], [.4,0], atol=1e-5)
+    np.testing.assert_allclose(result[:,0], [amplitude,0], atol=1e-5)
