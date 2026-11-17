@@ -235,3 +235,23 @@ def test_smi_uses_nonnegative_signal_constraints_in_forward_projection():
         data,obj.mask,rank1sl=False,sigma=np.full(obj.mask.shape,.4))
     assert np.isfinite(obj.signal_4d).all()
     assert obj.signal_4d[...,6:].min() >= -1e-10
+
+
+def test_nonnegative_fit_restarts_spurious_zero_stationary_point(monkeypatch):
+    from types import SimpleNamespace
+    import lib.rician_sh as module
+    original = module.minimize
+    calls = []
+    def stationary_first(fun, x, **kwargs):
+        calls.append(x.copy())
+        if len(calls) == 1:
+            return SimpleNamespace(x=np.zeros_like(x), success=True)
+        return original(fun, x, **kwargs)
+    monkeypatch.setattr(module, 'minimize', stationary_first)
+    basis = np.array([[1.,-1.],[1.,0.],[1.,1.]])
+    grid = np.array([[1.,-2.],[1.,2.]])
+    measured = np.full((3,1), rician_mean_and_derivative(.4,1.)[0])
+    result = module._enforce_nonnegative(basis, measured, np.ones(1),
+                                         np.array([[1.3],[.8]]), np.array([[1.],[1.]]),grid,1)
+    assert len(calls) >= 2
+    np.testing.assert_allclose(result[:,0], [.4,0], atol=1e-7)

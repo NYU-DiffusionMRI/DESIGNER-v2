@@ -7,7 +7,7 @@ import warnings
 
 import numpy as np
 from scipy.special import i0e, i1e
-from scipy.optimize import least_squares, minimize, LinearConstraint
+from scipy.optimize import least_squares, minimize, LinearConstraint, brentq
 
 
 def nonnegative_directions(count=65536):
@@ -135,6 +135,7 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
             active = seed.copy()
             current = best.copy()
             converged = False
+            restarted_zero = False
             for _ in range(24):
                 fit = minimize(objective, current, jac=True, method='SLSQP',
                                constraints=[LinearConstraint(grid[active], 0, np.inf)],
@@ -148,6 +149,22 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                 if np.isfinite(cost) and cost < best_cost:
                     best, best_cost = candidate, cost
                 if fit.success and minimum >= -1e-10:
+                    if noise > 0 and best[0]*constant < 1e-8 and not restarted_zero:
+                        # mu'(0)=0 makes the all-zero signal a stationary point
+                        # even when it is not a minimum. Restart from a positive
+                        # isotropic signal before accepting that boundary point.
+                        mean_observed = observed.mean()
+                        floor = noise*np.sqrt(np.pi/2)
+                        amplitude = (.1*noise if mean_observed <= floor else brentq(
+                            lambda value: rician_mean_and_derivative(value, noise)[0]-mean_observed,
+                            0., mean_observed, xtol=1e-12))
+                        current = np.zeros_like(best)
+                        current[0] = amplitude/constant
+                        cost = objective(current)[0]
+                        if cost < best_cost:
+                            best, best_cost = current.copy(), cost
+                        restarted_zero = True
+                        continue
                     converged = True
                     break
                 # Keep the most violated rows. A failed SLSQP solve without
