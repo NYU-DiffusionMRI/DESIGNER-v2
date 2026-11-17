@@ -7,7 +7,8 @@ import warnings
 
 import numpy as np
 from scipy.special import i0e, i1e
-from scipy.optimize import least_squares, minimize, LinearConstraint, brentq
+from scipy.linalg import lstsq
+from scipy.optimize import least_squares, minimize, LinearConstraint
 
 
 def nonnegative_directions(count=65536):
@@ -47,22 +48,30 @@ def rician_mean_and_derivative(signal, sigma):
     return mean, deriv
 
 
-def fit_rician_sh(basis, measurements, sigma, initial, chunk_size=256,
+def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
                   constraint_basis=None):
-    """Refine an LLS fit with bounded-memory batched Levenberg--Marquardt.
+    """Refine clipped corrected LLS with batched Levenberg--Marquardt.
 
     Shapes: basis (directions, coefficients), measurements (directions, voxels),
-    sigma (voxels,), initial (coefficients, voxels). With constraint_basis,
+    sigma (voxels,). Always initialize from the linear SH fit to
+    sqrt(max(0, measurements**2 - sigma**2)). This correction supplies only
+    the initial coefficients; the nonlinear objective uses raw measurements.
+    With constraint_basis,
     require nonnegative signal at its rows and all acquired directions using
     linear constraints in coefficient space. The unconstrained fit is used
     when already feasible; otherwise solve constrained mean least squares.
     Zero-noise fits reduce to constrained LLS. Without constraints, zero-noise
     voxels retain their LLS coefficients exactly. Fits are scaled so tolerances do
-    not depend on signal units. No spatial smoothing or intensity correction
-    is applied to the input data.
+    not depend on signal units. No spatial smoothing is applied.
     """
-    result = np.array(initial, dtype=float, copy=True)
+    measurements = np.asarray(measurements, dtype=float)
+    sigma = np.asarray(sigma, dtype=float)
     indices = np.flatnonzero(sigma > 0)
+    corrected = measurements.copy()
+    corrected[:, indices] = np.sqrt(np.maximum(
+        0, measurements[:, indices]**2 - sigma[indices]**2))
+    initial = lstsq(basis, corrected)[0]
+    result = np.array(initial, dtype=float, copy=True)
     unfinished = 0
     for start in range(0, indices.size, chunk_size):
         ids = indices[start:start + chunk_size]
@@ -129,17 +138,28 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                     coef[0] += (-minimum + 32*np.finfo(float).eps) / constant
                 return coef
 
-            # Start from feasible LLS, not a folded negative-signal solution.
-            best = feasible(initial[:, voxel] / scale)
+            # SLSQP accepts an infeasible start. Use the corrected-LLS seed
+            # exactly; restoring feasibility is only for the fallback point.
+            corrected_initial = initial[:, voxel] / scale
+            best = feasible(corrected_initial)
             best_cost = objective(best)[0]
             active = seed.copy()
-            current = best.copy()
+            current = corrected_initial.copy()
             converged = False
             restarted_zero = False
             for _ in range(24):
-                fit = minimize(objective, current, jac=True, method='SLSQP',
+                if restarted_zero:
+                    # A different solver avoids repeating the same spurious
+                    # zero stationary point, without changing the LLS seed.
+                    method = 'trust-constr'
+                    options = {'maxiter':1000, 'gtol':1e-9, 'xtol':1e-10,
+                               'barrier_tol':1e-10}
+                else:
+                    method = 'SLSQP'
+                    options = {'maxiter':500, 'ftol':1e-11}
+                fit = minimize(objective, current, jac=True, method=method,
                                constraints=[LinearConstraint(grid[active], 0, np.inf)],
-                               options={'maxiter':500, 'ftol':1e-11})
+                               options=options)
                 if not np.all(np.isfinite(fit.x)):
                     break
                 signal = grid @ fit.x
@@ -149,20 +169,12 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                 if np.isfinite(cost) and cost < best_cost:
                     best, best_cost = candidate, cost
                 if fit.success and minimum >= -1e-10:
-                    if noise > 0 and best[0]*constant < 1e-8 and not restarted_zero:
+                    if (noise > 0 and best[0]*constant < 1e-8
+                            and np.any(corrected_initial) and not restarted_zero):
                         # mu'(0)=0 makes the all-zero signal a stationary point
-                        # even when it is not a minimum. Restart from a positive
-                        # isotropic signal before accepting that boundary point.
-                        mean_observed = observed.mean()
-                        floor = noise*np.sqrt(np.pi/2)
-                        amplitude = (.1*noise if mean_observed <= floor else brentq(
-                            lambda value: rician_mean_and_derivative(value, noise)[0]-mean_observed,
-                            0., mean_observed, xtol=1e-12))
-                        current = np.zeros_like(best)
-                        current[0] = amplitude/constant
-                        cost = objective(current)[0]
-                        if cost < best_cost:
-                            best, best_cost = current.copy(), cost
+                        # even when it is not a minimum. Retry from the same
+                        # corrected-LLS coefficients with a trust-region solve.
+                        current = corrected_initial.copy()
                         restarted_zero = True
                         continue
                     converged = True

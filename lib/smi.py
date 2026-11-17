@@ -585,16 +585,16 @@ class SMI(object):
             if (abs(bb[1,i]) > 0.045) & (bb[0,i] > 0.05):
                 ids_current_lm = np.arange(n_sh_coeffs[i])
                 y_lm_current_cluster = y_lm_matrix[ids_current_cluster,:]
-                s_lm_current_cluster, _,_,_ = scl.lstsq(
-                    y_lm_current_cluster[:, ids_current_lm], 
-                    dwi_2D[ids_current_cluster,:]
-                    )
                 if self.rician_sh:
                     s_lm_current_cluster = fit_rician_sh(
                         y_lm_current_cluster[:, ids_current_lm],
                         dwi_2D[ids_current_cluster, :], sigma_1d,
-                        s_lm_current_cluster,
                         constraint_basis=nonnegative_basis[:, ids_current_lm])
+                else:
+                    s_lm_current_cluster, _,_,_ = scl.lstsq(
+                        y_lm_current_cluster[:, ids_current_lm],
+                        dwi_2D[ids_current_cluster,:]
+                        )
                 s_l_current_cluster = np.zeros((int(l_max[i]/2+1), n_voxels))
                 s_l_current_cluster[0,:] = abs(s_lm_current_cluster[0,:])
                 for j in range(2, int(l_max[i]) + 2, 2):

@@ -75,6 +75,7 @@ By default, if none of the below options are used, TMI will not estimate paramet
 ### `-RicianSH`
 - Use with `-SMI -sigma <noisemap>` to fit the underlying SH signal by nonlinear least squares with a Rician expected-magnitude observation model.
 - The fitted signal must be nonnegative at acquired directions and on a 65,536-direction sphere grid. This constrains the signal, not each SH coefficient. Grid feasibility is not a continuous-sphere guarantee.
+- Initialize the nonlinear search from the linear SH fit to `sqrt(max(0, M²−sigma²))`. The nonlinear objective uses the original magnitude data; correction is used only for the starting coefficients.
 - Without this flag, SH estimation remains ordinary linear least squares, including when `-sigma` is supplied.
 - The noise map must be a spatially aligned 3D map of the complex-component Gaussian standard deviation, in the same intensity units as the input DWI. Values inside the fitting mask must be finite and nonnegative; zero uses constrained linear least squares, preserving the linear fit when already feasible.
 - Use magnitude data with a Rician noise model. Do not apply this on top of `designer -rician`, phase-unwound data, or other data whose noise floor has already been removed. After denoising, rescaling or interpolation, the noise map must describe the data actually fitted.

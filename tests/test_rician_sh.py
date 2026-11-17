@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 from scipy.optimize import least_squares
+from scipy.linalg import lstsq
 from scipy.stats import rice
 
 from lib.rician_sh import fit_rician_sh, rician_mean_and_derivative, nonnegative_directions
@@ -49,8 +50,8 @@ def test_fit_matches_independent_scipy_solver_and_rescaling(scale):
     sigma = np.linspace(.05, .3, 7)
     m = np.hypot(y @ true + rng.normal(size=(90,7))*sigma,
                  rng.normal(size=(90,7))*sigma)
-    initial = np.linalg.lstsq(y, m, rcond=None)[0]
-    fitted = fit_rician_sh(y, m*scale, sigma*scale, initial*scale, chunk_size=3)/scale
+    initial = lstsq(y, np.sqrt(np.maximum(0, m*m-sigma*sigma)))[0]
+    fitted = fit_rician_sh(y, m*scale, sigma*scale, chunk_size=3)/scale
     reference = np.column_stack([
         least_squares(lambda c: rician_mean_and_derivative(y@c, sigma[i])[0]-m[:,i],
                       initial[:,i], method='lm', ftol=1e-12, xtol=1e-12, gtol=1e-12).x
@@ -63,12 +64,52 @@ def test_known_expectation_recovery_and_zero_noise():
     y = obj.get_even_sh(obj.dirs[6:96], 4)
     coefficients = np.zeros((15, 4)); coefficients[0] = 2; coefficients[3] = .2
     m = rician_mean_and_derivative(y @ coefficients, .3)[0]
-    initial = np.linalg.lstsq(y, m, rcond=None)[0]
-    fitted = fit_rician_sh(y, m, np.full(4, .3), initial)
+    initial = lstsq(y, m)[0]
+    fitted = fit_rician_sh(y, m, np.full(4, .3))
     np.testing.assert_allclose(fitted, coefficients, atol=1e-7)
     assert np.linalg.norm(initial-coefficients) > .1
-    np.testing.assert_array_equal(fit_rician_sh(y, m, np.zeros(4), initial), initial)
-    np.testing.assert_allclose(fit_rician_sh(y, m, np.full(4, 1e-12), initial), initial, atol=1e-10)
+    np.testing.assert_array_equal(fit_rician_sh(y, m, np.zeros(4)), initial)
+    np.testing.assert_allclose(fit_rician_sh(y, m, np.full(4, 1e-12)), initial, atol=1e-10)
+
+
+def test_all_nonlinear_seeds_use_clipped_corrected_lls_with_raw_objective(monkeypatch):
+    import lib.rician_sh as module
+    from types import SimpleNamespace
+    basis = np.array([[1., -1.], [1., 0.], [1., 1.]])
+    grid = np.array([[1., -2.], [1., 2.]])
+    measured = np.array([[.2, .5], [.5, 1.], [2., 3.]])
+    sigma = np.array([1., .8])
+    original = measured.copy()
+    expected = lstsq(basis, np.sqrt(np.maximum(0, measured**2-sigma**2)))[0]
+    assert np.min(grid @ expected) < 0  # Corrected LLS need not be feasible.
+    batch_calls = []
+    def batch(y, raw, noise, initial):
+        batch_calls.append(initial.copy())
+        np.testing.assert_array_equal(raw, original.T)
+        np.testing.assert_array_equal(noise, sigma)
+        return initial, 0
+    monkeypatch.setattr(module, '_fit_batch', batch)
+    constrained_calls = []
+    def constrained(fun, initial, **kwargs):
+        voxel = len(constrained_calls)
+        scale = measured[:, voxel].max()
+        constrained_calls.append(initial.copy()*scale)
+        probe = np.array([.6, .1])
+        residual = rician_mean_and_derivative(basis@probe, sigma[voxel]/scale)[0]-original[:,voxel]/scale
+        np.testing.assert_allclose(fun(probe)[0], .5*(residual@residual))
+        return SimpleNamespace(x=np.array([1., 0.]), success=True)
+    monkeypatch.setattr(module, 'minimize', constrained)
+    module.fit_rician_sh(basis, measured, sigma, constraint_basis=grid)
+    np.testing.assert_allclose(batch_calls[0], expected.T, atol=0)
+    np.testing.assert_allclose(np.array(constrained_calls), expected.T, atol=1e-15)
+    np.testing.assert_array_equal(measured, original)
+
+
+def test_all_clipped_measurements_have_zero_start_and_finite_fit():
+    basis = np.ones((4, 1))
+    fitted = fit_rician_sh(basis, np.full((4, 2), .5), np.ones(2),
+                           constraint_basis=basis)
+    np.testing.assert_array_equal(fitted, np.zeros((1, 2)))
 
 
 @pytest.mark.parametrize('shape', [(2, 2, 2), (2, 2, 1)])
@@ -166,13 +207,13 @@ def test_nonnegative_zero_noise_has_known_constrained_linear_solution(scale):
     basis = np.array([[1., -1.], [1., 0.], [1., 1.]])
     constraints = np.array([[1., -2.], [1., 2.]])
     measured = np.array([[0.], [1.], [2.]])*scale
-    initial = np.array([[1.], [1.]])*scale
-    result = fit_rician_sh(basis, measured, np.zeros(1), initial,
+    initial = lstsq(basis, measured)[0]
+    result = fit_rician_sh(basis, measured, np.zeros(1),
                            constraint_basis=constraints)/scale
     np.testing.assert_allclose(result[:,0], [8/7, 4/7], atol=1e-7)
     assert np.min(constraints @ result) >= -1e-12
     # Default unconstrained zero-noise behavior is preserved for diagnostics.
-    np.testing.assert_array_equal(fit_rician_sh(basis, measured, np.zeros(1), initial), initial)
+    np.testing.assert_array_equal(fit_rician_sh(basis, measured, np.zeros(1)), initial)
 
 
 def test_nonnegative_low_snr_signal_on_acquired_and_dense_grid():
@@ -183,10 +224,9 @@ def test_nonnegative_low_snr_signal_on_acquired_and_dense_grid():
     sigma = np.full(12, .4)
     measured = np.hypot(.3 + .4*rng.normal(size=(60,12)),
                         .4*rng.normal(size=(60,12)))
-    initial = np.linalg.lstsq(basis, measured, rcond=None)[0]
-    old = fit_rician_sh(basis, measured, sigma, initial)
+    old = fit_rician_sh(basis, measured, sigma)
     assert (grid @ old).min() < -.1
-    result = fit_rician_sh(basis, measured, sigma, initial,
+    result = fit_rician_sh(basis, measured, sigma,
                            constraint_basis=grid, chunk_size=3)
     assert (grid @ result).min() >= -1e-10
     assert (basis @ result).min() >= -1e-10
@@ -199,9 +239,8 @@ def test_nonnegative_constraint_does_not_change_feasible_fit():
     grid = obj.get_even_sh(nonnegative_directions(1024), 4)
     true = np.zeros((15,2)); true[0] = 3; true[2] = .1
     measured = rician_mean_and_derivative(basis @ true, .1)[0]
-    initial = np.linalg.lstsq(basis, measured, rcond=None)[0]
-    old = fit_rician_sh(basis, measured, np.full(2,.1), initial)
-    result = fit_rician_sh(basis, measured, np.full(2,.1), initial, constraint_basis=grid)
+    old = fit_rician_sh(basis, measured, np.full(2,.1))
+    result = fit_rician_sh(basis, measured, np.full(2,.1), constraint_basis=grid)
     np.testing.assert_array_equal(result, old)
     np.testing.assert_allclose(result, true, atol=1e-7)
 
@@ -215,7 +254,7 @@ def test_nonnegative_failed_solver_returns_feasible_result_with_warning(monkeypa
                         SimpleNamespace(x=np.array([1.,1.]), success=False))
     with pytest.warns(RuntimeWarning, match='grid-feasible'):
         result = fit_rician_sh(basis, np.array([[0.],[1.],[2.]]), np.zeros(1),
-                               np.array([[1.],[1.]]), constraint_basis=grid)
+                               constraint_basis=grid)
     assert (grid @ result).min() >= -1e-12
 
 
@@ -228,8 +267,7 @@ def test_smi_uses_nonnegative_signal_constraints_in_forward_projection():
                     .4*rng.normal(size=(2,2,1,186)))
     basis = obj.get_even_sh(obj.dirs[96:],4)
     raw = data[...,96:].reshape(-1,90).T
-    initial = np.linalg.lstsq(basis,raw,rcond=None)[0]
-    unconstrained = fit_rician_sh(basis,raw,np.full(4,.4),initial)
+    unconstrained = fit_rician_sh(basis,raw,np.full(4,.4))
     assert (basis @ unconstrained).min() < -.01
     obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(
         data,obj.mask,rank1sl=False,sigma=np.full(obj.mask.shape,.4))
@@ -243,7 +281,7 @@ def test_nonnegative_fit_restarts_spurious_zero_stationary_point(monkeypatch):
     original = module.minimize
     calls = []
     def stationary_first(fun, x, **kwargs):
-        calls.append(x.copy())
+        calls.append((x.copy(), kwargs['method']))
         if len(calls) == 1:
             return SimpleNamespace(x=np.zeros_like(x), success=True)
         return original(fun, x, **kwargs)
@@ -251,7 +289,10 @@ def test_nonnegative_fit_restarts_spurious_zero_stationary_point(monkeypatch):
     basis = np.array([[1.,-1.],[1.,0.],[1.,1.]])
     grid = np.array([[1.,-2.],[1.,2.]])
     measured = np.full((3,1), rician_mean_and_derivative(.4,1.)[0])
+    corrected_initial = lstsq(basis, np.sqrt(np.maximum(0, measured**2-1)))[0]
     result = module._enforce_nonnegative(basis, measured, np.ones(1),
-                                         np.array([[1.3],[.8]]), np.array([[1.],[1.]]),grid,1)
+                                         corrected_initial, np.array([[1.],[1.]]),grid,1)
     assert len(calls) >= 2
-    np.testing.assert_allclose(result[:,0], [.4,0], atol=1e-7)
+    np.testing.assert_allclose(calls[0][0], calls[1][0], atol=0)
+    assert calls[1][1] == 'trust-constr'
+    np.testing.assert_allclose(result[:,0], [.4,0], atol=1e-5)
