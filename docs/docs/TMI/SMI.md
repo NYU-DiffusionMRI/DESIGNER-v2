@@ -21,6 +21,29 @@ nav_order: 3
 
 In addition to the python implementation as a part of TMI, SMI is offered as a standalone matlab toolbox. [This MATLAB toolbox](https://github.com/NYU-DiffusionMRI/SMI/blob/master/SMI.m) contains all necessary functions for parameter estimation of the Standard Model (SM) of diffusion in white matter. Check [our recent paper](https://arxiv.org/pdf/2202.02399.pdf) for details on this implementation and on the Standard Model in general. Below we provide instructions on how to run the toolbox. See the [example.m](https://github.com/NYU-DiffusionMRI/SMI/blob/master/example.m) script that performs the parameter estimation in an [example dataset](https://cai2r.net/resources/standard-model-of-diffusion-in-white-matter-the-smi-toolbox/).
 
+TMI offers two output modes. `-SMI` estimates signal rotational invariants and
+then fits the Standard Model parameters. `-SH` estimates only the signal
+rotational invariants, without SMI priors, training, or model regression.
+Both modes use linear least squares for SH fitting by default. Adding
+`-RicianSH -sigma sigma.nii` accounts for Rician bias through the expected
+magnitude observation model and enforces a **nonnegative underlying SH signal**.
+
+### Choosing an estimation mode
+
+| Requested output | Example command |
+|---|---|
+| SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
+| SMI maps with Rician bias expectation correction and nonnegativity | `tmi dwi.nii smi_rician -SMI -RicianSH -sigma sigma.nii` |
+| Signal rotational invariants only, using LLS | `tmi dwi.nii sh_output -SH -lmax 6` |
+| Signal rotational invariants only, using constrained Rician fitting | `tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii -lmax 6` |
+
+Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
+`-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmax` sets the actual
+SH fitting order and requires enough independent directions in each directional
+shell. Omit it for automatic per-shell orders. The Rician option requires an
+aligned noise map in the same signal units as the DWI and data whose Rician
+noise floor has not already been removed; see [parameter estimation](#parameter-estimation).
+
 ---
 
 ## Overview: The Standard Model of diffusion in white matter
@@ -80,6 +103,8 @@ Standard Model parameters (diffusion) + compartmental T2 values (only if multipl
 - Note that compartmental T2 maps will only be outputted if variable TE data was used.
 - Rotational invariants for each diffusion shell will also be an output. To normalize them and remove T2 contrast, simply divide by b0 for fixed TE data or by proton density for variable TE data.
 
+## Signal rotational invariants without SMI
+
 To obtain rotational invariants alone, use `-SH` instead of `-SMI`:
 
 ```bash
@@ -93,10 +118,26 @@ than selecting invariants for model regression. Omit `-RicianSH` for ordinary
 LLS; omit `-lmax` for automatic per-shell orders. See the
 [standalone SH options]({{ site.baseurl }}{% link docs/TMI/usage.md %}#-sh).
 
+Orders 2, 4, and 6 require at least 6, 15, and 28 independent directional
+measurements, respectively. If different shells support different orders,
+use automatic orders or fit shell subsets separately at the desired supported
+orders. A requested order that cannot be identified from the directions is
+rejected; an unsupported higher-order invariant should not be interpreted as
+a measured zero.
+
+The saved invariants are in the original signal units. For figures, normalized
+invariants can be computed as `S_l / mean_b0`, using the mean b=0 image at the
+same echo time. When comparing estimators, use the **same b=0 reference image**
+for all methods so differences in the denominator do not confound the comparison.
+Apply this normalization after fitting; the Rician fit itself uses the DWI and
+noise map in their original matching units.
+
 ---
 
 ## Parameter estimation
 First, the rotational invariants of the diffusion signal are estimated. By default, SH coefficients are fit with ordinary linear least squares. Supplying a noise map alone does not change this estimator.
+
+### Rician bias expectation correction with a nonnegative signal
 
 With `tmi -SMI -RicianSH -sigma sigma.nii`, the SH fit instead minimizes
 
@@ -111,6 +152,12 @@ The Rician mean is evaluated using scaled modified Bessel functions and an analy
 This extends the Rician-expectation approach from S. Coelho's SHestimation with signal nonnegativity, retaining TMI's SH normalization, phase, shell grouping, and rank-one processing of invariants. The constraint prevents signed angular lobes from fitting positive magnitudes through the even Rician mean function. As in that reference, b=0 and isotropic-shell means remain unchanged. This is a fit of the expected magnitude, not a maximum-likelihood estimator or an unbiasedness guarantee. The downstream SMI regression and its noise training model remain unchanged; their statistical bias may persist, especially at low SNR.
 
 Use a finite, nonnegative noise map aligned to the DWI in the same intensity units. At zero noise, the estimator reduces to linear least squares with the same signal constraints; already feasible linear coefficients are retained exactly. The option is intended for magnitude data that retain a Rician noise floor, not data already corrected with `designer -rician` or complex/phase-unwound denoising. A noise map estimated before operations that change the noise distribution or signal scale may not be appropriate.
+
+The same expectation model, clipped-LLS initialization, and nonnegativity
+constraint are used by `-SH -RicianSH`. In that mode, processing stops after
+the signal rotational invariants have been saved.
+
+### Standard Model parameter fitting
 
 Then, the SM parameters are estimated from the rotational invariants of the signal (up to L=4 as default option). Unlike conventional parameter estimation approaches which rely on an analytical forward model, e.g. maximum likelihood, here we use data-driven machine learning (ML) regression. This is done by applying a sufficiently flexible nonlinear regression to _training data_ generated with the forward model of interest, considering a wide distribution of model parameters, the noise level, and the protocol that was used. Then, such regression is applied to the data of interest.
 

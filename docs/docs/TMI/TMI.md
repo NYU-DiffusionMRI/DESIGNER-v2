@@ -13,6 +13,7 @@ permalink: /docs/TMI
 - [multi shell kurtosis tensor estimation]({{ site.baseurl }}{% link docs/TMI/DTI-DKI.md %}#The-Diffusion-and-Kurtosis-Tensors)
 - [W tensor parameter extraction]({{ site.baseurl }}{% link docs/TMI/DTI-DKI.md %}#Tensor-parameters)
 - [DKI outlier replacement]({{ site.baseurl }}{% link docs/TMI/DTI-DKI.md %}#Outlier-replacement)
-- [SMI and rotational invariant estimation]({{ site.baseurl }}{% link docs/TMI/SMI.md %})
+- [Standard Model Imaging (SMI)]({{ site.baseurl }}{% link docs/TMI/SMI.md %}), including optional Rician bias expectation correction with a nonnegative SH signal
+- [Signal rotational invariants without SMI]({{ site.baseurl }}{% link docs/TMI/SMI.md %}#signal-rotational-invariants-without-smi), using `-SH` with either LLS or constrained Rician fitting
 
 
