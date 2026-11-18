@@ -51,8 +51,10 @@ For magnitude data with a retained Rician noise floor, `tmi -SMI -RicianSH
 -sigma sigma.nii dwi.nii output_dir` enables Rician-expectation SH fitting with
 nonnegative signal constraints at acquired directions and on a dense sphere grid.
 The search starts from LLS on `sqrt(max(0, M²−sigma²))` and fits the original magnitudes.
-The noise map must match the DWI grid and intensity scale. Omitting `-RicianSH`
-keeps linear least squares. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
+The noise map must match the DWI grid and intensity scale. Omitting both correction flags keeps linear least squares.
+Alternatively, `-RicianSHclip -sigma sigma.nii` fits
+`sqrt(max(0, M²−sigma²))` with the same signal nonnegativity constraint,
+in either `-SH` or `-SMI` mode. The two correction flags are mutually exclusive. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
 for assumptions and limitations.
 
 To estimate only signal rotational invariants, without SMI model fitting:
@@ -64,7 +66,7 @@ tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -mask brain_mask.nii -lmaxS
 This saves `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`, with one volume per shell
 in each file. `SH_shells.json` identifies each volume's b-value, b-shape, echo
 time, and fitted order. For `-SH`, `-lmaxSH` sets the SH fitting order; omitting it
-uses automatic per-shell orders. Omit `-RicianSH` for LLS, which needs no noise
+uses automatic per-shell orders. Omit both correction flags for LLS, which needs no noise
 map. `-SH` and `-SMI` are alternative output modes.
 
 ## Development Setup

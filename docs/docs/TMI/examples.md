@@ -167,3 +167,15 @@ only S0. The requested order must be supported by the directions in each
 diffusion shell. A single shell without b=0 is supported. For multi-TE or
 multi-b-shape data, use the same acquisition metadata options as for SMI.
 Choose either `-SH` or `-SMI` in a command.
+
+### Clipped-corrected SH fitting with signal nonnegativity
+
+```bash
+tmi dwi.nii sh_clip -SH -RicianSHclip -sigma sigma.nii -mask brain_mask.nii
+tmi dwi.nii smi_clip -SMI -RicianSHclip -sigma sigma.nii -mask brain_mask.nii
+```
+
+The fitting target is `sqrt(max(0, M²−sigma²))`, with nonnegativity enforced
+on the underlying SH signal. Supply the original magnitude DWI and use only
+one of `-RicianSHclip` and `-RicianSH`. Per-shell orders in standalone mode
+are set with `-lmaxSH`, as for the other estimators.

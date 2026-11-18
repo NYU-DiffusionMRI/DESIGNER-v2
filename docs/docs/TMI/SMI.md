@@ -27,6 +27,8 @@ rotational invariants, without SMI priors, training, or model regression.
 Both modes use linear least squares for SH fitting by default. Adding
 `-RicianSH -sigma sigma.nii` accounts for Rician bias through the expected
 magnitude observation model and enforces a **nonnegative underlying SH signal**.
+Alternatively, `-RicianSHclip -sigma sigma.nii` fits clipped-corrected measurements
+with the same nonnegativity constraint. Choose only one correction flag.
 
 ### Choosing an estimation mode
 
@@ -34,8 +36,10 @@ magnitude observation model and enforces a **nonnegative underlying SH signal**.
 |---|---|
 | SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
 | SMI maps with Rician bias expectation correction and nonnegativity | `tmi dwi.nii smi_rician -SMI -RicianSH -sigma sigma.nii` |
+| SMI maps with clipped correction and signal nonnegativity | `tmi dwi.nii smi_clip -SMI -RicianSHclip -sigma sigma.nii` |
 | Signal rotational invariants only, using default LLS | `tmi dwi.nii sh_output -SH` |
 | Signal rotational invariants only, using Rician expectation and signal nonnegativity | `tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii` |
+| Signal rotational invariants only, using clipped correction and signal nonnegativity | `tmi dwi.nii sh_clip -SH -RicianSHclip -sigma sigma.nii` |
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmaxSH` sets the actual
@@ -44,7 +48,7 @@ shell. A comma-separated list assigns an order to each shell, for example
 `-lmaxSH 0,2,4,4,6`; see [per-shell fitting orders](#choose-a-fitting-order-for-each-shell).
 Omit it for automatic per-shell orders. Per-shell lists are supported only
 with `-SH`: with `-SMI`, `-lmax` is a single invariant order for model regression,
-and SH fitting orders remain automatic. The Rician option requires an
+and SH fitting orders remain automatic. Either correction option requires an
 aligned noise map in the same signal units as the DWI and data whose Rician
 noise floor has not already been removed; see [parameter estimation](#parameter-estimation).
 
@@ -130,7 +134,13 @@ switch from LLS to Rician fitting. The same estimator choice applies to `-SMI`.
 See [Rician bias expectation correction](#rician-bias-expectation-correction-with-a-nonnegative-signal)
 for the observation model and initialization.
 
-Both commands bypass SMI priors and regression and save separate `S0.nii`,
+For clipped correction followed by a nonnegative linear SH fit, use:
+
+```bash
+tmi dwi.nii sh_clip -SH -RicianSHclip -sigma sigma.nii
+```
+
+All three commands bypass SMI priors and regression and save separate `S0.nii`,
 `S2.nii`, and higher even-order files through the maximum fitted order. Each
 contains one volume per shell, identified in `SH_shells.json`. Add `-lmaxSH 6`
 to fit through order 6 and save `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`.
@@ -141,8 +151,8 @@ In `-SH` mode, `-lmaxSH` sets the SH fitting order itself. See the
 
 Orders 2, 4, and 6 require at least 6, 15, and 28 independent directional
 measurements, respectively. With `-SH`, **each shell's maximum SH order can be
-specified independently** using a comma-separated list. This works with both
-LLS and RicianSH, for example:
+specified independently** using a comma-separated list. This works with
+LLS, RicianSH and RicianSHclip, for example:
 
 ```bash
 # Input containing b=0, 1000, 2000, 7000 and 25000 s/mm², at one b-shape and TE:
@@ -178,7 +188,8 @@ in other shells through this joint step.
 `-lmaxSH` is supported only with `-SH`. For `-SMI`, the separate `-lmax` option accepts one
 value (0, 2, 4, or 6) specifying the invariant order used for Standard Model
 regression; the SH fitting orders remain automatic per shell. The choice
-between LLS and constrained Rician fitting applies to both output modes.
+between LLS, constrained Rician-expectation fitting and constrained
+clipped-corrected LLS applies to both output modes.
 
 A requested order that cannot be identified from the directions is
 rejected; an unsupported higher-order invariant should not be interpreted as
@@ -235,6 +246,33 @@ identifies the shells, iteration cap, and per-shell counts. The early-stop
 mask marks cap exhaustion; the nonconverged mask also includes other failures
 of constrained refinement. These diagnostics do not describe convergence of
 the initial batched fit, whose existing warnings remain separate.
+
+### Clipped correction with a nonnegative signal
+
+Use `-RicianSHclip -sigma sigma.nii` with either `-SH` or `-SMI` to fit
+
+$$\min_c \sum_i ((Yc)_i-\widetilde M_i)^2,\qquad
+\widetilde M_i=\sqrt{\max(0,M_i^2-\sigma^2)},\qquad Y_{\rm grid}c\geq0.$$
+
+The corrected magnitudes are the fitting target, rather than only the
+initialization. This is a convex constrained linear least-squares problem;
+it does not evaluate the expected Rician magnitude. The correction subtracts
+**one** `sigma²`, and negative squared differences are set to zero before
+taking the square root. It is an approximate correction, not an unbiasedness
+guarantee.
+
+The same acquired directions and 65,536-direction sphere grid enforce
+nonnegativity. If the ordinary SH fit to the clipped data is already feasible,
+its coefficients are retained exactly. Otherwise, constrained refinement
+starts from those coefficients. The existing b=0 and isotropic-shell raw
+arithmetic means, SH normalization, cross-shell rank-one processing and SMI
+regression remain unchanged. Nonnegativity is enforced before rank-one
+processing, as for `-RicianSH`.
+
+Use uncorrected magnitude data and a matching noise map; do not apply the
+clipped correction to the input yourself. `-RicianSHclip` and `-RicianSH` are
+mutually exclusive. The optional `-RicianSH_maxiter` cap and its diagnostic
+outputs also apply to this mode.
 
 ### Standard Model parameter fitting
 

@@ -65,7 +65,7 @@ def rician_mean_and_derivative(signal, sigma):
 
 def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
                   constraint_basis=None, constrained_max_iter=None,
-                  diagnostics=None):
+                  diagnostics=None, *, clipped=False):
     """Refine clipped corrected LLS with batched Levenberg--Marquardt.
 
     Shapes: basis (directions, coefficients), measurements (directions, voxels),
@@ -83,6 +83,9 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
     per voxel, including all grid refinements and the trust-region restart.
     An exhausted fit returns its best grid-feasible coefficients. diagnostics
     optionally receives per-voxel iteration counts and early-stop flags.
+    clipped=True instead minimizes linear squared residuals against the
+    clipped measurements, with the same nonnegativity constraints. It does
+    not evaluate the Rician expectation or perform a nonlinear search.
     """
     if constrained_max_iter is not None and (
             not isinstance(constrained_max_iter, (int, np.integer))
@@ -100,6 +103,12 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
         0, measurements[:, indices]**2 - sigma[indices]**2))
     initial = lstsq(basis, corrected)[0]
     result = np.array(initial, dtype=float, copy=True)
+    if clipped:
+        if constraint_basis is not None:
+            result = _enforce_nonnegative(
+                basis, corrected, np.zeros_like(sigma), initial, result,
+                constraint_basis, chunk_size, constrained_max_iter, diagnostics)
+        return result
     unfinished = 0
     for start in range(0, indices.size, chunk_size):
         ids = indices[start:start + chunk_size]

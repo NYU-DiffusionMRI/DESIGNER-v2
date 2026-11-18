@@ -90,7 +90,7 @@ class SMI(object):
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
         l_max_training=None, seed=42, smi_fw_thres=0.2, rician_sh=False,
-        rician_sh_maxiter=None):
+        rician_sh_maxiter=None, rician_sh_clip=False):
         """
         Setting some default values and initialization required for class functions.
 
@@ -103,6 +103,10 @@ class SMI(object):
             Limit cumulative constrained-refinement iterations per voxel and
             shell. Exhausted fits return their best grid-feasible estimate.
             None retains the standard solver limits.
+        rician_sh_clip : bool, optional
+            Fit sqrt(max(0, dwi**2 - sigma**2)) by linear least squares with
+            the same signal nonnegativity constraint. Requires sigma and is
+            mutually exclusive with rician_sh and noise_bias correction.
         """
 
         if not cs_phase:
@@ -121,13 +125,17 @@ class SMI(object):
         self.n_training = int(n_training)
         self.smi_fw_thres = float(smi_fw_thres)
         self.rician_sh = bool(rician_sh)
+        self.rician_sh_clip = bool(rician_sh_clip)
+        if self.rician_sh and self.rician_sh_clip:
+            raise ValueError("rician_sh and rician_sh_clip are mutually exclusive")
+        self.constrained_sh = self.rician_sh or self.rician_sh_clip
         self.rician_sh_maxiter = rician_sh_maxiter
         self.rician_sh_diagnostics = None
         if rician_sh_maxiter is not None and (
-                not self.rician_sh or not isinstance(rician_sh_maxiter, (int, np.integer))
+                not self.constrained_sh or not isinstance(rician_sh_maxiter, (int, np.integer))
                 or rician_sh_maxiter < 1):
             raise ValueError("rician_sh_maxiter requires Rician SH and a positive integer")
-        if self.rician_sh and noise_bias:
+        if self.constrained_sh and noise_bias:
             raise ValueError("Rician SH fitting cannot be combined with noise_bias correction")
 
         # set up required inputs
@@ -532,7 +540,7 @@ class SMI(object):
         else:
             dwi_2D = dwi
 
-        if self.rician_sh:
+        if self.constrained_sh:
             from lib.rician_sh import fit_rician_sh, nonnegative_directions
             if sigma is None:
                 raise ValueError("Rician SH fitting requires an explicit sigma noise map")
@@ -556,7 +564,7 @@ class SMI(object):
         l_max = self.l_max
         n_shells = bb.shape[1]
 
-        if self.rician_sh and self.rician_sh_maxiter is not None:
+        if self.constrained_sh and self.rician_sh_maxiter is not None:
             self.rician_sh_diagnostics = {
                 'constrained_iterations':np.zeros((n_voxels, n_shells), dtype=np.int32),
                 'early_stopped':np.zeros((n_voxels, n_shells), dtype=bool),
@@ -583,7 +591,7 @@ class SMI(object):
         n_l_unique = np.sqrt((2 * l + 1) * (4 * np.pi))
 
         y_lm_matrix = self.get_even_sh(self.dirs, np.max(l_max))
-        if self.rician_sh:
+        if self.constrained_sh:
             nonnegative_basis = self.get_even_sh(nonnegative_directions(), np.max(l_max))
 
         s_l_clusters_all = np.zeros((int(np.max(l_max) / 2 + 1), n_voxels, n_shells))
@@ -602,14 +610,14 @@ class SMI(object):
             if (abs(bb[1,i]) > 0.045) & (bb[0,i] > 0.05):
                 ids_current_lm = np.arange(n_sh_coeffs[i])
                 y_lm_current_cluster = y_lm_matrix[ids_current_cluster,:]
-                if self.rician_sh:
+                if self.constrained_sh:
                     diagnostics = {} if self.rician_sh_diagnostics is not None else None
                     s_lm_current_cluster = fit_rician_sh(
                         y_lm_current_cluster[:, ids_current_lm],
                         dwi_2D[ids_current_cluster, :], sigma_1d,
                         constraint_basis=nonnegative_basis[:, ids_current_lm],
                         constrained_max_iter=self.rician_sh_maxiter,
-                        diagnostics=diagnostics)
+                        diagnostics=diagnostics, clipped=self.rician_sh_clip)
                     if diagnostics is not None:
                         for key, values in diagnostics.items():
                             self.rician_sh_diagnostics[key][:, i] = values
@@ -1512,7 +1520,7 @@ class SMI(object):
 
         self.dwishape = dwi.shape
 
-        if self.rician_sh and sigma is None:
+        if self.constrained_sh and sigma is None:
             raise ValueError("Rician SH fitting requires an explicit sigma noise map")
         self.set_mask(mask)
         self.set_sigma(sigma, dwi)

@@ -7,7 +7,7 @@ from lib.smi import SMI
 def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
                              lmax=None, beta=None, echo_time=None,
                              rician=False, rician_maxiter=None,
-                             diagnostics=None):
+                             diagnostics=None, rician_clip=False):
     """Return one 4D image per even SH order, plus ordered shell metadata.
 
     ``lmax`` is a common SH fitting order or a sequence with one order per
@@ -38,7 +38,7 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
 
     estimator = SMI(np.asarray(bval), np.asarray(bvec), beta=beta,
                     echo_time=echo_time, rician_sh=rician, seed=None,
-                    rician_sh_maxiter=rician_maxiter)
+                    rician_sh_maxiter=rician_maxiter, rician_sh_clip=rician_clip)
     automatic = estimator.get_default_lmax()  # Also populates the sorted shell table.
     table = estimator.table_4d
     if requested is None:

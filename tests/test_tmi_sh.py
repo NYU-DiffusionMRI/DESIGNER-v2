@@ -9,7 +9,7 @@ from tests.test_rician_sh import protocol
 from tests.test_tmi_rician_sh import inputs, run_cli
 
 
-@pytest.mark.parametrize('rician', [False, True])
+@pytest.mark.parametrize('rician', [False, 'RicianSH', 'RicianSHclip'])
 def test_single_shell_cli_saves_separate_invariants(inputs, rician):
     image = nib.load(inputs/'dwi.nii')
     nib.save(nib.Nifti1Image(image.get_fdata()[..., 6:96], image.affine), inputs/'dwi.nii')
@@ -18,7 +18,7 @@ def test_single_shell_cli_saves_separate_invariants(inputs, rician):
     np.savetxt(inputs/'dwi.bvec', g[6:96].T)
     options = ['-SH', '-lmaxSH', '6', '-mask', 'mask.nii']
     if rician:
-        options += ['-RicianSH', '-sigma', 'sigma.nii']
+        options += ['-'+rician, '-sigma', 'sigma.nii']
     result = run_cli(inputs, 'sh', options)
     assert result.returncode == 0, result.stdout
     assert 'SMI loading' not in result.stdout
@@ -31,7 +31,7 @@ def test_single_shell_cli_saves_separate_invariants(inputs, rician):
         assert np.isfinite(output.get_fdata()).all()
         np.testing.assert_allclose(output.affine, image.affine)
     metadata = json.loads((inputs/'sh/SH_shells.json').read_text())
-    assert metadata['estimator'] == ('RicianSH' if rician else 'LLS')
+    assert metadata['estimator'] == (rician if rician else 'LLS')
     assert metadata['shells'] == [dict(volume=0, b_value_s_per_mm2=1000., b_shape=1.,
                                      echo_time_ms=0., n_measurements=90, lmax=6)]
 
@@ -71,6 +71,9 @@ def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
     (['-SMI', '-lmaxSH', '0,2,4'], '-lmaxSH requires -SH'),
     (['-SMI', '-lmax', '0,2,4'], '-SMI -lmax accepts one invariant order'),
     (['-SH', '-RicianSH'], 'requires an explicit noise map'),
+    (['-SH', '-RicianSHclip'], 'requires an explicit noise map'),
+    (['-RicianSHclip'], 'requires -SH or -SMI'),
+    (['-SH', '-RicianSH', '-RicianSHclip', '-sigma', 'sigma.nii'], 'mutually exclusive'),
     (['-SH', '-RicianSH_maxiter', '2'], 'requires -RicianSH'),
     (['-SH', '-RicianSH', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '0'], 'positive integer'),
 ])
@@ -80,11 +83,11 @@ def test_cli_rejects_invalid_standalone_options(inputs, options, error):
     assert error in result.stdout
 
 
-@pytest.mark.parametrize('rician', [False, True])
+@pytest.mark.parametrize('rician', [False, 'RicianSH', 'RicianSHclip'])
 def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
     options = ['-SH', '-lmaxSH', '0,2,4', '-mask', 'mask.nii']
     if rician:
-        options += ['-RicianSH', '-sigma', 'sigma.nii']
+        options += ['-'+rician, '-sigma', 'sigma.nii']
     result = run_cli(inputs, 'mixed_orders', options)
     assert result.returncode == 0, result.stdout
     root = inputs/'mixed_orders'
@@ -100,8 +103,9 @@ def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
 
 
 @pytest.mark.parametrize('mode', ['-SH', '-SMI'])
-def test_cli_iteration_cap_saves_aligned_diagnostics(inputs, mode):
-    options = [mode, '-RicianSH', '-sigma', 'sigma.nii', '-mask', 'mask.nii',
+@pytest.mark.parametrize('estimator', ['-RicianSH', '-RicianSHclip'])
+def test_cli_iteration_cap_saves_aligned_diagnostics(inputs, mode, estimator):
+    options = [mode, estimator, '-sigma', 'sigma.nii', '-mask', 'mask.nii',
                '-RicianSH_maxiter', '2', '-lmaxSH' if mode == '-SH' else '-lmax', '4']
     if mode == '-SMI':
         options += ['-load_prior', 'prior.mat']

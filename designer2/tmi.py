@@ -247,9 +247,10 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
     smi_options.add_argument('-RicianSH', action='store_true', help='Fit spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SH or -SMI, and -sigma). Default: linear least squares.')
-    smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianSH. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
-    smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH, optional for SMI parameter estimation')
-    smi_options.add_argument('-lmaxSH', metavar='<orders>', help='With -SH: a common even SH fitting/output order (0,2,4,...) or comma-separated orders for every shell, sorted by b-value, b-shape, then echo time, including b=0. Default: automatic per shell. Applies to LLS and RicianSH.')
+    smi_options.add_argument('-RicianSHclip', action='store_true', help='Fit spherical harmonics to sqrt(max(0, M^2-sigma^2)) by linear least squares with nonnegative signal constraints (requires -SH or -SMI, and -sigma). Mutually exclusive with -RicianSH.')
+    smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianSH or -RicianSHclip. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
+    smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH or -RicianSHclip, optional for SMI parameter estimation')
+    smi_options.add_argument('-lmaxSH', metavar='<orders>', help='With -SH: a common even SH fitting/output order (0,2,4,...) or comma-separated orders for every shell, sorted by b-value, b-shape, then echo time, including b=0. Default: automatic per shell. Applies to LLS, RicianSH and RicianSHclip.')
     smi_options.add_argument('-lmax', metavar=('<lmax>'), help='With -SMI: one invariant order for polynomial regression (0,2,4,6), retaining automatic SH fitting orders. For standalone SH fitting orders use -SH -lmaxSH instead.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
     smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
@@ -296,7 +297,7 @@ def _load_sigma_map(filename, reference, spatial_shape, rician=False):
     if rician:
         if (not np.allclose(sigma_image.vox[:3], reference.vox[:3], rtol=1e-5, atol=1e-5)
             or not np.allclose(sigma_image.transform, reference.transform, rtol=1e-5, atol=1e-4)):
-            raise MRtrixError("-RicianSH sigma map must be aligned to the DWI grid")
+            raise MRtrixError("-RicianSH/-RicianSHclip sigma map must be aligned to the DWI grid")
         sigma = _ensure_spatial_map_3d(sigma, spatial_shape, name="sigma")
     return sigma
 
@@ -344,14 +345,23 @@ def execute(): #pylint: disable=unused-variable
         raise MRtrixError("-SMI -lmax accepts one invariant order and retains "
                           "automatic SH fitting orders; per-shell orders use "
                           "-SH -lmaxSH")
-    if app.ARGS.RicianSH:
+    if app.ARGS.RicianSH and app.ARGS.RicianSHclip:
+        raise MRtrixError("-RicianSH and -RicianSHclip are mutually exclusive")
+    constrained_sh = app.ARGS.RicianSH or app.ARGS.RicianSHclip
+    sh_estimator = ('RicianSH' if app.ARGS.RicianSH else
+                    'RicianSHclip' if app.ARGS.RicianSHclip else 'LLS')
+    sh_description = ('Rician expectation NLS with nonnegative signal constraints'
+                      if app.ARGS.RicianSH else
+                      'clipped corrected LLS with nonnegative signal constraints'
+                      if app.ARGS.RicianSHclip else 'linear least squares')
+    if constrained_sh:
         if not (app.ARGS.SMI or app.ARGS.SH):
-            raise MRtrixError("-RicianSH requires -SH or -SMI")
+            raise MRtrixError(f"-{sh_estimator} requires -SH or -SMI")
         if not app.ARGS.sigma:
-            raise MRtrixError("-RicianSH requires an explicit noise map via -sigma")
+            raise MRtrixError(f"-{sh_estimator} requires an explicit noise map via -sigma")
     if app.ARGS.RicianSH_maxiter is not None:
-        if not app.ARGS.RicianSH or app.ARGS.RicianSH_maxiter < 1:
-            raise MRtrixError("-RicianSH_maxiter requires -RicianSH and a positive integer")
+        if not constrained_sh or app.ARGS.RicianSH_maxiter < 1:
+            raise MRtrixError("-RicianSH_maxiter requires -RicianSH or -RicianSHclip and a positive integer")
     if app.ARGS.gnc_format and not app.ARGS.gnc:
         raise MRtrixError("-gnc_format requires -gnc <field>")
 
@@ -1692,9 +1702,8 @@ def execute(): #pylint: disable=unused-variable
 
     if app.ARGS.SH:
         from lib.sh import fit_rotational_invariants
-        logger.info("SH estimator: %s", "Rician expectation NLS with nonnegative signal constraints"
-                    if app.ARGS.RicianSH else "linear least squares")
-        sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, app.ARGS.RicianSH)
+        logger.info("SH estimator: %s", sh_description)
+        sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, constrained_sh)
         echo_times = np.array(dwi_metadata['echo_time_per_volume'], dtype=float, copy=True)
         if 0 < np.min(echo_times) < 1:
             echo_times *= 1000
@@ -1706,13 +1715,13 @@ def execute(): #pylint: disable=unused-variable
             mask=mask, sigma=sigma, lmax=sh_lmax,
             beta=dwi_metadata['bshape_per_volume'], echo_time=echo_times,
             rician=app.ARGS.RicianSH, rician_maxiter=app.ARGS.RicianSH_maxiter,
-            diagnostics=diagnostics)
+            diagnostics=diagnostics, rician_clip=app.ARGS.RicianSHclip)
         save_params(images, mif, model=None, outdir=outdir)
         if diagnostics is not None:
             _save_rician_diagnostics(diagnostics, mif, outdir,
                                     app.ARGS.RicianSH_maxiter, shells)
         with open(os.path.join(outdir, 'SH_shells.json'), 'w') as stream:
-            json.dump(dict(estimator='RicianSH' if app.ARGS.RicianSH else 'LLS',
+            json.dump(dict(estimator=sh_estimator,
                            normalization='Sl = norm(c_lm) / sqrt((2*l+1)*4*pi); '
                                          'orthonormal SH, original signal units',
                            rank_one_processing=True, shells=shells), stream, indent=2)
@@ -1742,8 +1751,8 @@ def execute(): #pylint: disable=unused-variable
 
             if not app.ARGS.sigma:
                 logger.warning("No sigma map provided. SMI may be poorly conditioned.")
-            sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, app.ARGS.RicianSH)
-            logger.info("SMI SH estimator: %s", "Rician expectation NLS with nonnegative signal constraints" if app.ARGS.RicianSH else "linear least squares")
+            sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, constrained_sh)
+            logger.info("SMI SH estimator: %s", sh_description)
 
             if app.ARGS.compartments:
                 compartments = app.ARGS.compartments
@@ -1806,6 +1815,7 @@ def execute(): #pylint: disable=unused-variable
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianSH,
+                            rician_sh_clip=app.ARGS.RicianSHclip,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
                 
 
@@ -1849,6 +1859,7 @@ def execute(): #pylint: disable=unused-variable
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianSH,
+                            rician_sh_clip=app.ARGS.RicianSHclip,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
 
                 # else:
