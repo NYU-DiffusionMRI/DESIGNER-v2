@@ -247,6 +247,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
     smi_options.add_argument('-RicianSH', action='store_true', help='Fit spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SH or -SMI, and -sigma). Default: linear least squares.')
+    smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianSH. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH, optional for SMI parameter estimation')
     smi_options.add_argument('-lmax', metavar=('<lmax>'),help='With -SH: maximum even SH fitting/output order (0,2,4,...); default is automatic per shell. With -SMI: invariant order for polynomial regression (0,2,4,6), retaining automatic SH fitting orders.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
@@ -299,6 +300,20 @@ def _load_sigma_map(filename, reference, spatial_shape, rician=False):
     return sigma
 
 
+def _save_rician_diagnostics(images, reference, outdir, maxiter, shells):
+    """Save optional solver diagnostics using the same geometry as the maps."""
+    from lib.designer_fit_wrappers import save_params
+    save_params(images, reference, model=None, outdir=outdir)
+    summary = dict(constrained_maxiter=maxiter, shells=shells,
+                   counts_are_before_rank_one_processing=True)
+    for name in ('RicianSH_early_stop', 'RicianSH_nonconverged'):
+        summary[name] = np.count_nonzero(images[name], axis=(0, 1, 2)).tolist()
+    summary['maximum_constrained_iterations'] = np.max(
+        images['RicianSH_iterations'], axis=(0, 1, 2)).tolist()
+    with open(os.path.join(outdir, 'RicianSH_diagnostics.json'), 'w') as stream:
+        json.dump(summary, stream, indent=2)
+
+
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, path, run, MRtrixError #pylint: disable=no-name-in-module, import-outside-toplevel
     import lib.tensor as tensor
@@ -320,6 +335,9 @@ def execute(): #pylint: disable=unused-variable
             raise MRtrixError("-RicianSH requires -SH or -SMI")
         if not app.ARGS.sigma:
             raise MRtrixError("-RicianSH requires an explicit noise map via -sigma")
+    if app.ARGS.RicianSH_maxiter is not None:
+        if not app.ARGS.RicianSH or app.ARGS.RicianSH_maxiter < 1:
+            raise MRtrixError("-RicianSH_maxiter requires -RicianSH and a positive integer")
     if app.ARGS.gnc_format and not app.ARGS.gnc:
         raise MRtrixError("-gnc_format requires -gnc <field>")
 
@@ -1666,14 +1684,19 @@ def execute(): #pylint: disable=unused-variable
         echo_times = np.array(dwi_metadata['echo_time_per_volume'], dtype=float, copy=True)
         if 0 < np.min(echo_times) < 1:
             echo_times *= 1000
+        diagnostics = {} if app.ARGS.RicianSH_maxiter is not None else None
         images, shells = fit_rotational_invariants(
             dwi_orig if multi_te_beta else dwi,
             bval_orig if multi_te_beta else bval,
             bvec_orig if multi_te_beta else bvec,
             mask=mask, sigma=sigma, lmax=sh_lmax,
             beta=dwi_metadata['bshape_per_volume'], echo_time=echo_times,
-            rician=app.ARGS.RicianSH)
+            rician=app.ARGS.RicianSH, rician_maxiter=app.ARGS.RicianSH_maxiter,
+            diagnostics=diagnostics)
         save_params(images, mif, model=None, outdir=outdir)
+        if diagnostics is not None:
+            _save_rician_diagnostics(diagnostics, mif, outdir,
+                                    app.ARGS.RicianSH_maxiter, shells)
         with open(os.path.join(outdir, 'SH_shells.json'), 'w') as stream:
             json.dump(dict(estimator='RicianSH' if app.ARGS.RicianSH else 'LLS',
                            normalization='Sl = norm(c_lm) / sqrt((2*l+1)*4*pi); '
@@ -1768,7 +1791,8 @@ def execute(): #pylint: disable=unused-variable
                 smi = SMI(bval=bval_orig, bvec=bvec_orig, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
-                            rician_sh=app.ARGS.RicianSH)
+                            rician_sh=app.ARGS.RicianSH,
+                            rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
                 
 
                 logger.info("SMI model initialized for multi-TE/beta data.")
@@ -1810,7 +1834,8 @@ def execute(): #pylint: disable=unused-variable
                 smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
-                            rician_sh=app.ARGS.RicianSH)
+                            rician_sh=app.ARGS.RicianSH,
+                            rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
 
                 # else:
                 #     smi = SMI(bval=bval, bvec=bvec, rotinv_lmax=lmax,
@@ -1826,6 +1851,15 @@ def execute(): #pylint: disable=unused-variable
                 save_params(params_smi, mif, model='smi', outdir=outdir)
                 logger.info("SMI parameters saved for single-TE/beta data.", extra={"outdir": outdir})
     
+        if app.ARGS.SMI and app.ARGS.RicianSH_maxiter is not None:
+            from lib.rician_sh import diagnostics_to_images
+            diagnostics = diagnostics_to_images(smi.rician_sh_diagnostics, mask)
+            shells = [dict(volume=i, b_value_s_per_mm2=float(row[0]*1000),
+                           b_shape=float(row[1]), echo_time_ms=float(row[3]))
+                      for i, row in enumerate(smi.table_4d.T)]
+            _save_rician_diagnostics(diagnostics, mif, outdir,
+                                    app.ARGS.RicianSH_maxiter, shells)
+
     logger.info("Execution completed successfully.")
 
 def main():

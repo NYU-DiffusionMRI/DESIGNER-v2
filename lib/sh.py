@@ -6,7 +6,8 @@ from lib.smi import SMI
 
 def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
                              lmax=None, beta=None, echo_time=None,
-                             rician=False):
+                             rician=False, rician_maxiter=None,
+                             diagnostics=None):
     """Return one 4D image per even SH order, plus ordered shell metadata.
 
     ``lmax`` sets the SH fitting order on every directional diffusion shell;
@@ -15,6 +16,8 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
     and have zero higher-order invariants. No SMI priors, noise estimation,
     training, or microstructure regression are run. The shared SH backend
     retains SMI's normalization and rank-one processing across shells.
+    rician_maxiter optionally limits constrained optimization. When supplied,
+    diagnostics can receive image-grid iteration counts and early-stop masks.
     """
     if lmax is not None and (not isinstance(lmax, (int, np.integer))
                              or lmax < 0 or lmax % 2):
@@ -29,7 +32,8 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
         raise ValueError("SH mask must match the DWI spatial shape and contain voxels")
 
     estimator = SMI(np.asarray(bval), np.asarray(bvec), beta=beta,
-                    echo_time=echo_time, rician_sh=rician, seed=None)
+                    echo_time=echo_time, rician_sh=rician, seed=None,
+                    rician_sh_maxiter=rician_maxiter)
     automatic = estimator.get_default_lmax()  # Also populates the sorted shell table.
     table = estimator.table_4d
     orders = (np.maximum(automatic, 0).astype(int) if lmax is None
@@ -60,6 +64,9 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
     estimator.rotinv_lmax = output_lmax
     invariants = estimator.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(
         dwi.astype(np.float32), mask, sigma=sigma)
+    if diagnostics is not None and estimator.rician_sh_diagnostics is not None:
+        from lib.rician_sh import diagnostics_to_images
+        diagnostics.update(diagnostics_to_images(estimator.rician_sh_diagnostics, mask))
     n_shells = table.shape[1]
     images = {}
     for order in range(0, output_lmax + 1, 2):

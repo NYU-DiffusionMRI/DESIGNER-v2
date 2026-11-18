@@ -89,7 +89,8 @@ class SMI(object):
     def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
-        l_max_training=None, seed=42, smi_fw_thres=0.2, rician_sh=False):
+        l_max_training=None, seed=42, smi_fw_thres=0.2, rician_sh=False,
+        rician_sh_maxiter=None):
         """
         Setting some default values and initialization required for class functions.
 
@@ -98,6 +99,10 @@ class SMI(object):
             constraints on acquired directions and a dense sphere grid (default False). Requires
             an explicit sigma map in fit(), in the same intensity units as dwi.
             Cannot be combined with the separate noise_bias pre-correction.
+        rician_sh_maxiter : positive int, optional
+            Limit cumulative constrained-refinement iterations per voxel and
+            shell. Exhausted fits return their best grid-feasible estimate.
+            None retains the standard solver limits.
         """
 
         if not cs_phase:
@@ -116,6 +121,12 @@ class SMI(object):
         self.n_training = int(n_training)
         self.smi_fw_thres = float(smi_fw_thres)
         self.rician_sh = bool(rician_sh)
+        self.rician_sh_maxiter = rician_sh_maxiter
+        self.rician_sh_diagnostics = None
+        if rician_sh_maxiter is not None and (
+                not self.rician_sh or not isinstance(rician_sh_maxiter, (int, np.integer))
+                or rician_sh_maxiter < 1):
+            raise ValueError("rician_sh_maxiter requires Rician SH and a positive integer")
         if self.rician_sh and noise_bias:
             raise ValueError("Rician SH fitting cannot be combined with noise_bias correction")
 
@@ -545,6 +556,12 @@ class SMI(object):
         l_max = self.l_max
         n_shells = bb.shape[1]
 
+        if self.rician_sh and self.rician_sh_maxiter is not None:
+            self.rician_sh_diagnostics = {
+                'constrained_iterations':np.zeros((n_voxels, n_shells), dtype=np.int32),
+                'early_stopped':np.zeros((n_voxels, n_shells), dtype=bool),
+                'nonconverged':np.zeros((n_voxels, n_shells), dtype=bool)}
+
         if np.isscalar(l_max):
             l_max = l_max * np.ones(n_shells)
 
@@ -586,10 +603,16 @@ class SMI(object):
                 ids_current_lm = np.arange(n_sh_coeffs[i])
                 y_lm_current_cluster = y_lm_matrix[ids_current_cluster,:]
                 if self.rician_sh:
+                    diagnostics = {} if self.rician_sh_diagnostics is not None else None
                     s_lm_current_cluster = fit_rician_sh(
                         y_lm_current_cluster[:, ids_current_lm],
                         dwi_2D[ids_current_cluster, :], sigma_1d,
-                        constraint_basis=nonnegative_basis[:, ids_current_lm])
+                        constraint_basis=nonnegative_basis[:, ids_current_lm],
+                        constrained_max_iter=self.rician_sh_maxiter,
+                        diagnostics=diagnostics)
+                    if diagnostics is not None:
+                        for key, values in diagnostics.items():
+                            self.rician_sh_diagnostics[key][:, i] = values
                 else:
                     s_lm_current_cluster, _,_,_ = scl.lstsq(
                         y_lm_current_cluster[:, ids_current_lm],

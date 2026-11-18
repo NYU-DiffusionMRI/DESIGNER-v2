@@ -11,6 +11,21 @@ from scipy.linalg import lstsq
 from scipy.optimize import least_squares, minimize, LinearConstraint
 
 
+def diagnostics_to_images(diagnostics, mask):
+    """Expand voxel-by-shell solver diagnostics onto the input image grid."""
+    mask = np.asarray(mask, dtype=bool)
+    names = {'early_stopped':'RicianSH_early_stop',
+             'constrained_iterations':'RicianSH_iterations',
+             'nonconverged':'RicianSH_nonconverged'}
+    images = {}
+    for key, name in names.items():
+        values = diagnostics[key]
+        image = np.zeros(mask.shape + (values.shape[1],), dtype=np.float64)
+        image[mask] = values
+        images[name] = image
+    return images
+
+
 def nonnegative_directions(count=65536):
     """Deterministic sphere grid used to constrain the underlying SH signal.
 
@@ -49,7 +64,8 @@ def rician_mean_and_derivative(signal, sigma):
 
 
 def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
-                  constraint_basis=None):
+                  constraint_basis=None, constrained_max_iter=None,
+                  diagnostics=None):
     """Refine clipped corrected LLS with batched Levenberg--Marquardt.
 
     Shapes: basis (directions, coefficients), measurements (directions, voxels),
@@ -63,9 +79,21 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
     Zero-noise fits reduce to constrained LLS. Without constraints, zero-noise
     voxels retain their LLS coefficients exactly. Fits are scaled so tolerances do
     not depend on signal units. No spatial smoothing is applied.
+    constrained_max_iter optionally limits the total constrained iterations
+    per voxel, including all grid refinements and the trust-region restart.
+    An exhausted fit returns its best grid-feasible coefficients. diagnostics
+    optionally receives per-voxel iteration counts and early-stop flags.
     """
+    if constrained_max_iter is not None and (
+            not isinstance(constrained_max_iter, (int, np.integer))
+            or constrained_max_iter < 1):
+        raise ValueError("Rician SH constrained iteration limit must be a positive integer")
     measurements = np.asarray(measurements, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
+    if diagnostics is not None:
+        diagnostics['constrained_iterations'] = np.zeros(measurements.shape[1], dtype=np.int32)
+        diagnostics['early_stopped'] = np.zeros(measurements.shape[1], dtype=bool)
+        diagnostics['nonconverged'] = np.zeros(measurements.shape[1], dtype=bool)
     indices = np.flatnonzero(sigma > 0)
     corrected = measurements.copy()
     corrected[:, indices] = np.sqrt(np.maximum(
@@ -86,12 +114,14 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
             RuntimeWarning, stacklevel=2)
     if constraint_basis is not None:
         result = _enforce_nonnegative(basis, measurements, sigma, initial,
-                                      result, constraint_basis, chunk_size)
+                                      result, constraint_basis, chunk_size,
+                                      constrained_max_iter, diagnostics)
     return result
 
 
 def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
-                         constraint_basis, chunk_size):
+                         constraint_basis, chunk_size, max_iter=None,
+                         diagnostics=None):
     """Constraint generation avoids passing 65k inequalities to every QP.
 
     Each subproblem contains all acquired directions, an initial sphere
@@ -112,6 +142,7 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                            np.linspace(len(basis), len(grid)-1,
                                        min(256, len(constraint_basis)), dtype=int)])
     unfinished = 0
+    early_stopped = 0
     for start in range(0, fitted.shape[1], chunk_size):
         stop = min(start + chunk_size, fitted.shape[1])
         minima = np.min(grid @ fitted[:, start:stop], axis=0)
@@ -147,7 +178,12 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
             current = corrected_initial.copy()
             converged = False
             restarted_zero = False
+            iterations = 0
+            limit_reached = False
             for _ in range(24):
+                if max_iter is not None and iterations >= max_iter:
+                    limit_reached = True
+                    break
                 if restarted_zero:
                     # A different solver avoids repeating the same spurious
                     # zero stationary point, without changing the LLS seed.
@@ -161,9 +197,12 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                 else:
                     method = 'SLSQP'
                     options = {'maxiter':500, 'ftol':1e-11}
+                if max_iter is not None:
+                    options['maxiter'] = min(options['maxiter'], max_iter-iterations)
                 fit = minimize(objective, current, jac=True, method=method,
                                constraints=[LinearConstraint(grid[active], 0, np.inf)],
                                options=options)
+                iterations += max(1, int(getattr(fit, 'nit', 1)))
                 if not np.all(np.isfinite(fit.x)):
                     break
                 signal = grid @ fit.x
@@ -194,7 +233,17 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                     active = np.union1d(active, worst)
                 current = candidate
             fitted[:, voxel] = best * scale
-            unfinished += not converged
+            limit_reached |= not converged and max_iter is not None and iterations >= max_iter
+            early_stopped += limit_reached
+            unfinished += not converged and not limit_reached
+            if diagnostics is not None:
+                diagnostics['constrained_iterations'][voxel] = iterations
+                diagnostics['early_stopped'][voxel] = limit_reached
+                diagnostics['nonconverged'][voxel] = not converged
+    if early_stopped:
+        warnings.warn(f'Rician SH constrained iteration limit reached in {early_stopped} voxel(s) '
+                      'in this shell; returning the best grid-feasible coefficients.',
+                      RuntimeWarning, stacklevel=2)
     if unfinished:
         warnings.warn(f'Nonnegative Rician SH fit did not converge in {unfinished} voxel(s) '
                       'in this shell; returning the best grid-feasible coefficients.',

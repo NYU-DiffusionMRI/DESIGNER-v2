@@ -62,8 +62,31 @@ def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
     (['-SH', '-lmax', '-2'], 'nonnegative even integer'),
     (['-SH', '-lmax', 'no'], 'nonnegative even integer'),
     (['-SH', '-RicianSH'], 'requires an explicit noise map'),
+    (['-SH', '-RicianSH_maxiter', '2'], 'requires -RicianSH'),
+    (['-SH', '-RicianSH', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '0'], 'positive integer'),
 ])
 def test_cli_rejects_invalid_standalone_options(inputs, options, error):
     result = run_cli(inputs, 'invalid', options)
     assert result.returncode != 0
     assert error in result.stdout
+
+
+@pytest.mark.parametrize('mode', ['-SH', '-SMI'])
+def test_cli_iteration_cap_saves_aligned_diagnostics(inputs, mode):
+    options = [mode, '-RicianSH', '-sigma', 'sigma.nii', '-mask', 'mask.nii',
+               '-RicianSH_maxiter', '2', '-lmax', '4']
+    if mode == '-SMI':
+        options += ['-load_prior', 'prior.mat']
+    result = run_cli(inputs, 'capped', options)
+    assert result.returncode == 0, result.stdout
+    summary = json.loads((inputs/'capped/RicianSH_diagnostics.json').read_text())
+    assert summary['constrained_maxiter'] == 2
+    for name in ('RicianSH_early_stop', 'RicianSH_iterations', 'RicianSH_nonconverged'):
+        image = nib.load(inputs/'capped'/f'{name}.nii')
+        assert image.shape == (2, 2, 1, 3)
+        np.testing.assert_allclose(image.affine, nib.load(inputs/'dwi.nii').affine)
+        values = image.get_fdata()
+        assert np.all(values[..., 0] == 0)
+        assert np.all((values >= 0) & (values <= (2 if name.endswith('iterations') else 1)))
+        if name in summary:
+            assert np.count_nonzero(values, axis=(0,1,2)).tolist() == summary[name]

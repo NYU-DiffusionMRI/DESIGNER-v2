@@ -158,6 +158,25 @@ The same expectation model, clipped-LLS initialization, and nonnegativity
 constraint are used by `-SH -RicianSH`. In that mode, processing stops after
 the signal rotational invariants have been saved.
 
+For difficult fits, `-RicianSH_maxiter N` optionally caps the cumulative
+constrained-refinement iterations per voxel and shell, including restarts
+and constraint-generation rounds. The fast initial batched fit retains its
+standard limit. Without this option, the existing solver limits are unchanged.
+At the cap, the best grid-feasible coefficients are returned with a warning;
+an early-stopped fit is not a convergence guarantee. Very small limits can
+change the estimates substantially, even with clipped-LLS initialization,
+because the initial SH signal need not satisfy nonnegativity.
+
+When this option is supplied, both `-SH` and `-SMI` also save
+`RicianSH_early_stop.nii`, `RicianSH_iterations.nii`, and
+`RicianSH_nonconverged.nii`. Each volume describes one shell before rank-one
+processing. Zero iterations means no constrained refinement was needed;
+b=0 and isotropic shells also have zero counts. `RicianSH_diagnostics.json`
+identifies the shells, iteration cap, and per-shell counts. The early-stop
+mask marks cap exhaustion; the nonconverged mask also includes other failures
+of constrained refinement. These diagnostics do not describe convergence of
+the initial batched fit, whose existing warnings remain separate.
+
 ### Standard Model parameter fitting
 
 Then, the SM parameters are estimated from the rotational invariants of the signal (up to L=4 as default option). Unlike conventional parameter estimation approaches which rely on an analytical forward model, e.g. maximum likelihood, here we use data-driven machine learning (ML) regression. This is done by applying a sufficiently flexible nonlinear regression to _training data_ generated with the forward model of interest, considering a wide distribution of model parameters, the noise level, and the protocol that was used. Then, such regression is applied to the data of interest.

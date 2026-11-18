@@ -258,6 +258,31 @@ def test_nonnegative_failed_solver_returns_feasible_result_with_warning(monkeypa
     assert (grid @ result).min() >= -1e-12
 
 
+def test_constrained_iteration_budget_is_cumulative_and_returns_feasible_best(monkeypatch):
+    from types import SimpleNamespace
+    import lib.rician_sh as module
+    basis = np.array([[1.,-1.],[1.,0.],[1.,1.]])
+    grid = np.array([[1.,-2.],[1.,2.]])
+    measured = np.array([[0.],[1.],[2.]])
+    initial = lstsq(basis, measured)[0]
+    calls = []
+    def slow(fun, x, **kwargs):
+        calls.append((x.copy(), kwargs['options']['maxiter']))
+        return SimpleNamespace(x=np.array([1., .5]), success=False,
+                               nit=min(2, kwargs['options']['maxiter']))
+    monkeypatch.setattr(module, 'minimize', slow)
+    diagnostics = {}
+    with pytest.warns(RuntimeWarning, match='constrained iteration limit'):
+        fitted = fit_rician_sh(basis, measured, np.zeros(1), constraint_basis=grid,
+                              constrained_max_iter=3, diagnostics=diagnostics)
+    assert [c[1] for c in calls] == [3, 1]
+    np.testing.assert_allclose(calls[0][0], initial[:,0]/measured.max())
+    assert np.min(np.vstack((basis, grid)) @ fitted) >= 0
+    assert diagnostics['constrained_iterations'].tolist() == [3]
+    assert diagnostics['early_stopped'].tolist() == [True]
+    assert diagnostics['nonconverged'].tolist() == [True]
+
+
 def test_smi_uses_nonnegative_signal_constraints_in_forward_projection():
     obj = model(True)
     obj.mask = np.ones((2,2,1), bool)
