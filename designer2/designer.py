@@ -67,6 +67,11 @@ def usage(cmdline): #pylint: disable=unused-variable
     options.add_argument('-b1correct', action='store_true', help='Include a bias correction step in dwi preprocessing', default=False)
     options.add_argument('-normalize', action='store_true', help='normalize the dwi volume to median b0 CSF intensity of 1000 (useful for multiple dwi acquisitions)', default=False)
     options.add_argument('-mask', action='store_true',help='compute a brain mask prior to tensor fitting to strip skull and improve efficiency')
+    options.add_argument('-skullstrip_backend', choices=['bet', 'synthstrip'], default='bet',
+        help='Backend used for every brain extraction step in the pipeline (both internal '
+             'eddy/topup masks and, if -mask is set, the final output mask) - applies '
+             'regardless of whether -mask is passed. "bet" (default) uses FSL\'s bet; '
+             '"synthstrip" uses FreeSurfer\'s mri_synthstrip.')
     options.add_argument('-echo_time',metavar=('<TE1,TE2,...>'),help='specify the echo time used in the acquisition (comma separated list the same length as number of inputs)')
     options.add_argument('-bshape',metavar=('<beta1,beta2,...>'),help='specify the b-shape used in the acquisition (comma separated list the same length as number of inputs)')
     options.add_argument('-pre_align',action='store_true',help='rigidly align each input series to correct for large motion between series')
@@ -297,7 +302,7 @@ def execute(): #pylint: disable=unused-variable
 
     # generate a final brainmask
     if app.ARGS.mask or app.ARGS.normalize:
-        create_brainmask(fsl_suffix,dwi_metadata)    
+        create_brainmask(fsl_suffix, dwi_metadata, app.ARGS.skullstrip_backend)
 
 
     # Forced after b1 correction and moved before rician bias correction - added by omnia (enable)
