@@ -61,6 +61,10 @@ def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
     (['-SH', '-lmax', '3'], 'nonnegative even integer'),
     (['-SH', '-lmax', '-2'], 'nonnegative even integer'),
     (['-SH', '-lmax', 'no'], 'nonnegative even integer'),
+    (['-SH', '-lmax', '0,2,3'], 'nonnegative even integer'),
+    (['-SH', '-lmax', '0,,4'], 'nonnegative even integer'),
+    (['-SH', '-lmax', '2,4'], 'expected 3, got 2'),
+    (['-SMI', '-lmax', '0,2,4'], 'Per-shell -lmax lists require -SH'),
     (['-SH', '-RicianSH'], 'requires an explicit noise map'),
     (['-SH', '-RicianSH_maxiter', '2'], 'requires -RicianSH'),
     (['-SH', '-RicianSH', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '0'], 'positive integer'),
@@ -69,6 +73,25 @@ def test_cli_rejects_invalid_standalone_options(inputs, options, error):
     result = run_cli(inputs, 'invalid', options)
     assert result.returncode != 0
     assert error in result.stdout
+
+
+@pytest.mark.parametrize('rician', [False, True])
+def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
+    options = ['-SH', '-lmax', '0,2,4', '-mask', 'mask.nii']
+    if rician:
+        options += ['-RicianSH', '-sigma', 'sigma.nii']
+    result = run_cli(inputs, 'mixed_orders', options)
+    assert result.returncode == 0, result.stdout
+    root = inputs/'mixed_orders'
+    metadata = json.loads((root/'SH_shells.json').read_text())
+    assert metadata['rank_one_processing']
+    assert [s['lmax'] for s in metadata['shells']] == [0, 2, 4]
+    assert {p.name for p in root.glob('*.nii')} == {'S0.nii', 'S2.nii', 'S4.nii'}
+    s2 = nib.load(root/'S2.nii').get_fdata()
+    s4 = nib.load(root/'S4.nii').get_fdata()
+    assert s2.shape == s4.shape == (2, 2, 1, 3)
+    assert np.all(s4[..., :2] == 0)
+    assert np.any(s2[..., 1] > 0) and np.any(s4[..., 2] > 0)
 
 
 @pytest.mark.parametrize('mode', ['-SH', '-SMI'])

@@ -71,3 +71,38 @@ def test_unidentifiable_order_fails_before_nonlinear_fit():
     with pytest.raises(ValueError, match='rank-deficient'):
         fit_rotational_invariants(np.ones((1, 1, 1, 90)), np.ones(90),
                                   np.tile([0., 0., 1.], (90, 1)), lmax=2)
+
+
+@pytest.mark.parametrize('rician', [False, True])
+def test_per_shell_orders_recover_analytic_invariants_in_sorted_order(rician):
+    b, g = protocol()
+    clean = np.ones(b.size)
+    clean[b == 1] = .6 + .12*eval_legendre(2, g[b == 1, 2])
+    clean[b == 2] = (.3 + .09*eval_legendre(2, g[b == 2, 2])
+                    + .06*eval_legendre(4, g[b == 2, 2]))
+    measured = clean.copy()
+    if rician:
+        measured[b > 0] = rice.mean(clean[b > 0]/.15)*.15
+    permutation = np.random.default_rng(13).permutation(b.size)
+    orders = np.array([0, 2, 4])
+    images, shells = fit_rotational_invariants(
+        measured[permutation].reshape(1, 1, 1, -1), b[permutation], g[permutation],
+        lmax=orders, rician=rician, sigma=np.full((1, 1, 1), .15))
+    np.testing.assert_array_equal(orders, [0, 2, 4])
+    assert [s['lmax'] for s in shells] == [0, 2, 4]
+    np.testing.assert_allclose(images['S0'].ravel(), [1, .6, .3], atol=2e-7)
+    np.testing.assert_allclose(images['S2'].ravel(), [0, .12/5, .09/5], atol=2e-7)
+    np.testing.assert_allclose(images['S4'].ravel(), [0, 0, .06/9], atol=2e-7)
+
+
+@pytest.mark.parametrize('orders', [[], [0, 3, 4], [0, -2, 4], [0., 2., 4.], [[0, 2, 4]]])
+def test_invalid_per_shell_orders_are_rejected(orders):
+    b, g = protocol()
+    with pytest.raises(ValueError, match='nonnegative even integer'):
+        fit_rotational_invariants(np.ones((1, 1, 1, b.size)), b, g, lmax=orders)
+
+
+def test_per_shell_list_must_include_every_shell():
+    b, g = protocol()
+    with pytest.raises(ValueError, match='expected 3, got 2'):
+        fit_rotational_invariants(np.ones((1, 1, 1, b.size)), b, g, lmax=[2, 4])

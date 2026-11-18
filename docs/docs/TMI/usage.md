@@ -80,6 +80,7 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - Save separate `S0.nii`, `S2.nii`, ..., `S<lmax>.nii` files in original signal units. Each file is 4D, with one volume per acquisition shell, including a singleton volume dimension for a single shell.
 - `SH_shells.json` maps each zero-based volume index to its b-value (s/mm²), b-shape, echo time (ms), number of measurements, and fitted SH order. Shells are ordered by b-value, b-shape, then echo time.
 - `-lmax 6` fits through order 6 and saves S0, S2, S4, and S6. Without `-lmax`, use the existing automatic per-shell orders and save every fitted even order. Higher-order volumes are zero for shells fitted at a lower order; b=0 and isotropic shells retain their arithmetic means and zero higher orders.
+- A comma-separated list sets individual shell orders while preserving joint processing, for example `-lmax 0,2,4,4,4` for b=0,1000,2000,7000,25000 at one b-shape and TE. Include every shell, sorted by b-value, b-shape, then echo time; `SH_shells.json` records the mapping.
 - A single diffusion shell is supported, including acquisitions without b=0. A requested fitting order must have enough independent directions in every directional shell; otherwise reduce `-lmax`.
 - LLS is the default and requires no noise map. Add `-RicianSH -sigma <noisemap>` for the same constrained Rician-expectation fit used by SMI. The existing SH normalization and rank-one processing across shells are retained; no microstructure regression is performed.
 
@@ -119,6 +120,7 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 
 ### `-lmax <lmax>`
 - With `-SH`: a nonnegative even integer specifying the maximum SH fitting and output order, for example `-lmax 6`. The order applies to all directional diffusion shells; `-lmax 0` saves only S0. If omitted, fitting orders are selected automatically per shell.
+- With `-SH`, a comma-separated list supplies one order per sorted shell, including b=0/isotropic shells. For example, `-lmax 2,4,4,4` fits order 2 at b=1000 and order 4 at b=2000,7000,25000 when these are the only shells in the input. Higher-order volumes for shells fitted at a lower order are zero placeholders, not measurements.
 - With `-SMI`: the invariant order used for model regression (0, 2, 4, or 6). This retains the existing automatic per-shell SH fitting orders and SMI output format.
 
 ### `-bshape <beta1,beta2,...>`

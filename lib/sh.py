@@ -10,7 +10,8 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
                              diagnostics=None):
     """Return one 4D image per even SH order, plus ordered shell metadata.
 
-    ``lmax`` sets the SH fitting order on every directional diffusion shell;
+    ``lmax`` is a common SH fitting order or a sequence with one order per
+    sorted shell (ascending b-value, b-shape, then echo time, including b=0).
     None retains TMI's automatic per-shell orders. b-values are in ms/um^2
     and echo times in ms. b=0/isotropic shells retain their arithmetic means
     and have zero higher-order invariants. No SMI priors, noise estimation,
@@ -19,9 +20,13 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
     rician_maxiter optionally limits constrained optimization. When supplied,
     diagnostics can receive image-grid iteration counts and early-stop masks.
     """
-    if lmax is not None and (not isinstance(lmax, (int, np.integer))
-                             or lmax < 0 or lmax % 2):
-        raise ValueError("SH lmax must be a nonnegative even integer")
+    requested = None if lmax is None else np.asarray(lmax)
+    if requested is not None and (requested.ndim > 1 or requested.size == 0
+                                  or requested.dtype.kind not in 'iu'
+                                  or np.any(requested < 0)
+                                  or np.any(requested % 2)):
+        raise ValueError("SH lmax must be a nonnegative even integer or a "
+                         "one-dimensional list of nonnegative even integers")
     dwi = np.asarray(dwi)
     if dwi.ndim != 4:
         raise ValueError("SH input must be a 4D DWI")
@@ -36,11 +41,19 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
                     rician_sh_maxiter=rician_maxiter)
     automatic = estimator.get_default_lmax()  # Also populates the sorted shell table.
     table = estimator.table_4d
-    orders = (np.maximum(automatic, 0).astype(int) if lmax is None
-              else np.full(table.shape[1], lmax, dtype=int))
+    if requested is None:
+        orders = np.maximum(automatic, 0).astype(int)
+    elif requested.ndim == 0:
+        orders = np.full(table.shape[1], int(requested), dtype=int)
+    else:
+        if requested.size != table.shape[1]:
+            raise ValueError(f"SH lmax list needs one order per sorted shell "
+                             f"(including b=0/isotropic shells): expected "
+                             f"{table.shape[1]}, got {requested.size}")
+        orders = requested.astype(int, copy=True)
     isotropic = (table[0] <= .05) | (np.abs(table[1]) <= .045)
     orders[isotropic] = 0
-    output_lmax = int(np.max(orders)) if lmax is None else lmax
+    output_lmax = int(np.max(orders if requested is None else requested))
 
     # Explicit orders must be identifiable; do not silently lower the order.
     for i, order in enumerate(orders):

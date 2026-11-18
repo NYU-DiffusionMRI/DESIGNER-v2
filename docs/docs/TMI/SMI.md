@@ -40,7 +40,8 @@ magnitude observation model and enforces a **nonnegative underlying SH signal**.
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmax` sets the actual
 SH fitting order and requires enough independent directions in each directional
-shell. Omit it for automatic per-shell orders. The Rician option requires an
+shell. A comma-separated list assigns an order to each shell. Omit it for
+automatic per-shell orders. The Rician option requires an
 aligned noise map in the same signal units as the DWI and data whose Rician
 noise floor has not already been removed; see [parameter estimation](#parameter-estimation).
 
@@ -120,8 +121,27 @@ LLS; omit `-lmax` for automatic per-shell orders. See the
 
 Orders 2, 4, and 6 require at least 6, 15, and 28 independent directional
 measurements, respectively. If different shells support different orders,
-use automatic orders or fit shell subsets separately at the desired supported
-orders. A requested order that cannot be identified from the directions is
+use automatic orders or supply a comma-separated list, for example:
+
+```bash
+# Input containing b=0, 1000, 2000, 7000 and 25000 s/mm², at one b-shape and TE:
+tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -lmax 0,2,4,4,4
+```
+
+The list must contain one nonnegative even order for **every shell**, including
+b=0 and isotropic shells, in ascending b-value, then b-shape, then echo time.
+`SH_shells.json` records this order and the order actually fitted. Use zero for
+b=0/isotropic shells; these always retain their arithmetic means. A single
+integer continues to apply the same order to all directional shells.
+
+With the example above, b=1000 has S0 and S2, while the other diffusion shells
+also have S4. The b=1000 volume in `S4.nii` is a zero placeholder, not an estimated
+S4. Fitting the shells together retains cross-shell rank-one processing: S2
+uses all shells supporting order 2, and S4 uses only those supporting order 4.
+Changing one shell's order can therefore also change higher-order invariants
+in other shells through this joint step.
+
+A requested order that cannot be identified from the directions is
 rejected; an unsupported higher-order invariant should not be interpreted as
 a measured zero. A full-rank design can still be poorly conditioned when
 directions are nearly redundant; reducing the fitting order can improve stability.
