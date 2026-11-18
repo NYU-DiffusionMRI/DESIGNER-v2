@@ -151,9 +151,13 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                 if restarted_zero:
                     # A different solver avoids repeating the same spurious
                     # zero stationary point, without changing the LLS seed.
+                    # Interior-point slack variables make dense QR expensive
+                    # with many active inequalities. Sparse factorization
+                    # preserves the objective and constraints.
                     method = 'trust-constr'
                     options = {'maxiter':1000, 'gtol':1e-9, 'xtol':1e-10,
-                               'barrier_tol':1e-10}
+                               'barrier_tol':1e-10, 'sparse_jacobian':True,
+                               'factorization_method':'AugmentedSystem'}
                 else:
                     method = 'SLSQP'
                     options = {'maxiter':500, 'ftol':1e-11}
