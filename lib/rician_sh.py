@@ -1,7 +1,8 @@
-"""Rician-expectation SH fitting, adapted from S. Coelho's SHestimation.
+"""Constrained SH fitting, adapted from S. Coelho's SHestimation.
 
 The underlying signal is Y @ coefficients; the observations are magnitude data.
-Fit the Rician *mean* by nonlinear least squares, not the Rician likelihood.
+Fit the Rician *mean* by nonlinear least squares, not the Rician likelihood,
+or select constrained linear least squares on clipped-corrected magnitudes.
 """
 import warnings
 
@@ -65,8 +66,8 @@ def rician_mean_and_derivative(signal, sigma):
 
 def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
                   constraint_basis=None, constrained_max_iter=None,
-                  diagnostics=None, *, clipped=False):
-    """Refine clipped corrected LLS with batched Levenberg--Marquardt.
+                  diagnostics=None, *, clipped=False, n_jobs=1):
+    """Fit the Rician mean, or clipped magnitudes, starting from corrected LLS.
 
     Shapes: basis (directions, coefficients), measurements (directions, voxels),
     sigma (voxels,). Always initialize from the linear SH fit to
@@ -86,6 +87,8 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
     clipped=True instead minimizes linear squared residuals against the
     clipped measurements, with the same nonnegativity constraints. It does
     not evaluate the Rician expectation or perform a nonlinear search.
+    n_jobs uses joblib's process-count convention; independent voxel blocks
+    run with one BLAS thread each. One worker retains the serial path.
     """
     if constrained_max_iter is not None and (
             not isinstance(constrained_max_iter, (int, np.integer))
@@ -93,6 +96,22 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
         raise ValueError("Rician SH constrained iteration limit must be a positive integer")
     measurements = np.asarray(measurements, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
+    if n_jobs != 1 and measurements.shape[1] > 32:
+        from joblib import Parallel, delayed, effective_n_jobs, parallel_config
+        workers = min(effective_n_jobs(n_jobs), (measurements.shape[1]+31)//32)
+        if workers > 1:
+            block_size = max(32, min(chunk_size,
+                (measurements.shape[1] + 4*workers-1)//(4*workers)))
+            with parallel_config(backend='loky', inner_max_num_threads=1):
+                blocks = Parallel(n_jobs=workers)(
+                    delayed(_fit_parallel_block)(basis, measurements[:, start:start+block_size],
+                        sigma[start:start+block_size], constraint_basis, constrained_max_iter,
+                        diagnostics is not None, clipped)
+                    for start in range(0, measurements.shape[1], block_size))
+            if diagnostics is not None:
+                for key in blocks[0][1]:
+                    diagnostics[key] = np.concatenate([block[1][key] for block in blocks])
+            return np.concatenate([block[0] for block in blocks], axis=1)
     if diagnostics is not None:
         diagnostics['constrained_iterations'] = np.zeros(measurements.shape[1], dtype=np.int32)
         diagnostics['early_stopped'] = np.zeros(measurements.shape[1], dtype=bool)
@@ -128,6 +147,15 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
     return result
 
 
+def _fit_parallel_block(basis, measurements, sigma, constraint_basis, max_iter,
+                        collect_diagnostics, clipped):
+    diagnostics = {} if collect_diagnostics else None
+    coefficients = fit_rician_sh(
+        basis, measurements, sigma, constraint_basis=constraint_basis,
+        constrained_max_iter=max_iter, diagnostics=diagnostics, clipped=clipped)
+    return coefficients, diagnostics
+
+
 def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                          constraint_basis, chunk_size, max_iter=None,
                          diagnostics=None):
@@ -147,9 +175,14 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
     if not np.allclose(grid[:, 0], grid[0, 0], rtol=1e-12, atol=0) or grid[0, 0] <= 0:
         raise ValueError('Nonnegative SH fitting requires a positive constant first basis column')
     constant = grid[0, 0]
+    # Normalize the objective curvature for SLSQP's initial identity Hessian.
+    # A positive scalar preserves the minimizer; scale ftol by the same
+    # factor. This avoids overshooting into the spurious all-zero stationary
+    # point at low SNR, where a trust-region restart would be expensive.
+    objective_scale = 2 / np.linalg.norm(basis, ord=2)**2
     seed = np.unique(np.r_[np.arange(len(basis)),
                            np.linspace(len(basis), len(grid)-1,
-                                       min(256, len(constraint_basis)), dtype=int)])
+                                       min(32, len(constraint_basis)), dtype=int)])
     unfinished = 0
     early_stopped = 0
     for start in range(0, fitted.shape[1], chunk_size):
@@ -169,6 +202,10 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                     mean, derivative = rician_mean_and_derivative(signal, noise)
                 residual = mean - observed
                 return .5*(residual @ residual), basis.T @ (residual*derivative)
+
+            def scaled_objective(coef):
+                cost, gradient = objective(coef)
+                return cost*objective_scale, gradient*objective_scale
 
             def feasible(coef, minimum=None):
                 coef = np.array(coef, copy=True)
@@ -205,10 +242,11 @@ def _enforce_nonnegative(basis, measurements, sigma, initial, fitted,
                                'factorization_method':'AugmentedSystem'}
                 else:
                     method = 'SLSQP'
-                    options = {'maxiter':500, 'ftol':1e-11}
+                    options = {'maxiter':500, 'ftol':1e-11*objective_scale}
                 if max_iter is not None:
                     options['maxiter'] = min(options['maxiter'], max_iter-iterations)
-                fit = minimize(objective, current, jac=True, method=method,
+                fit = minimize(objective if restarted_zero else scaled_objective,
+                               current, jac=True, method=method,
                                constraints=[LinearConstraint(grid[active], 0, np.inf)],
                                options=options)
                 iterations += max(1, int(getattr(fit, 'nit', 1)))

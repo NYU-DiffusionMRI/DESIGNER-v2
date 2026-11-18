@@ -96,7 +96,8 @@ def test_all_nonlinear_seeds_use_clipped_corrected_lls_with_raw_objective(monkey
         constrained_calls.append(initial.copy()*scale)
         probe = np.array([.6, .1])
         residual = rician_mean_and_derivative(basis@probe, sigma[voxel]/scale)[0]-original[:,voxel]/scale
-        np.testing.assert_allclose(fun(probe)[0], .5*(residual@residual))
+        objective_scale = 2 / np.linalg.norm(basis, ord=2)**2
+        np.testing.assert_allclose(fun(probe)[0], .5*(residual@residual)*objective_scale)
         return SimpleNamespace(x=np.array([1., 0.]), success=True)
     monkeypatch.setattr(module, 'minimize', constrained)
     module.fit_rician_sh(basis, measured, sigma, constraint_basis=grid)
@@ -110,6 +111,31 @@ def test_all_clipped_measurements_have_zero_start_and_finite_fit():
     fitted = fit_rician_sh(basis, np.full((4, 2), .5), np.ones(2),
                            constraint_basis=basis)
     np.testing.assert_array_equal(fitted, np.zeros((1, 2)))
+
+
+@pytest.mark.parametrize('clipped', [False, True])
+def test_parallel_blocks_preserve_coefficients_and_diagnostics(clipped):
+    # More than 32 voxels exercises multiple process blocks, including an
+    # uneven final block, and both noisy and exactly zero-noise data.
+    rng = np.random.default_rng(331)
+    dirs = nonnegative_directions(24)
+    model = SMI(np.ones(24), dirs)
+    basis = model.get_even_sh(dirs, 2)
+    grid = model.get_even_sh(nonnegative_directions(512), 2)
+    raw = np.hypot(.1 + .4*rng.normal(size=(24, 65)), .4*rng.normal(size=(24, 65)))
+    noise = np.full(65, .4)
+    noise[:3] = 0
+    serial_diagnostics, parallel_diagnostics = {}, {}
+    serial = fit_rician_sh(basis, raw, noise, constraint_basis=grid,
+                          constrained_max_iter=300, diagnostics=serial_diagnostics,
+                          clipped=clipped)
+    parallel = fit_rician_sh(basis, raw, noise, constraint_basis=grid,
+                            constrained_max_iter=300, diagnostics=parallel_diagnostics,
+                            clipped=clipped, n_jobs=2)
+    np.testing.assert_allclose(parallel, serial, atol=1e-10, rtol=1e-10)
+    for key in serial_diagnostics:
+        np.testing.assert_array_equal(parallel_diagnostics[key], serial_diagnostics[key])
+    assert np.min(grid @ parallel) >= -1e-12
 
 
 @pytest.mark.parametrize('shape', [(2, 2, 2), (2, 2, 1)])

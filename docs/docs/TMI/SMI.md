@@ -218,7 +218,7 @@ where `Yc` is the underlying SH signal, `M` is the measured magnitude, and `sigm
 
 Every nonlinear fit starts from the ordinary linear SH fit to `sqrt(max(0, M²−sigma²))`. The clipping sets negative values of the squared difference to zero before taking the square root. This correction is used only to initialize the coefficients; the nonlinear objective still uses the original magnitude measurements. The SH projection of corrected measurements can itself have negative lobes, so the constrained solver accepts an initially infeasible coefficient vector rather than shifting that starting estimate.
 
-The Rician mean is evaluated using scaled modified Bessel functions and an analytic Jacobian. A batched Levenberg–Marquardt fit, with SciPy refinement where necessary, is retained when it already satisfies the constraints. Otherwise, a scaled SLSQP fit starts from the same corrected-LLS coefficients. Constraint generation adds the worst violated directions until the entire dense grid is feasible. An all-zero stationary solution is retried with a trust-region solver from those same corrected-LLS coefficients, because the Rician derivative vanishes at zero even when that point is not a minimum. If constrained optimization does not converge, a warning is issued and the best grid-feasible coefficients are returned. The constraint applies to the per-shell signal fit; the existing subsequent rank-one processing of higher-order invariants is unchanged and does not alter S0.
+The Rician mean is evaluated using scaled modified Bessel functions and an analytic Jacobian. A batched Levenberg–Marquardt fit, with SciPy refinement where necessary, is retained when it already satisfies the constraints. Otherwise, SLSQP starts from the same corrected-LLS coefficients. Its objective is multiplied by a positive scalar based on the SH design matrix, with the stopping tolerance scaled consistently; this preserves the fitted objective and reduces overshooting into spurious zero stationary points. Constraint generation adds the worst violated directions until the entire dense grid is feasible. An all-zero stationary solution is retried with a trust-region solver from those same corrected-LLS coefficients, because the Rician derivative vanishes at zero even when that point is not a minimum. If constrained optimization does not converge, a warning is issued and the best grid-feasible coefficients are returned. The constraint applies to the per-shell signal fit; the existing subsequent rank-one processing of higher-order invariants is unchanged and does not alter S0.
 
 This extends the Rician-expectation approach from S. Coelho's SHestimation with signal nonnegativity, retaining TMI's SH normalization, phase, shell grouping, and rank-one processing of invariants. The constraint prevents signed angular lobes from fitting positive magnitudes through the even Rician mean function. As in that reference, b=0 and isotropic-shell means remain unchanged. This is a fit of the expected magnitude, not a maximum-likelihood estimator or an unbiasedness guarantee. The downstream SMI regression and its noise training model remain unchanged; their statistical bias may persist, especially at low SNR.
 
@@ -273,6 +273,22 @@ Use uncorrected magnitude data and a matching noise map; do not apply the
 clipped correction to the input yourself. `-RicianSHclip` and `-RicianSH` are
 mutually exclusive. The optional `-RicianSH_maxiter` cap and its diagnostic
 outputs also apply to this mode.
+
+### Processing time and parallel workers
+
+Both `-RicianSH` and `-RicianSHclip` use `-n_cores` to fit independent voxel
+blocks in parallel. For example, add `-n_cores 8` to use eight worker processes,
+or `-n_cores 1` for serial fitting. The default follows TMI's available-cores
+minus two convention. Each worker uses one BLAS thread to avoid multiplying
+threads across workers. Parallelization leaves the fitting objective,
+initialization, dense nonnegativity grid and cross-shell rank-one step unchanged.
+
+Clipped correction solves a constrained linear problem and is generally
+faster than Rician-expectation fitting. Runtime depends on voxel count, angular
+order, SNR, active constraints, hardware and competing jobs; a short iteration
+cap is not a substitute for convergence. A full dense-grid feasibility check
+is retained even though each constrained subproblem starts with fewer grid
+rows and adds violated constraints as needed.
 
 ### Standard Model parameter fitting
 

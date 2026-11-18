@@ -1715,7 +1715,8 @@ def execute(): #pylint: disable=unused-variable
             mask=mask, sigma=sigma, lmax=sh_lmax,
             beta=dwi_metadata['bshape_per_volume'], echo_time=echo_times,
             rician=app.ARGS.RicianSH, rician_maxiter=app.ARGS.RicianSH_maxiter,
-            diagnostics=diagnostics, rician_clip=app.ARGS.RicianSHclip)
+            diagnostics=diagnostics, rician_clip=app.ARGS.RicianSHclip,
+            n_jobs=app.ARGS.n_cores)
         save_params(images, mif, model=None, outdir=outdir)
         if diagnostics is not None:
             _save_rician_diagnostics(diagnostics, mif, outdir,
@@ -1816,6 +1817,7 @@ def execute(): #pylint: disable=unused-variable
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianSH,
                             rician_sh_clip=app.ARGS.RicianSHclip,
+                            sh_n_jobs=app.ARGS.n_cores,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
                 
 
@@ -1860,6 +1862,7 @@ def execute(): #pylint: disable=unused-variable
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianSH,
                             rician_sh_clip=app.ARGS.RicianSHclip,
+                            sh_n_jobs=app.ARGS.n_cores,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
 
                 # else:

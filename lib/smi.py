@@ -90,7 +90,7 @@ class SMI(object):
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
         l_max_training=None, seed=42, smi_fw_thres=0.2, rician_sh=False,
-        rician_sh_maxiter=None, rician_sh_clip=False):
+        rician_sh_maxiter=None, rician_sh_clip=False, sh_n_jobs=1):
         """
         Setting some default values and initialization required for class functions.
 
@@ -107,6 +107,9 @@ class SMI(object):
             Fit sqrt(max(0, dwi**2 - sigma**2)) by linear least squares with
             the same signal nonnegativity constraint. Requires sigma and is
             mutually exclusive with rician_sh and noise_bias correction.
+        sh_n_jobs : int, optional
+            Number of process workers for Rician or clipped SH fitting (default
+            1); negative values follow joblib conventions. LLS is unchanged.
         """
 
         if not cs_phase:
@@ -126,6 +129,7 @@ class SMI(object):
         self.smi_fw_thres = float(smi_fw_thres)
         self.rician_sh = bool(rician_sh)
         self.rician_sh_clip = bool(rician_sh_clip)
+        self.sh_n_jobs = sh_n_jobs
         if self.rician_sh and self.rician_sh_clip:
             raise ValueError("rician_sh and rician_sh_clip are mutually exclusive")
         self.constrained_sh = self.rician_sh or self.rician_sh_clip
@@ -617,7 +621,8 @@ class SMI(object):
                         dwi_2D[ids_current_cluster, :], sigma_1d,
                         constraint_basis=nonnegative_basis[:, ids_current_lm],
                         constrained_max_iter=self.rician_sh_maxiter,
-                        diagnostics=diagnostics, clipped=self.rician_sh_clip)
+                        diagnostics=diagnostics, clipped=self.rician_sh_clip,
+                        n_jobs=self.sh_n_jobs)
                     if diagnostics is not None:
                         for key, values in diagnostics.items():
                             self.rician_sh_diagnostics[key][:, i] = values

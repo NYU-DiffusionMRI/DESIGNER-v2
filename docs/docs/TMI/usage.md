@@ -104,12 +104,14 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - The noise map must be a spatially aligned 3D map of the complex-component Gaussian standard deviation, in the same intensity units as the input DWI. Values inside the fitting mask must be finite and nonnegative; zero uses constrained linear least squares, preserving the linear fit when already feasible.
 - Use magnitude data with a Rician noise model. Do not apply this on top of `designer -rician`, phase-unwound data, or other data whose noise floor has already been removed. After denoising, rescaling or interpolation, the noise map must describe the data actually fitted.
 - The reference estimator retains arithmetic means for b=0 and isotropic encoding shells. The existing SH basis, shell ordering, rank-one invariant processing, regression priors and output map names are retained.
+- Independent voxel blocks use `-n_cores` worker processes (default: available cores minus two), with one BLAS thread per worker. Use `-n_cores 1` for serial fitting.
 - This reduces the modeled magnitude noise-floor bias; finite-sample SH invariants and downstream SMI maps can still be biased. See [SMI estimation]({% link docs/TMI/SMI.md %}#parameter-estimation).
 
 ### `-RicianSHclip`
 
 - Use with `-SH` or `-SMI`, plus `-sigma <noisemap>`, for clipped correction followed by nonnegative linear SH fitting.
 - Fit `sqrt(max(0, M²−sigma²))` as the target using constrained linear least squares. This subtracts one `sigma²` and does not evaluate the Rician expectation.
+- Uses the same `-n_cores` parallel processing as `-RicianSH`.
 - Enforce the same signal nonnegativity constraint on acquired directions and the 65,536-direction sphere grid. Already feasible clipped-LLS fits are retained exactly.
 - Mutually exclusive with `-RicianSH`. Use uncorrected magnitude input and an aligned noise map in matching units.
 - Raw b=0/isotropic means, rank-one processing across shells, and downstream SMI regression are retained. This approximate correction is not an unbiasedness guarantee.
