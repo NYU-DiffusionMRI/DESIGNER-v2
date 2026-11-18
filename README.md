@@ -52,9 +52,12 @@ For magnitude data with a retained Rician noise floor, `tmi -SMI -RicianSH
 nonnegative signal constraints at acquired directions and on a dense sphere grid.
 The search starts from LLS on `sqrt(max(0, M²−sigma²))` and fits the original magnitudes.
 The noise map must match the DWI grid and intensity scale. Omitting both correction flags keeps linear least squares.
-Alternatively, `-RicianSHclip -sigma sigma.nii` fits
+Alternatively, `-RicianClip -sigma sigma.nii` fits
 `sqrt(max(0, M²−sigma²))` with the same signal nonnegativity constraint,
-in either `-SH` or `-SMI` mode. The two correction flags are mutually exclusive. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
+in either `-SH` or `-SMI` mode. It also corrects input magnitudes for
+`-DTI`, `-DKI` and `-WDKI`, including b0. If both flags are given,
+`-RicianSH` takes precedence for SH/SMI only, using original magnitudes;
+tensor fits still receive clipped correction. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
 for assumptions and limitations.
 
 To estimate only signal rotational invariants, without SMI model fitting:

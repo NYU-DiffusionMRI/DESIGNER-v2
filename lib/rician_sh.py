@@ -64,6 +64,17 @@ def rician_mean_and_derivative(signal, sigma):
     return mean, deriv
 
 
+def clipped_magnitude(measurements, sigma):
+    """Return sqrt(max(0, M**2 - sigma**2)), with NumPy broadcasting.
+
+    Sigma is the Gaussian complex-component standard deviation in the same
+    units as M. This subtracts one sigma squared, and never mutates the input.
+    """
+    measurements = np.asarray(measurements, dtype=float)
+    sigma = np.asarray(sigma, dtype=float)
+    return np.sqrt(np.maximum(0, measurements**2 - sigma**2))
+
+
 def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
                   constraint_basis=None, constrained_max_iter=None,
                   diagnostics=None, *, clipped=False, n_jobs=1):
@@ -118,8 +129,7 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
         diagnostics['nonconverged'] = np.zeros(measurements.shape[1], dtype=bool)
     indices = np.flatnonzero(sigma > 0)
     corrected = measurements.copy()
-    corrected[:, indices] = np.sqrt(np.maximum(
-        0, measurements[:, indices]**2 - sigma[indices]**2))
+    corrected[:, indices] = clipped_magnitude(measurements[:, indices], sigma[indices])
     initial = lstsq(basis, corrected)[0]
     result = np.array(initial, dtype=float, copy=True)
     if clipped:

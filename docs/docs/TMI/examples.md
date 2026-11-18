@@ -171,11 +171,24 @@ Choose either `-SH` or `-SMI` in a command.
 ### Clipped-corrected SH fitting with signal nonnegativity
 
 ```bash
-tmi dwi.nii sh_clip -SH -RicianSHclip -sigma sigma.nii -mask brain_mask.nii
-tmi dwi.nii smi_clip -SMI -RicianSHclip -sigma sigma.nii -mask brain_mask.nii
+tmi dwi.nii sh_clip -SH -RicianClip -sigma sigma.nii -mask brain_mask.nii
+tmi dwi.nii smi_clip -SMI -RicianClip -sigma sigma.nii -mask brain_mask.nii
 ```
 
 The fitting target is `sqrt(max(0, M²−sigma²))`, with nonnegativity enforced
-on the underlying SH signal. Supply the original magnitude DWI and use only
-one of `-RicianSHclip` and `-RicianSH`. Per-shell orders in standalone mode
+on the underlying SH signal. Supply the original magnitude DWI.
+`-RicianSH` takes precedence if both correction flags are present. Per-shell orders in standalone mode
 are set with `-lmaxSH`, as for the other estimators.
+
+### Clipped tensor inputs with an independent SH estimator
+
+```bash
+# Clipped correction before the existing DTI and DKI fits
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii
+
+# Clipped correction for tensors; Rician expectation + nonnegativity for SH
+tmi dwi.nii combined -DTI -DKI -SH -RicianClip -RicianSH -sigma sigma.nii
+```
+
+With both flags, the SH stage uses original magnitudes, so the input is not
+corrected twice. Replace `-SH` with `-SMI` to include Standard Model fitting.

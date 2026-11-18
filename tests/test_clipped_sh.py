@@ -58,8 +58,8 @@ def test_clipped_feasible_fit_is_exact_lls_and_zero_data_stays_zero():
     np.testing.assert_array_equal(fitted[:, 1], 0)
 
 
-def test_smi_rejects_double_correction():
-    with pytest.raises(ValueError, match='mutually exclusive'):
-        SMI(np.ones(6), nonnegative_directions(6), rician_sh=True, rician_sh_clip=True)
+def test_smi_rician_precedence_and_rejection_of_noise_bias():
+    estimator = SMI(np.ones(6), nonnegative_directions(6), rician_sh=True, rician_sh_clip=True)
+    assert estimator.rician_sh and not estimator.rician_sh_clip
     with pytest.raises(ValueError, match='noise_bias'):
         SMI(np.ones(6), nonnegative_directions(6), rician_sh_clip=True, noise_bias=True)

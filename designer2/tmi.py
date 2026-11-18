@@ -246,11 +246,11 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-SH', action='store_true', help='Fit spherical harmonics and save S0.nii, S2.nii, ..., through -lmaxSH, without SMI model fitting. Each file contains one volume per shell; SH_shells.json identifies the volumes. Default estimator: LLS.')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
-    smi_options.add_argument('-RicianSH', action='store_true', help='Fit spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SH or -SMI, and -sigma). Default: linear least squares.')
-    smi_options.add_argument('-RicianSHclip', action='store_true', help='Fit spherical harmonics to sqrt(max(0, M^2-sigma^2)) by linear least squares with nonnegative signal constraints (requires -SH or -SMI, and -sigma). Mutually exclusive with -RicianSH.')
-    smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianSH or -RicianSHclip. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
-    smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH or -RicianSHclip, optional for SMI parameter estimation')
-    smi_options.add_argument('-lmaxSH', metavar='<orders>', help='With -SH: a common even SH fitting/output order (0,2,4,...) or comma-separated orders for every shell, sorted by b-value, b-shape, then echo time, including b=0. Default: automatic per shell. Applies to LLS, RicianSH and RicianSHclip.')
+    smi_options.add_argument('-RicianSH', action='store_true', help='Fit spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SH or -SMI, and -sigma). Overrides -RicianClip for SH/SMI only. Default: linear least squares.')
+    options.add_argument('-RicianClip', action='store_true', help='Correct DTI/DKI/WDKI inputs using sqrt(max(0, M^2-sigma^2)); for SH/SMI use clipped corrected LLS with signal nonnegativity. Requires -sigma. -RicianSH overrides this option for SH/SMI only.')
+    smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianSH or -RicianClip. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
+    options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH or -RicianClip, optional for SMI parameter estimation')
+    smi_options.add_argument('-lmaxSH', metavar='<orders>', help='With -SH: a common even SH fitting/output order (0,2,4,...) or comma-separated orders for every shell, sorted by b-value, b-shape, then echo time, including b=0. Default: automatic per shell. Applies to LLS, RicianSH and RicianClip.')
     smi_options.add_argument('-lmax', metavar=('<lmax>'), help='With -SMI: one invariant order for polynomial regression (0,2,4,6), retaining automatic SH fitting orders. For standalone SH fitting orders use -SH -lmaxSH instead.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
     smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
@@ -297,7 +297,7 @@ def _load_sigma_map(filename, reference, spatial_shape, rician=False):
     if rician:
         if (not np.allclose(sigma_image.vox[:3], reference.vox[:3], rtol=1e-5, atol=1e-5)
             or not np.allclose(sigma_image.transform, reference.transform, rtol=1e-5, atol=1e-4)):
-            raise MRtrixError("-RicianSH/-RicianSHclip sigma map must be aligned to the DWI grid")
+            raise MRtrixError("-RicianSH/-RicianClip sigma map must be aligned to the DWI grid")
         sigma = _ensure_spatial_map_3d(sigma, spatial_shape, name="sigma")
     return sigma
 
@@ -345,23 +345,26 @@ def execute(): #pylint: disable=unused-variable
         raise MRtrixError("-SMI -lmax accepts one invariant order and retains "
                           "automatic SH fitting orders; per-shell orders use "
                           "-SH -lmaxSH")
-    if app.ARGS.RicianSH and app.ARGS.RicianSHclip:
-        raise MRtrixError("-RicianSH and -RicianSHclip are mutually exclusive")
-    constrained_sh = app.ARGS.RicianSH or app.ARGS.RicianSHclip
+    tensor_requested = app.ARGS.DTI or app.ARGS.DKI or app.ARGS.WDKI
+    sh_requested = app.ARGS.SH or app.ARGS.SMI
+    constrained_sh = app.ARGS.RicianSH or app.ARGS.RicianClip
     sh_estimator = ('RicianSH' if app.ARGS.RicianSH else
-                    'RicianSHclip' if app.ARGS.RicianSHclip else 'LLS')
+                    'RicianClip' if app.ARGS.RicianClip else 'LLS')
     sh_description = ('Rician expectation NLS with nonnegative signal constraints'
                       if app.ARGS.RicianSH else
                       'clipped corrected LLS with nonnegative signal constraints'
-                      if app.ARGS.RicianSHclip else 'linear least squares')
+                      if app.ARGS.RicianClip else 'linear least squares')
+    if app.ARGS.RicianSH and not sh_requested:
+        raise MRtrixError("-RicianSH requires -SH or -SMI")
+    if app.ARGS.RicianClip and not (tensor_requested or sh_requested):
+        raise MRtrixError("-RicianClip requires -DTI, -DKI, -WDKI, -SH or -SMI")
     if constrained_sh:
-        if not (app.ARGS.SMI or app.ARGS.SH):
-            raise MRtrixError(f"-{sh_estimator} requires -SH or -SMI")
         if not app.ARGS.sigma:
             raise MRtrixError(f"-{sh_estimator} requires an explicit noise map via -sigma")
     if app.ARGS.RicianSH_maxiter is not None:
-        if not constrained_sh or app.ARGS.RicianSH_maxiter < 1:
-            raise MRtrixError("-RicianSH_maxiter requires -RicianSH or -RicianSHclip and a positive integer")
+        if not constrained_sh or not sh_requested or app.ARGS.RicianSH_maxiter < 1:
+            raise MRtrixError("-RicianSH_maxiter requires -RicianSH or -RicianClip "
+                              "with -SH/-SMI and a positive integer")
     if app.ARGS.gnc_format and not app.ARGS.gnc:
         raise MRtrixError("-gnc_format requires -gnc <field>")
 
@@ -535,6 +538,18 @@ def execute(): #pylint: disable=unused-variable
             "dwi_shape": dwi.shape,
             "mask_shape": mask.shape})
 
+    clip_sigma = None
+    if app.ARGS.RicianClip:
+        from lib.rician_sh import clipped_magnitude
+        clip_sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, rician=True)
+        if not np.all(np.isfinite(clip_sigma[mask])) or np.any(clip_sigma[mask] < 0):
+            raise MRtrixError("-RicianClip sigma must be finite and nonnegative inside the mask")
+        if not np.all(np.isfinite(dwi[mask])):
+            raise MRtrixError("-RicianClip requires finite magnitude DWI inside the mask")
+        if tensor_requested:
+            logger.info("DTI/DKI input correction: sqrt(max(0, M^2-sigma^2)), "
+                        "including b0; existing tensor fit constraints are unchanged.")
+
     if app.ARGS.fit_constraints:
         constraints = app.ARGS.fit_constraints
         if type(constraints) == str:
@@ -585,6 +600,8 @@ def execute(): #pylint: disable=unused-variable
 
             dtishell = (bval <= 0.15) | ((bval > .5) & (bval <= maxb_dti))
             dwi_dti = dwi[:,:,:,dtishell]
+            if clip_sigma is not None:
+                dwi_dti = clipped_magnitude(dwi_dti, clip_sigma[..., None])
             bval_dti = bval[dtishell]
             logger.info("DTI shells selected [shell: number of volumes].", extra={"dti_shells": shell_counts(bval_dti)})
             bvec_dti = bvec[:,dtishell]
@@ -620,6 +637,8 @@ def execute(): #pylint: disable=unused-variable
                 maxb = 3.01
 
             dwi_dki = dwi[:,:,:,bval < maxb]
+            if clip_sigma is not None:
+                dwi_dki = clipped_magnitude(dwi_dki, clip_sigma[..., None])
             bvec_dki = bvec[:,bval < maxb]
             bval_dki = bval[bval < maxb]
             logger.info("DKI shells selected.", extra={"dki_shells": shell_counts(bval_dki)})
@@ -853,7 +872,7 @@ def execute(): #pylint: disable=unused-variable
             noutlier=np.sum(akc_mask)
             c=np.sum(akc_mask)+1
             count=0
-            improve=np.round((noutlier0-noutlier)/noutlier0,3)
+            improve = np.round((noutlier0-noutlier)/noutlier0, 3) if noutlier0 else 0.0
             print('Number of outliers: {}'.format(np.sum(mask)))
 
             # ==========================iteration===========================
@@ -865,7 +884,7 @@ def execute(): #pylint: disable=unused-variable
             if improve>thresh:
                 print(f"{improve} > {thresh}")
             
-            while True:
+            while np.any(akc_mask):
                 count=count+1
                 print('iteration {}'.format(count))
                 noutlier0=np.sum(akc_mask)
@@ -1115,6 +1134,14 @@ def execute(): #pylint: disable=unused-variable
 
         if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
             rdwi = tensor.vectorize(dwi, mask)
+            if clip_sigma is not None:
+                corrected_trace = clipped_magnitude(
+                    rdwi, tensor.vectorize(clip_sigma, mask).reshape(1, -1))
+                if app.ARGS.db0restore and not multi_te_beta:
+                    # Restoration has already copied b0 from the corrected
+                    # tensor input into dwi. Do not correct those samples twice.
+                    corrected_trace[bval < .01] = rdwi[bval < .01]
+                rdwi = corrected_trace
             rdwi[~np.isfinite(rdwi)] = np.finfo(float).eps
             rdwi[rdwi<=0] = np.finfo(float).eps
             B = np.round(grad[:,-1]*1000)
@@ -1186,6 +1213,8 @@ def execute(): #pylint: disable=unused-variable
                 logger.info(f"Setting b max for DTI for TE={te}...", extra={"max b": maxb_dti})
                 dtishell = (bval_te <= 0.15) | ((bval_te > .5) & (bval_te <= maxb_dti))
                 dwi_dti = dwi[:,:,:,dtishell]
+                if clip_sigma is not None:
+                    dwi_dti = clipped_magnitude(dwi_dti, clip_sigma[..., None])
                 bval_dti = bval_te[dtishell]
                 logger.info(f"DTI shells selected for TE={te}.", extra={"dti_shells": shell_counts(bval_dti)})
                 bvec_dti = bvec_te[:,dtishell]
@@ -1210,6 +1239,8 @@ def execute(): #pylint: disable=unused-variable
                     maxb = 3.01
 
                 dwi_dki = dwi[:,:,:,bval_te < maxb]
+                if clip_sigma is not None:
+                    dwi_dki = clipped_magnitude(dwi_dki, clip_sigma[..., None])
                 bvec_dki = bvec_te[:,bval_te < maxb]
                 bval_dki = bval_te[bval_te < maxb]
                 logger.info(f"DKI shells selected for TE={te}.", extra={"dki_shells": shell_counts(bval_dki)})
@@ -1296,10 +1327,10 @@ def execute(): #pylint: disable=unused-variable
 
                 # ====================================================================================
                     params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-                    rk = params_dki['rk']
-                    md = params_dki['md']
-                    fa = params_dki['fa']
-                    mk = params_dki['mk']
+                    rk = _ensure_spatial_map_3d(params_dki['rk'], mask.shape, 'RK')
+                    md = _ensure_spatial_map_3d(params_dki['md'], mask.shape, 'MD')
+                    fa = _ensure_spatial_map_3d(params_dki['fa'], mask.shape, 'FA')
+                    mk = _ensure_spatial_map_3d(params_dki['mk'], mask.shape, 'MK')
                 # first akc outlier mask
                     # print("============AKC mask============")
                     outlier_inds=np.array(np.where(mask>0))
@@ -1329,8 +1360,8 @@ def execute(): #pylint: disable=unused-variable
                     else:
                         kernel=int(app.ARGS.kernel)
 
-                    # Restore b=0 for single-TE data.
-                    restore_result = _apply_db0restore(
+                    # Restore b=0 for this echo time.
+                    dwi_new = _apply_db0restore(
                         'slope',
                         akc_mask,
                         dwi_dki,
@@ -1369,9 +1400,9 @@ def execute(): #pylint: disable=unused-variable
                     
                     #extract new rk, md, fa
                     params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-                    rk = params_dki['rk']
-                    md = params_dki['md']
-                    fa = params_dki['fa']
+                    rk = _ensure_spatial_map_3d(params_dki['rk'], mask.shape, 'RK')
+                    md = _ensure_spatial_map_3d(params_dki['md'], mask.shape, 'MD')
+                    fa = _ensure_spatial_map_3d(params_dki['fa'], mask.shape, 'FA')
 
                     #new akc outlier mask based on rk and md
                     xx=np.shape(mask)[0]
@@ -1390,7 +1421,7 @@ def execute(): #pylint: disable=unused-variable
                     noutlier=np.sum(akc_mask)
                     c=np.sum(akc_mask)+1
                     count=0
-                    improve=np.round((noutlier0-noutlier)/noutlier0,3)
+                    improve = np.round((noutlier0-noutlier)/noutlier0, 3) if noutlier0 else 0.0
                     print('Number of outliers: {}'.format(np.sum(mask)))
 
                     # # ====================================iteration===================================
@@ -1403,7 +1434,7 @@ def execute(): #pylint: disable=unused-variable
                     if improve>thresh:
                         print('{} > {}'.format(improve, thresh))
                     
-                    while True:
+                    while np.any(akc_mask):
                         count=count+1
                         print('iteration {}'.format(count))
                         noutlier0=np.sum(akc_mask)
@@ -1438,9 +1469,9 @@ def execute(): #pylint: disable=unused-variable
                         akc_mask = ensure_spatial_3d(akc_mask, mask.shape, "AKC mask")
                         akc_mask_tmp = akc_mask
                         params_dki = dki.extract_parameters(dt_dki, b_dki, mask, extract_dti=True, extract_dki=True, fit_w=False)
-                        rk = params_dki['rk']
-                        md = params_dki['md']
-                        fa = params_dki['fa']
+                        rk = _ensure_spatial_map_3d(params_dki['rk'], mask.shape, 'RK')
+                        md = _ensure_spatial_map_3d(params_dki['md'], mask.shape, 'MD')
+                        fa = _ensure_spatial_map_3d(params_dki['fa'], mask.shape, 'FA')
                         print('detecting outliers')
                         akc_mask_new=akc_out(outlier_inds, akc_mask_tmp, akc_dirs,rk,md,fa, n_cores=-3)
                         akc_mask[akc_mask!=0]=1
@@ -1630,6 +1661,8 @@ def execute(): #pylint: disable=unused-variable
 
             if app.ARGS.DTI or app.ARGS.DKI or app.ARGS.polyreg or app.ARGS.WDKI:
                 rdwi = tensor.vectorize(dwi, mask)
+                if clip_sigma is not None:
+                    rdwi = clipped_magnitude(rdwi, tensor.vectorize(clip_sigma, mask).reshape(1, -1))
                 B = np.round(grad[:,-1]*1000)
                 uB = np.unique(B)
                 trace = np.zeros((rdwi.shape[1], uB.shape[0]))
@@ -1703,7 +1736,8 @@ def execute(): #pylint: disable=unused-variable
     if app.ARGS.SH:
         from lib.sh import fit_rotational_invariants
         logger.info("SH estimator: %s", sh_description)
-        sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, constrained_sh)
+        sigma = clip_sigma if clip_sigma is not None else _load_sigma_map(
+            app.ARGS.sigma, mif, mask.shape, constrained_sh)
         echo_times = np.array(dwi_metadata['echo_time_per_volume'], dtype=float, copy=True)
         if 0 < np.min(echo_times) < 1:
             echo_times *= 1000
@@ -1715,7 +1749,7 @@ def execute(): #pylint: disable=unused-variable
             mask=mask, sigma=sigma, lmax=sh_lmax,
             beta=dwi_metadata['bshape_per_volume'], echo_time=echo_times,
             rician=app.ARGS.RicianSH, rician_maxiter=app.ARGS.RicianSH_maxiter,
-            diagnostics=diagnostics, rician_clip=app.ARGS.RicianSHclip,
+            diagnostics=diagnostics, rician_clip=app.ARGS.RicianClip,
             n_jobs=app.ARGS.n_cores)
         save_params(images, mif, model=None, outdir=outdir)
         if diagnostics is not None:
@@ -1752,7 +1786,8 @@ def execute(): #pylint: disable=unused-variable
 
             if not app.ARGS.sigma:
                 logger.warning("No sigma map provided. SMI may be poorly conditioned.")
-            sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, constrained_sh)
+            sigma = clip_sigma if clip_sigma is not None else _load_sigma_map(
+                app.ARGS.sigma, mif, mask.shape, constrained_sh)
             logger.info("SMI SH estimator: %s", sh_description)
 
             if app.ARGS.compartments:
@@ -1816,7 +1851,7 @@ def execute(): #pylint: disable=unused-variable
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianSH,
-                            rician_sh_clip=app.ARGS.RicianSHclip,
+                            rician_sh_clip=app.ARGS.RicianClip,
                             sh_n_jobs=app.ARGS.n_cores,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
                 
@@ -1861,7 +1896,7 @@ def execute(): #pylint: disable=unused-variable
                             compartments=compartments, echo_time=echo_times,
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianSH,
-                            rician_sh_clip=app.ARGS.RicianSHclip,
+                            rician_sh_clip=app.ARGS.RicianClip,
                             sh_n_jobs=app.ARGS.n_cores,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
 

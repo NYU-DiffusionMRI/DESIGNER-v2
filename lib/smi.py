@@ -106,7 +106,8 @@ class SMI(object):
         rician_sh_clip : bool, optional
             Fit sqrt(max(0, dwi**2 - sigma**2)) by linear least squares with
             the same signal nonnegativity constraint. Requires sigma and is
-            mutually exclusive with rician_sh and noise_bias correction.
+            incompatible with noise_bias correction. rician_sh takes
+            precedence when both SH estimator switches are enabled.
         sh_n_jobs : int, optional
             Number of process workers for Rician or clipped SH fitting (default
             1); negative values follow joblib conventions. LLS is unchanged.
@@ -128,10 +129,8 @@ class SMI(object):
         self.n_training = int(n_training)
         self.smi_fw_thres = float(smi_fw_thres)
         self.rician_sh = bool(rician_sh)
-        self.rician_sh_clip = bool(rician_sh_clip)
+        self.rician_sh_clip = bool(rician_sh_clip) and not self.rician_sh
         self.sh_n_jobs = sh_n_jobs
-        if self.rician_sh and self.rician_sh_clip:
-            raise ValueError("rician_sh and rician_sh_clip are mutually exclusive")
         self.constrained_sh = self.rician_sh or self.rician_sh_clip
         self.rician_sh_maxiter = rician_sh_maxiter
         self.rician_sh_diagnostics = None

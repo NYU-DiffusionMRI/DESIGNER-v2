@@ -27,8 +27,9 @@ rotational invariants, without SMI priors, training, or model regression.
 Both modes use linear least squares for SH fitting by default. Adding
 `-RicianSH -sigma sigma.nii` accounts for Rician bias through the expected
 magnitude observation model and enforces a **nonnegative underlying SH signal**.
-Alternatively, `-RicianSHclip -sigma sigma.nii` fits clipped-corrected measurements
-with the same nonnegativity constraint. Choose only one correction flag.
+Alternatively, `-RicianClip -sigma sigma.nii` fits clipped-corrected measurements
+with the same nonnegativity constraint. If both flags are present,
+`-RicianSH` takes precedence for SH/SMI fitting.
 
 ### Choosing an estimation mode
 
@@ -36,10 +37,10 @@ with the same nonnegativity constraint. Choose only one correction flag.
 |---|---|
 | SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
 | SMI maps with Rician bias expectation correction and nonnegativity | `tmi dwi.nii smi_rician -SMI -RicianSH -sigma sigma.nii` |
-| SMI maps with clipped correction and signal nonnegativity | `tmi dwi.nii smi_clip -SMI -RicianSHclip -sigma sigma.nii` |
+| SMI maps with clipped correction and signal nonnegativity | `tmi dwi.nii smi_clip -SMI -RicianClip -sigma sigma.nii` |
 | Signal rotational invariants only, using default LLS | `tmi dwi.nii sh_output -SH` |
 | Signal rotational invariants only, using Rician expectation and signal nonnegativity | `tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii` |
-| Signal rotational invariants only, using clipped correction and signal nonnegativity | `tmi dwi.nii sh_clip -SH -RicianSHclip -sigma sigma.nii` |
+| Signal rotational invariants only, using clipped correction and signal nonnegativity | `tmi dwi.nii sh_clip -SH -RicianClip -sigma sigma.nii` |
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmaxSH` sets the actual
@@ -137,7 +138,7 @@ for the observation model and initialization.
 For clipped correction followed by a nonnegative linear SH fit, use:
 
 ```bash
-tmi dwi.nii sh_clip -SH -RicianSHclip -sigma sigma.nii
+tmi dwi.nii sh_clip -SH -RicianClip -sigma sigma.nii
 ```
 
 All three commands bypass SMI priors and regression and save separate `S0.nii`,
@@ -152,7 +153,7 @@ In `-SH` mode, `-lmaxSH` sets the SH fitting order itself. See the
 Orders 2, 4, and 6 require at least 6, 15, and 28 independent directional
 measurements, respectively. With `-SH`, **each shell's maximum SH order can be
 specified independently** using a comma-separated list. This works with
-LLS, RicianSH and RicianSHclip, for example:
+LLS, RicianSH and RicianClip, for example:
 
 ```bash
 # Input containing b=0, 1000, 2000, 7000 and 25000 s/mm², at one b-shape and TE:
@@ -249,7 +250,7 @@ the initial batched fit, whose existing warnings remain separate.
 
 ### Clipped correction with a nonnegative signal
 
-Use `-RicianSHclip -sigma sigma.nii` with either `-SH` or `-SMI` to fit
+Use `-RicianClip -sigma sigma.nii` with either `-SH` or `-SMI` to fit
 
 $$\min_c \sum_i ((Yc)_i-\widetilde M_i)^2,\qquad
 \widetilde M_i=\sqrt{\max(0,M_i^2-\sigma^2)},\qquad Y_{\rm grid}c\geq0.$$
@@ -270,13 +271,46 @@ regression remain unchanged. Nonnegativity is enforced before rank-one
 processing, as for `-RicianSH`.
 
 Use uncorrected magnitude data and a matching noise map; do not apply the
-clipped correction to the input yourself. `-RicianSHclip` and `-RicianSH` are
-mutually exclusive. The optional `-RicianSH_maxiter` cap and its diagnostic
+clipped correction to the input yourself. When both `-RicianClip` and
+`-RicianSH` are supplied, SH/SMI uses Rician-expectation fitting on the original
+magnitudes, with nonnegativity; it does not fit the expectation to
+already-corrected data. The optional `-RicianSH_maxiter` cap and its diagnostic
 outputs also apply to this mode.
+
+### Clipped correction for DTI and DKI
+
+`-RicianClip` also corrects the input to `-DTI`, `-DKI` and `-WDKI` using
+`sqrt(max(0, M²−sigma²))` before their existing tensor fits. It requires the
+same aligned noise map and applies once to the selected measurements,
+including b=0, in each echo-time/LTE subset. Tensor fitting constraints and
+GNC handling are unchanged. Clipped zeros use the tensor fitter's existing
+positive floor before taking logarithms; low-SNR estimates can still be biased.
+
+| Flags | DTI/DKI/WDKI input | SH/SMI estimator |
+|---|---|---|
+| Neither correction flag | Original magnitudes | Ordinary LLS |
+| `-RicianClip` | Clipped-corrected magnitudes | Clipped-corrected LLS with signal nonnegativity |
+| `-RicianSH` | Original magnitudes | Rician expectation with signal nonnegativity |
+| Both flags | Clipped-corrected magnitudes | Rician expectation with signal nonnegativity, using original magnitudes |
+
+`-RicianSH` requires `-SH` or `-SMI`. Its precedence applies only to the SH
+stage; it never disables the clipped correction requested for tensor fitting.
+For example:
+
+```bash
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii
+tmi dwi.nii combined -DTI -DKI -SH -RicianClip -RicianSH -sigma sigma.nii
+```
+
+Tensor inputs are corrected separately so a combined run does not correct
+SH data twice. The SH/SMI b=0/isotropic mean convention described above is
+retained; this differs from correcting b=0 measurements before a tensor fit.
+The existing propagation of restored b=0 data in `-db0restore` workflows
+continues to apply.
 
 ### Processing time and parallel workers
 
-Both `-RicianSH` and `-RicianSHclip` use `-n_cores` to fit independent voxel
+Both `-RicianSH` and `-RicianClip` use `-n_cores` to fit independent voxel
 blocks in parallel. For example, add `-n_cores 8` to use eight worker processes,
 or `-n_cores 1` for serial fitting. The default follows TMI's available-cores
 minus two convention. Each worker uses one BLAS thread to avoid multiplying
