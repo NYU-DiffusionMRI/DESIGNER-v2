@@ -71,7 +71,7 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
             basis = estimator.get_even_sh(directions[ids], order)
             if np.linalg.matrix_rank(basis) < n_coefficients:
                 raise ValueError(f"SH order {order} has a rank-deficient direction "
-                                 f"set in shell {i}; reduce -lmax")
+                                 f"set in shell {i}; reduce -lmaxSH")
 
     estimator.l_max = orders
     estimator.rotinv_lmax = output_lmax

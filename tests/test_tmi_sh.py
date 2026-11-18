@@ -16,7 +16,7 @@ def test_single_shell_cli_saves_separate_invariants(inputs, rician):
     b, g = protocol()
     np.savetxt(inputs/'dwi.bval', [b[6:96]*1000])
     np.savetxt(inputs/'dwi.bvec', g[6:96].T)
-    options = ['-SH', '-lmax', '6', '-mask', 'mask.nii']
+    options = ['-SH', '-lmaxSH', '6', '-mask', 'mask.nii']
     if rician:
         options += ['-RicianSH', '-sigma', 'sigma.nii']
     result = run_cli(inputs, 'sh', options)
@@ -44,7 +44,7 @@ def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
     np.savetxt(inputs/'dwi.bval', [np.tile(b*1000, 2)])
     np.savetxt(inputs/'dwi.bvec', np.tile(g.T, (1, 2)))
     np.savetxt(inputs/'dwi.echotime', np.repeat([60, 90], b.size))
-    result = run_cli(inputs, 'sh', ['-SH', '-lmax', '0'])
+    result = run_cli(inputs, 'sh', ['-SH', '-lmaxSH', '0'])
     assert result.returncode == 0, result.stdout
     assert {p.name for p in (inputs/'sh').glob('*.nii')} == {'S0.nii'}
     metadata = json.loads((inputs/'sh/SH_shells.json').read_text())
@@ -58,13 +58,18 @@ def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
 
 @pytest.mark.parametrize('options,error', [
     (['-SH', '-SMI'], 'Select either -SH'),
-    (['-SH', '-lmax', '3'], 'nonnegative even integer'),
-    (['-SH', '-lmax', '-2'], 'nonnegative even integer'),
-    (['-SH', '-lmax', 'no'], 'nonnegative even integer'),
-    (['-SH', '-lmax', '0,2,3'], 'nonnegative even integer'),
-    (['-SH', '-lmax', '0,,4'], 'nonnegative even integer'),
-    (['-SH', '-lmax', '2,4'], 'expected 3, got 2'),
-    (['-SMI', '-lmax', '0,2,4'], 'Per-shell -lmax lists require -SH'),
+    (['-SH', '-lmaxSH', '3'], 'nonnegative even integer'),
+    (['-SH', '-lmaxSH', '-2'], 'nonnegative even integer'),
+    (['-SH', '-lmaxSH', 'no'], 'nonnegative even integer'),
+    (['-SH', '-lmaxSH', '0,2,3'], 'nonnegative even integer'),
+    (['-SH', '-lmaxSH', '0,,4'], 'nonnegative even integer'),
+    (['-SH', '-lmaxSH', '2,4'], 'expected 3, got 2'),
+    (['-SH', '-lmax', '4'], 'use -lmaxSH for SH fitting orders'),
+    (['-SH', '-lmax', '0,2,4'], 'use -lmaxSH for SH fitting orders'),
+    (['-SH', '-lmax', '2', '-lmaxSH', '4'], 'use -lmaxSH for SH fitting orders'),
+    (['-lmaxSH', '4'], '-lmaxSH requires -SH'),
+    (['-SMI', '-lmaxSH', '0,2,4'], '-lmaxSH requires -SH'),
+    (['-SMI', '-lmax', '0,2,4'], '-SMI -lmax accepts one invariant order'),
     (['-SH', '-RicianSH'], 'requires an explicit noise map'),
     (['-SH', '-RicianSH_maxiter', '2'], 'requires -RicianSH'),
     (['-SH', '-RicianSH', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '0'], 'positive integer'),
@@ -77,7 +82,7 @@ def test_cli_rejects_invalid_standalone_options(inputs, options, error):
 
 @pytest.mark.parametrize('rician', [False, True])
 def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
-    options = ['-SH', '-lmax', '0,2,4', '-mask', 'mask.nii']
+    options = ['-SH', '-lmaxSH', '0,2,4', '-mask', 'mask.nii']
     if rician:
         options += ['-RicianSH', '-sigma', 'sigma.nii']
     result = run_cli(inputs, 'mixed_orders', options)
@@ -97,7 +102,7 @@ def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
 @pytest.mark.parametrize('mode', ['-SH', '-SMI'])
 def test_cli_iteration_cap_saves_aligned_diagnostics(inputs, mode):
     options = [mode, '-RicianSH', '-sigma', 'sigma.nii', '-mask', 'mask.nii',
-               '-RicianSH_maxiter', '2', '-lmax', '4']
+               '-RicianSH_maxiter', '2', '-lmaxSH' if mode == '-SH' else '-lmax', '4']
     if mode == '-SMI':
         options += ['-load_prior', 'prior.mat']
     result = run_cli(inputs, 'capped', options)

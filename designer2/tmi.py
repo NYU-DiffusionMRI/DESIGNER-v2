@@ -243,13 +243,14 @@ def usage(cmdline): #pylint: disable=unused-variable
 #=======================================tmi d-b0restore======================================
 
     smi_options = cmdline.add_argument_group('spherical harmonic and SMI options')
-    smi_options.add_argument('-SH', action='store_true', help='Fit spherical harmonics and save S0.nii, S2.nii, ..., through -lmax, without SMI model fitting. Each file contains one volume per shell; SH_shells.json identifies the volumes. Default estimator: LLS.')
+    smi_options.add_argument('-SH', action='store_true', help='Fit spherical harmonics and save S0.nii, S2.nii, ..., through -lmaxSH, without SMI model fitting. Each file contains one volume per shell; SH_shells.json identifies the volumes. Default estimator: LLS.')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
     smi_options.add_argument('-RicianSH', action='store_true', help='Fit spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SH or -SMI, and -sigma). Default: linear least squares.')
     smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianSH. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
     smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH, optional for SMI parameter estimation')
-    smi_options.add_argument('-lmax', metavar=('<lmax>'),help='With -SH: a common even SH fitting/output order (0,2,4,...) or comma-separated orders for every shell, sorted by b-value, b-shape, then echo time, including b=0. Default: automatic per shell. With -SMI: one invariant order for polynomial regression (0,2,4,6), retaining automatic SH fitting orders.')
+    smi_options.add_argument('-lmaxSH', metavar='<orders>', help='With -SH: a common even SH fitting/output order (0,2,4,...) or comma-separated orders for every shell, sorted by b-value, b-shape, then echo time, including b=0. Default: automatic per shell. Applies to LLS and RicianSH.')
+    smi_options.add_argument('-lmax', metavar=('<lmax>'), help='With -SMI: one invariant order for polynomial regression (0,2,4,6), retaining automatic SH fitting orders. For standalone SH fitting orders use -SH -lmaxSH instead.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
     smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
     smi_options.add_argument('-smi_fw_thres', metavar=(''), type=float, default=0.2, help='Free-water threshold used by the SMI two-step free-water fit. Only used when FW is included in -compartments. Default=0.2.')
@@ -322,20 +323,27 @@ def execute(): #pylint: disable=unused-variable
 
     if app.ARGS.SH and app.ARGS.SMI:
         raise MRtrixError("Select either -SH for invariants only or -SMI for model fitting")
-    sh_lmax = None
     if app.ARGS.SH and app.ARGS.lmax is not None:
+        raise MRtrixError("-lmax is reserved for SMI regression; use -lmaxSH "
+                          "for SH fitting orders")
+    if app.ARGS.lmaxSH is not None and not app.ARGS.SH:
+        raise MRtrixError("-lmaxSH requires -SH; -SMI uses -lmax for its "
+                          "regression order and retains automatic SH fitting orders")
+    sh_lmax = None
+    if app.ARGS.lmaxSH is not None:
         try:
-            orders = [int(value) for value in app.ARGS.lmax.split(',')]
+            orders = [int(value) for value in app.ARGS.lmaxSH.split(',')]
         except ValueError:
-            raise MRtrixError("SH -lmax must be a nonnegative even integer or "
+            raise MRtrixError("-lmaxSH must be a nonnegative even integer or "
                               "comma-separated nonnegative even integers")
         if any(order < 0 or order % 2 for order in orders):
-            raise MRtrixError("SH -lmax must be a nonnegative even integer or "
+            raise MRtrixError("-lmaxSH must be a nonnegative even integer or "
                               "comma-separated nonnegative even integers")
         sh_lmax = orders[0] if len(orders) == 1 else orders
     if app.ARGS.SMI and app.ARGS.lmax is not None and ',' in app.ARGS.lmax:
-        raise MRtrixError("Per-shell -lmax lists require -SH; -SMI accepts one "
-                          "invariant order and retains automatic SH fitting orders")
+        raise MRtrixError("-SMI -lmax accepts one invariant order and retains "
+                          "automatic SH fitting orders; per-shell orders use "
+                          "-SH -lmaxSH")
     if app.ARGS.RicianSH:
         if not (app.ARGS.SMI or app.ARGS.SH):
             raise MRtrixError("-RicianSH requires -SH or -SMI")

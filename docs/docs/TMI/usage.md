@@ -80,18 +80,18 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - Estimate signal rotational invariants without SMI model fitting or training priors. Use either `-SH` or `-SMI`.
 - **`-SH` alone uses ordinary linear least squares (LLS)** with automatic per-shell fitting orders and no signal nonnegativity constraint. No noise map is required.
 - **`-SH -RicianSH -sigma <noisemap>` fits the expected Rician magnitude signal with a nonnegativity constraint on the underlying SH signal.** Supplying `-sigma` alone does not change the default LLS estimator.
-- Save separate `S0.nii`, `S2.nii`, ..., `S<lmax>.nii` files in original signal units. Each file is 4D, with one volume per acquisition shell, including a singleton volume dimension for a single shell.
+- Save separate `S0.nii`, `S2.nii`, ..., `S<maximum_order>.nii` files in original signal units. Each file is 4D, with one volume per acquisition shell, including a singleton volume dimension for a single shell.
 - `SH_shells.json` maps each zero-based volume index to its b-value (s/mm²), b-shape, echo time (ms), number of measurements, and fitted SH order. Shells are ordered by b-value, b-shape, then echo time.
-- `-lmax 6` fits through order 6 and saves S0, S2, S4, and S6. Without `-lmax`, use the existing automatic per-shell orders and save every fitted even order. Higher-order volumes are zero for shells fitted at a lower order; b=0 and isotropic shells retain their arithmetic means and zero higher orders.
-- A comma-separated list sets each shell's fitting order independently for either estimator, for example `-lmax 0,2,4,4,6` for b=0,1000,2000,7000,25000 at one b-shape and TE. Include every shell, sorted by b-value, b-shape, then echo time; `SH_shells.json` records the mapping. See the [per-shell example]({% link docs/TMI/SMI.md %}#choose-a-fitting-order-for-each-shell).
-- A single diffusion shell is supported, including acquisitions without b=0. A requested fitting order must have enough independent directions in every directional shell; otherwise reduce `-lmax`.
+- `-lmaxSH 6` fits through order 6 and saves S0, S2, S4, and S6. Without `-lmaxSH`, use the existing automatic per-shell orders and save every fitted even order. Higher-order volumes are zero for shells fitted at a lower order; b=0 and isotropic shells retain their arithmetic means and zero higher orders.
+- A comma-separated list sets each shell's fitting order independently for either estimator, for example `-lmaxSH 0,2,4,4,6` for b=0,1000,2000,7000,25000 at one b-shape and TE. Include every shell, sorted by b-value, b-shape, then echo time; `SH_shells.json` records the mapping. See the [per-shell example]({% link docs/TMI/SMI.md %}#choose-a-fitting-order-for-each-shell).
+- A single diffusion shell is supported, including acquisitions without b=0. A requested fitting order must have enough independent directions in every directional shell; otherwise reduce `-lmaxSH`.
 - Both estimators retain the existing SH normalization and rank-one processing across shells; no microstructure regression is performed.
 
 ### `-SMI`
 
 - Perform estimation of the Standard Model of White Matter.
 - SH fitting uses LLS by default. Add `-RicianSH -sigma <noisemap>` to use the same expected Rician magnitude model and signal nonnegativity constraint as `-SH -RicianSH`.
-- Per-shell `-lmax` lists are supported only with `-SH`. With `-SMI`, a single `-lmax` value selects the invariant order for model regression while SH fitting orders remain automatic per shell.
+- `-lmaxSH` sets standalone SH fitting orders and is supported only with `-SH`. With `-SMI`, a single `-lmax` value selects the invariant order for model regression while SH fitting orders remain automatic per shell.
 - Use in conjunction with `-compartments`, `-sigma`, `-bshape`, and `-echo_time` options.
 - We recommend prior estimation of the noise level sigma using `designer` along with the `-denoise` option.
 
@@ -124,11 +124,17 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - Path to noise map. Required with `-RicianSH` in either output mode; optional but recommended for SMI. Standalone `-SH` LLS does not need a noise map.
 - We recommend computing sigma prior to running `tmi` using `designer`.
 
+### `-lmaxSH <orders>`
+
+- Use with `-SH` to set the maximum SH fitting and output order for either LLS or RicianSH. A single nonnegative even integer applies to every directional shell: `-lmaxSH 6` saves S0, S2, S4, and S6; `-lmaxSH 0` saves only S0. If omitted, fitting orders are selected automatically per shell.
+- A comma-separated list specifies each shell's order independently, sorted by b-value, b-shape, then echo time, including b=0/isotropic shells. For example, `-lmaxSH 0,2,4,4,6` assigns orders 0, 2, 4, 4, and 6 to b=0,1000,2000,7000,25000 when these are the input shells at one b-shape and TE. Use nonnegative even integers, no spaces or trailing comma, and exactly one entry per shell.
+- Higher-order volumes for shells fitted at a lower order are zero placeholders, not measurements. `SH_shells.json` records each shell's fitted order.
+- This option is not accepted with `-SMI`. When adapting an earlier standalone SH command, replace `-lmax` with `-lmaxSH`; `-SH -lmax` produces a migration message.
+
 ### `-lmax <lmax>`
 
-- With `-SH`: a nonnegative even integer specifying the maximum SH fitting and output order, for example `-lmax 6`. The order applies to all directional diffusion shells; `-lmax 0` saves only S0. If omitted, fitting orders are selected automatically per shell.
-- With `-SH`, a comma-separated list supplies one fitting order per shell, sorted by b-value, b-shape, then echo time, including b=0/isotropic shells. For example, `-lmax 0,2,4,4,6` assigns orders 0, 2, 4, 4, and 6 to b=0,1000,2000,7000,25000 when these are the input shells at one b-shape and TE. This works with LLS or `-RicianSH`. Use nonnegative even integers, no spaces or trailing comma, and exactly one entry per shell. Higher-order volumes for shells fitted at a lower order are zero placeholders, not measurements.
 - With `-SMI`: a single invariant order used for model regression (0, 2, 4, or 6). Per-shell lists are not accepted; SH fitting orders remain automatic per shell, with or without `-RicianSH`.
+- For standalone SH fitting orders, use `-SH -lmaxSH` instead.
 
 ### `-bshape <beta1,beta2,...>`
 - Specify the b-shape used in the acquisition (comma separated list the same length as number of inputs).

@@ -38,10 +38,10 @@ magnitude observation model and enforces a **nonnegative underlying SH signal**.
 | Signal rotational invariants only, using Rician expectation and signal nonnegativity | `tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii` |
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
-`-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmax` sets the actual
+`-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmaxSH` sets the actual
 SH fitting order and requires enough independent directions in each directional
 shell. A comma-separated list assigns an order to each shell, for example
-`-lmax 0,2,4,4,6`; see [per-shell fitting orders](#choose-a-fitting-order-for-each-shell).
+`-lmaxSH 0,2,4,4,6`; see [per-shell fitting orders](#choose-a-fitting-order-for-each-shell).
 Omit it for automatic per-shell orders. Per-shell lists are supported only
 with `-SH`: with `-SMI`, `-lmax` is a single invariant order for model regression,
 and SH fitting orders remain automatic. The Rician option requires an
@@ -132,9 +132,9 @@ for the observation model and initialization.
 
 Both commands bypass SMI priors and regression and save separate `S0.nii`,
 `S2.nii`, and higher even-order files through the maximum fitted order. Each
-contains one volume per shell, identified in `SH_shells.json`. Add `-lmax 6`
+contains one volume per shell, identified in `SH_shells.json`. Add `-lmaxSH 6`
 to fit through order 6 and save `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`.
-In `-SH` mode, `-lmax` sets the SH fitting order itself. See the
+In `-SH` mode, `-lmaxSH` sets the SH fitting order itself. See the
 [standalone SH options]({% link docs/TMI/usage.md %}#-sh).
 
 ### Choose a fitting order for each shell
@@ -146,8 +146,8 @@ LLS and RicianSH, for example:
 
 ```bash
 # Input containing b=0, 1000, 2000, 7000 and 25000 s/mm², at one b-shape and TE:
-tmi dwi.nii sh_lls -SH -lmax 0,2,4,4,6
-tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii -lmax 0,2,4,4,6
+tmi dwi.nii sh_lls -SH -lmaxSH 0,2,4,4,6
+tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii -lmaxSH 0,2,4,4,6
 ```
 
 | Shell b-value (s/mm²) | Maximum SH fitting order | Fitted invariants |
@@ -162,9 +162,10 @@ The list must contain one nonnegative even order for **every shell**, including
 b=0 and isotropic shells, in ascending b-value, then b-shape, then echo time.
 `SH_shells.json` records this order and the order actually fitted. Use zero for
 b=0/isotropic shells; these always retain their arithmetic means. A single
-integer applies the same order to all directional shells; omitting `-lmax`
+integer applies the same order to all directional shells; omitting `-lmaxSH`
 selects fitting orders automatically. Write the list as one argument, with
-no spaces or trailing comma.
+no spaces or trailing comma. If adapting an earlier standalone SH command,
+replace `-lmax` with `-lmaxSH`; `-SH -lmax` is rejected with a migration message.
 
 The example saves `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`, each with five
 shell volumes. Volumes above a shell's fitting order are zero placeholders,
@@ -174,7 +175,7 @@ rank-one processing: each even order uses only the shells that support it.
 Changing one shell's order can therefore also change higher-order invariants
 in other shells through this joint step.
 
-Per-shell lists are **not supported with `-SMI`**. There, `-lmax` accepts one
+`-lmaxSH` is supported only with `-SH`. For `-SMI`, the separate `-lmax` option accepts one
 value (0, 2, 4, or 6) specifying the invariant order used for Standard Model
 regression; the SH fitting orders remain automatic per shell. The choice
 between LLS and constrained Rician fitting applies to both output modes.

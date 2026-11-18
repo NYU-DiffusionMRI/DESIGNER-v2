@@ -147,7 +147,7 @@ Fit through SH order 6 using the Rician expected magnitude and nonnegative
 signal constraints, without training or fitting the Standard Model:
 
 ```bash
-tmi dwi.nii sh_rician -SH -RicianSH -lmax 6 \
+tmi dwi.nii sh_rician -SH -RicianSH -lmaxSH 6 \
   -sigma sigma.nii -mask brain_mask.nii
 ```
 
@@ -159,10 +159,10 @@ maps or combined `rotinvs_smi.nii` are generated.
 For the linear fit, no noise map is required:
 
 ```bash
-tmi dwi.nii sh_linear -SH -lmax 6 -mask brain_mask.nii
+tmi dwi.nii sh_linear -SH -lmaxSH 6 -mask brain_mask.nii
 ```
 
-Omit `-lmax` to use automatic per-shell SH orders, or use `-lmax 0` to save
+Omit `-lmaxSH` to use automatic per-shell SH orders, or use `-lmaxSH 0` to save
 only S0. The requested order must be supported by the directions in each
 diffusion shell. A single shell without b=0 is supported. For multi-TE or
 multi-b-shape data, use the same acquisition metadata options as for SMI.

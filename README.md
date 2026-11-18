@@ -58,12 +58,12 @@ for assumptions and limitations.
 To estimate only signal rotational invariants, without SMI model fitting:
 
 ```bash
-tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -mask brain_mask.nii -lmax 6
+tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -mask brain_mask.nii -lmaxSH 6
 ```
 
 This saves `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`, with one volume per shell
 in each file. `SH_shells.json` identifies each volume's b-value, b-shape, echo
-time, and fitted order. For `-SH`, `-lmax` sets the SH fitting order; omitting it
+time, and fitted order. For `-SH`, `-lmaxSH` sets the SH fitting order; omitting it
 uses automatic per-shell orders. Omit `-RicianSH` for LLS, which needs no noise
 map. `-SH` and `-SMI` are alternative output modes.
 
