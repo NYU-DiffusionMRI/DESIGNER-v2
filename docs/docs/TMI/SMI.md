@@ -34,14 +34,17 @@ magnitude observation model and enforces a **nonnegative underlying SH signal**.
 |---|---|
 | SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
 | SMI maps with Rician bias expectation correction and nonnegativity | `tmi dwi.nii smi_rician -SMI -RicianSH -sigma sigma.nii` |
-| Signal rotational invariants only, using LLS | `tmi dwi.nii sh_output -SH -lmax 6` |
-| Signal rotational invariants only, using constrained Rician fitting | `tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii -lmax 6` |
+| Signal rotational invariants only, using default LLS | `tmi dwi.nii sh_output -SH` |
+| Signal rotational invariants only, using Rician expectation and signal nonnegativity | `tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii` |
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmax` sets the actual
 SH fitting order and requires enough independent directions in each directional
-shell. A comma-separated list assigns an order to each shell. Omit it for
-automatic per-shell orders. The Rician option requires an
+shell. A comma-separated list assigns an order to each shell, for example
+`-lmax 0,2,4,4,6`; see [per-shell fitting orders](#choose-a-fitting-order-for-each-shell).
+Omit it for automatic per-shell orders. Per-shell lists are supported only
+with `-SH`: with `-SMI`, `-lmax` is a single invariant order for model regression,
+and SH fitting orders remain automatic. The Rician option requires an
 aligned noise map in the same signal units as the DWI and data whose Rician
 noise floor has not already been removed; see [parameter estimation](#parameter-estimation).
 
@@ -106,40 +109,75 @@ Standard Model parameters (diffusion) + compartmental T2 values (only if multipl
 
 ## Signal rotational invariants without SMI
 
-To obtain rotational invariants alone, use `-SH` instead of `-SMI`:
+To obtain rotational invariants alone, use `-SH` instead of `-SMI`.
+**`-SH` alone uses ordinary linear least squares (LLS)** for the SH fit,
+with automatic fitting orders and no noise map required:
 
 ```bash
-tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -lmax 6
+tmi dwi.nii sh_output -SH
 ```
 
-This bypasses SMI priors and regression and saves separate `S0.nii`, `S2.nii`,
-`S4.nii`, and `S6.nii` files. Each contains one volume per shell, identified in
-`SH_shells.json`. In this mode `-lmax` sets the SH fitting order itself, rather
-than selecting invariants for model regression. Omit `-RicianSH` for ordinary
-LLS; omit `-lmax` for automatic per-shell orders. See the
+**`-SH -RicianSH` uses the expected Rician magnitude signal and a nonnegativity
+constraint on the underlying SH signal.** Supply a noise map with `-sigma`:
+
+```bash
+tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii
+```
+
+The constraint applies at acquired directions and on a dense sphere grid;
+the default LLS fit has no such constraint. Supplying `-sigma` alone does not
+switch from LLS to Rician fitting. The same estimator choice applies to `-SMI`.
+See [Rician bias expectation correction](#rician-bias-expectation-correction-with-a-nonnegative-signal)
+for the observation model and initialization.
+
+Both commands bypass SMI priors and regression and save separate `S0.nii`,
+`S2.nii`, and higher even-order files through the maximum fitted order. Each
+contains one volume per shell, identified in `SH_shells.json`. Add `-lmax 6`
+to fit through order 6 and save `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`.
+In `-SH` mode, `-lmax` sets the SH fitting order itself. See the
 [standalone SH options]({% link docs/TMI/usage.md %}#-sh).
 
+### Choose a fitting order for each shell
+
 Orders 2, 4, and 6 require at least 6, 15, and 28 independent directional
-measurements, respectively. If different shells support different orders,
-use automatic orders or supply a comma-separated list, for example:
+measurements, respectively. With `-SH`, **each shell's maximum SH order can be
+specified independently** using a comma-separated list. This works with both
+LLS and RicianSH, for example:
 
 ```bash
 # Input containing b=0, 1000, 2000, 7000 and 25000 s/mm², at one b-shape and TE:
-tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -lmax 0,2,4,4,4
+tmi dwi.nii sh_lls -SH -lmax 0,2,4,4,6
+tmi dwi.nii sh_rician -SH -RicianSH -sigma sigma.nii -lmax 0,2,4,4,6
 ```
+
+| Shell b-value (s/mm²) | Maximum SH fitting order | Fitted invariants |
+|---|---|---|
+| 0 | 0 | S0 |
+| 1000 | 2 | S0, S2 |
+| 2000 | 4 | S0, S2, S4 |
+| 7000 | 4 | S0, S2, S4 |
+| 25000 | 6 | S0, S2, S4, S6 |
 
 The list must contain one nonnegative even order for **every shell**, including
 b=0 and isotropic shells, in ascending b-value, then b-shape, then echo time.
 `SH_shells.json` records this order and the order actually fitted. Use zero for
 b=0/isotropic shells; these always retain their arithmetic means. A single
-integer continues to apply the same order to all directional shells.
+integer applies the same order to all directional shells; omitting `-lmax`
+selects fitting orders automatically. Write the list as one argument, with
+no spaces or trailing comma.
 
-With the example above, b=1000 has S0 and S2, while the other diffusion shells
-also have S4. The b=1000 volume in `S4.nii` is a zero placeholder, not an estimated
-S4. Fitting the shells together retains cross-shell rank-one processing: S2
-uses all shells supporting order 2, and S4 uses only those supporting order 4.
+The example saves `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`, each with five
+shell volumes. Volumes above a shell's fitting order are zero placeholders,
+not estimated invariants: for example, b=1000 has no fitted S4 or S6, and only
+b=25000 has a fitted S6. Fitting the shells together retains cross-shell
+rank-one processing: each even order uses only the shells that support it.
 Changing one shell's order can therefore also change higher-order invariants
 in other shells through this joint step.
+
+Per-shell lists are **not supported with `-SMI`**. There, `-lmax` accepts one
+value (0, 2, 4, or 6) specifying the invariant order used for Standard Model
+regression; the SH fitting orders remain automatic per shell. The choice
+between LLS and constrained Rician fitting applies to both output modes.
 
 A requested order that cannot be identified from the directions is
 rejected; an unsupported higher-order invariant should not be interpreted as
