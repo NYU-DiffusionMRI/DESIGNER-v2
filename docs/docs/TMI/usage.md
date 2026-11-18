@@ -9,7 +9,7 @@ parent: TMI
 # Options and Usage for TMI
 {: .no_toc }
 
-This page describes each optional argument to TMI. For specific use-case examples of TMI calls, please see the [examples]({{ site.baseurl }}{% link docs/TMI/examples.md %}) page.
+This page describes each optional argument to TMI. For specific use-case examples of TMI calls, please see the [examples]({% link docs/TMI/examples.md %}) page.
 
 Main usage:
 `tmi <input> <output>`
@@ -49,7 +49,7 @@ By default, if none of the below options are used, TMI will not estimate paramet
 
 ### `-gnc <field>`
 
-Use a voxelwise gradient field on the DWI grid for DTI/DKI fitting. Pass the original graddev NIfTI. Set `-gnc_format` to specify its source. See the [TORTOISE and gradunwarp examples]({{ site.baseurl }}{% link docs/TMI/DTI-DKI.md %}#gradient-nonlinearity-correction).
+Use a voxelwise gradient field on the DWI grid for DTI/DKI fitting. Pass the original graddev NIfTI. Set `-gnc_format` to specify its source. See the [TORTOISE and gradunwarp examples]({% link docs/TMI/DTI-DKI.md %}#gradient-nonlinearity-correction).
 
 ### `-gnc_format <convention>`
 
@@ -96,7 +96,7 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - The noise map must be a spatially aligned 3D map of the complex-component Gaussian standard deviation, in the same intensity units as the input DWI. Values inside the fitting mask must be finite and nonnegative; zero uses constrained linear least squares, preserving the linear fit when already feasible.
 - Use magnitude data with a Rician noise model. Do not apply this on top of `designer -rician`, phase-unwound data, or other data whose noise floor has already been removed. After denoising, rescaling or interpolation, the noise map must describe the data actually fitted.
 - The reference estimator retains arithmetic means for b=0 and isotropic encoding shells. The existing SH basis, shell ordering, rank-one invariant processing, regression priors and output map names are retained.
-- This reduces the modeled magnitude noise-floor bias; finite-sample SH invariants and downstream SMI maps can still be biased. See [SMI estimation]({{ site.baseurl }}{% link docs/TMI/SMI.md %}#parameter-estimation).
+- This reduces the modeled magnitude noise-floor bias; finite-sample SH invariants and downstream SMI maps can still be biased. See [SMI estimation]({% link docs/TMI/SMI.md %}#parameter-estimation).
 
 ### `-WMTI`
 - Include WMTI parameters in output folder (awf,ias_params,eas_params).

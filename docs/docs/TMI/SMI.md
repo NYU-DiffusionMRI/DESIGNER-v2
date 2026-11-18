@@ -116,7 +116,7 @@ This bypasses SMI priors and regression and saves separate `S0.nii`, `S2.nii`,
 `SH_shells.json`. In this mode `-lmax` sets the SH fitting order itself, rather
 than selecting invariants for model regression. Omit `-RicianSH` for ordinary
 LLS; omit `-lmax` for automatic per-shell orders. See the
-[standalone SH options]({{ site.baseurl }}{% link docs/TMI/usage.md %}#-sh).
+[standalone SH options]({% link docs/TMI/usage.md %}#-sh).
 
 Orders 2, 4, and 6 require at least 6, 15, and 28 independent directional
 measurements, respectively. If different shells support different orders,
