@@ -83,7 +83,7 @@ Notes:
 
 | Docker Tag | Commit Hash for Docker File | Dependency Version |
 | :--------: | :-------------------------: | :----------------: |
-| *pending*  |             N/A              |       1.8          |
+| 2026-11-17 |             fa75802         |       1.8          |
 
 Notes:
 - `Dockerfile_synthstrip` re-tags the upstream [`freesurfer/synthstrip:1.8`](https://hub.docker.com/r/freesurfer/synthstrip) image as-is. Consuming Dockerfiles only copy its `mri_synthstrip` script and model weights, relying on DESIGNER's own `torch`/`surfa` (`requirements.txt`) instead of the upstream `/freesurfer/env` — so only `FREESURFER_HOME=/freesurfer` and `/freesurfer` on `PATH` are needed, no `PYTHONUSERBASE`.
