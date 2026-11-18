@@ -7,6 +7,7 @@ import nibabel as nib
 import numpy as np
 
 from lib.gnc.backends import gradunwarp, tortoise
+from lib.gnc.graddev import GRADDEV_DESCRIPTIONS, sanitize_graddev_matrix
 from lib.utils import force_remove
 
 
@@ -44,7 +45,7 @@ class GncBackend(Protocol):
         out_prefix: str,
     ) -> str:
         """
-        Produce the raw per-voxel gradient-deviation tensor L.
+        Produce the raw per-voxel gradient Jacobian J in backend axes.
 
         Called right after compute_warp() with the same arguments; may
         consume files compute_warp() deliberately left on disk.
@@ -56,7 +57,7 @@ class GncBackend(Protocol):
             out_prefix: Same basename prefix passed to compute_warp()
 
         Returns:
-            Path to a raw (unsanitized, may contain NaN) L tensor NIfTI with
+            Path to a raw (unsanitized, may contain NaN) Jacobian NIfTI with
             last dimension 9 (row-major 3x3, ~Identity at undistorted voxels).
             The caller sanitizes it and then deletes it.
         """
@@ -131,8 +132,8 @@ def derive_gnc_graddev(
     backend: str,
 ) -> str:
     """
-    Produce {out_prefix}_graddev.nii.gz: the per-voxel gradient-deviation
-    tensor L (L ~= Identity at undistorted voxels) consumed by
+    Export the native gradient Jacobian to {out_prefix}_graddev.nii.gz
+    with the backend tag consumed by
     designer2/tmi.py's -gnc option. Must be called immediately after
     compute_gnc_warp() with the same arguments.
 
@@ -149,32 +150,15 @@ def derive_gnc_graddev(
     raw = _get_backend(backend).derive_graddev(ref_volume_nii, coeff_file, scanner, out_prefix)
 
     out_path = f'{out_prefix}_graddev.nii.gz'
-    _sanitize_graddev_nan(raw, out_path)
+    _write_graddev(raw, out_path, backend)
     force_remove(raw)
     return out_path
 
 
-def _sanitize_graddev_matrix(mat):
-    """Replace any 3x3 gradient-deviation block containing a NaN with the
-    identity matrix as a whole block (not entrywise). Works around a
-    confirmed TORTOISE bug: CreateGradientNonlinearityBMatrix emits NaN for
-    the entire 3x3 block exactly at the isocenter voxel, where the true
-    value is Identity. Accepts (...,9) or (...,3,3); returns the same shape.
-    """
-    flat = mat.reshape(*mat.shape[:-1], 3, 3) if mat.shape[-1] == 9 else mat
-    bad = np.isnan(flat).any(axis=(-2, -1))
-    flat = np.where(bad[..., None, None], np.eye(3, dtype=flat.dtype), flat)
-    return flat.reshape(mat.shape)
-
-
-def _sanitize_graddev_nan(raw_path: str | Path, out_path: str | Path) -> None:
-    """
-    Apply _sanitize_graddev_matrix() to a graddev NIfTI on disk.
-
-    Args:
-        raw_path: Raw L tensor NIfTI from a backend's derive_graddev()
-        out_path: Where to write the sanitized tensor (float32, same affine)
-    """
+def _write_graddev(raw_path: str | Path, out_path: str | Path, backend: str) -> None:
+    """Export native components and identify their convention for TMI."""
     img = nib.load(str(raw_path))
-    data = _sanitize_graddev_matrix(np.asarray(img.dataobj)).astype(np.float32)
-    nib.save(nib.Nifti1Image(data, img.affine), str(out_path))
+    data = sanitize_graddev_matrix(np.asarray(img.dataobj)).astype(np.float32)
+    out = nib.Nifti1Image(data, img.affine)
+    out.header['descrip'] = GRADDEV_DESCRIPTIONS[backend]
+    nib.save(out, str(out_path))

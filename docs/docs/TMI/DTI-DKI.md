@@ -89,24 +89,68 @@ This can be extended to a sliding median filter, or an adaptive filtering method
 
 Gradient nonlinearity can change both the diffusion weighting and the gradient direction across the image. For DTI and DKI with linear tensor encoding (LTE), `tmi -gnc` uses a gradient coil tensor field `L` to compute the effective b-matrix at each voxel as `L B Lᵀ`, where `B` is the nominal b-matrix for a DWI volume.
 
-This example fits both models using the gradients in `dwi.mif` and the coil tensor field in `L.nii.gz`. TMI writes the maps to `parameters_gnc`.
+These examples use a version of TMI that lists `-gnc_format` in `tmi -help`. Use `-gnc_format` to tell TMI where `preproc_graddev.nii` came from. An explicit choice overrides the header. If you omit the option, TMI reads the backend name that DESIGNER records in the NIfTI header’s `descrip` field. For an empty or unrecognized description, TMI checks the determinant of the NIfTI affine’s 3 × 3 spatial part. A negative determinant allows the **gradunwarp/FSL** default because its axes agree with TORTOISE on that grid. A positive determinant requires an explicit `-gnc_format` because the two conventions differ in the signs of four tensor entries. Renaming the file has no effect on this choice.
+
+Use the preprocessed DWI and a field on the same spatial grid. For `dwi_designer.nii`, keep `dwi_designer.bval` and `dwi_designer.bvec` alongside the image. You can also use a `.mif` DWI with an embedded gradient table. The final argument names the output directory.
+
+### TORTOISE
+
+For a native TORTOISE export, pass the original `preproc_graddev.nii` with `-gnc_format tortoise`. TMI uses its affine to interpret the nine components. The tensor is already sampled at voxel centers.
 
 ```bash
-tmi -DTI -DKI -gnc L.nii.gz dwi.mif parameters_gnc
+tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format tortoise dwi_designer.nii parameters_tortoise
 ```
 
-Supply the full 3 × 3 matrix `L` at each voxel on the DWI grid, with components expressed in the same coordinate frame as the gradients. The identity matrix represents an ideal gradient coil. TMI accepts a NIfTI or MIF field with shape `(X, Y, Z, 3, 3)` or `(X, Y, Z, 9)`. For nine-component images, store the entries in row order as `Lxx, Lxy, Lxz, Lyx, Lyy, Lyz, Lzx, Lzy, Lzz`.
+### gradunwarp and FSL
 
-**Using an external b-matrix.** If you have a nominal b-matrix for each volume, add `-bmat` to override the gradient table during fitting. To use the external b-matrix alone, omit `-gnc L.nii.gz`.
+**If DESIGNER produced the field**, use `gnc_graddev.nii.gz` from its scratch directory (kept with `designer -nocleanup`). DESIGNER records the backend in the NIfTI header, so the same command works for either backend.
 
 ```bash
-tmi -DTI -DKI -bmat dwi.bmat -gnc L.nii.gz dwi.mif parameters_bmat_gnc
+tmi -DTI -DKI -gnc gnc_graddev.nii.gz dwi_designer.nii parameters_gnc
 ```
 
-Use a whitespace-delimited text file with six rows and one column per DWI volume, in the same order as the input volumes. The rows are `Bxx, Bxy, Bxz, Byy, Byz, Bzz` in s/mm², expressed in the image voxel coordinate frame. Use the unscaled off-diagonal elements and six zeros for a b = 0 volume. TMI also accepts the transposed layout. For NIfTI input, keep the accompanying `.bval` and `.bvec` files available for import. For MIF input, keep the embedded gradient table.
+**If you already have a gradunwarp/FSL Jacobian**, pass the full, dimensionless 3 × 3 Jacobian at each voxel. An ideal coil has ones on the diagonal and zeros elsewhere. Specify `-gnc_format gradunwarp` to use this convention on any grid.
+
+```bash
+tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format gradunwarp dwi_designer.nii parameters_gradunwarp
+```
+
+On a negative-determinant grid, such as LAS storage, an untagged native field can also use the default.
+
+```bash
+tmi -DTI -DKI -gnc preproc_graddev.nii dwi_designer.nii parameters_default
+```
+
+**If you have only `fullWarp_abs.nii.gz` from `gradient_unwarp.py`**, first convert this three-component absolute warp to a nine-component Jacobian. The example below starts with a warp on the DWI grid and a brain mask that excludes its outermost voxel layer. FSL estimates spatial derivatives using neighboring voxels, so values on the outermost layer are unreliable. To retain those voxels, generate the warp from the coil coefficients on a reference padded by one voxel on each side, compute the Jacobian there, and crop it back to the DWI grid. DESIGNER's gradunwarp backend performs that padding and cropping automatically.
+
+```bash
+export FSLOUTPUTTYPE=NIFTI_GZ
+calc_grad_perc_dev --fullwarp=fullWarp_abs.nii.gz --out=grad_pct
+fslmerge -t grad_pct_9.nii.gz grad_pct_x.nii.gz grad_pct_y.nii.gz grad_pct_z.nii.gz
+fslmaths grad_pct_9.nii.gz -div 100 gradunwarp_graddev.nii.gz
+
+tmi -DTI -DKI -gnc gradunwarp_graddev.nii.gz -gnc_format gradunwarp \
+    -mask brain_mask.nii.gz dwi_designer.nii parameters_from_warp
+```
+
+With an **absolute** warp as input, `calc_grad_perc_dev` includes the identity contribution. Divide its percentage values by 100 once. Relative displacement fields and deviation-only images use a different baseline.
+
+### How TMI applies the field
+
+Use the original native NIfTI so its affine describes the component axes. TMI accepts nine row-ordered components or two trailing dimensions of size three. If you have already converted the field to a scanner-frame coil tensor, use `-gnc L.nii.gz -gnc_format scanner` to skip the conversion. Scanner-frame components are the default for MIF fields.
+
+TMI transposes the native Jacobian and changes its basis using `L = R Jᵀ Rᵀ`. The columns of `R` are the unit directions of the field's voxel axes in scanner coordinates. For gradunwarp/FSL, the first column changes sign on a positive-determinant grid to account for FSL's x-axis convention. This acts on the nine components at each voxel and requires no spatial interpolation. DESIGNER handles the separate Siemens displacement-field sampling correction during image unwarping.
+
+**Using an external b-matrix.** If you have a nominal b-matrix for each volume, add `-bmat` to override the gradient table during fitting. To use the external b-matrix alone, omit `-gnc`.
+
+```bash
+tmi -DTI -DKI -bmat dwi.bmat -gnc preproc_graddev.nii -gnc_format tortoise dwi.mif parameters_bmat_gnc
+```
+
+Use a whitespace-delimited text file with six rows and one column per DWI volume, in the same order as the input volumes. The rows are `Bxx, Bxy, Bxz, Byy, Byz, Bzz` in s/mm², expressed in scanner axes (the MRtrix gradient-table frame). Use the unscaled off-diagonal elements and six zeros for a b = 0 volume. TMI also accepts the transposed layout.
 
 **Outlier replacement and smoothing.** You can use `-gnc` with `-akc_outliers`, `-fit_smoothing`, or both. When `-akc_outliers` replaces the signal at a flagged voxel, TMI refits its kurtosis tensor using that voxel's corrected b-matrix for each volume. With `-fit_smoothing`, TMI also uses the corrected b-matrices when fitting the diffusion and kurtosis tensors to the smoothed signal. This applies to both single- and multi-echo fits.
 
 ```bash
-tmi -DTI -DKI -gnc L.nii.gz -akc_outliers -fit_smoothing 10 dwi.mif parameters_gnc_smoothed
+tmi -DTI -DKI -gnc preproc_graddev.nii -gnc_format tortoise -akc_outliers -fit_smoothing 10 dwi.mif parameters_gnc_smoothed
 ```

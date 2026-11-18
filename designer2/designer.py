@@ -111,8 +111,8 @@ def usage(cmdline): #pylint: disable=unused-variable
     gnc_options.add_argument('-gnc_grad_coeff', metavar=('<coeff file>'),
         help='Path to scanner gradient coefficient file for gradient nonlinearity '
              'correction (spatial unwarping, backend chosen via -gnc_backend). Providing '
-             'this enables the step and also produces a per-voxel gradient-deviation '
-             '(L) tensor field, written to the scratch directory as gnc_graddev.nii.gz '
+             'this enables the step and also produces a native gradient Jacobian '
+             'tagged with its backend, written to the scratch directory as gnc_graddev.nii.gz '
              '(use -nocleanup to keep it), for use with designer2/tmi.py\'s -gnc option. '
              'Currently only supported with -eddy combined with -rpe_pair or -rpe_none '
              '(not -rpe_all, -rpe_header, -eddy_groups, -pre_align, or '
