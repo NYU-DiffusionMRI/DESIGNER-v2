@@ -5,6 +5,7 @@ The following Docker files are included:
 - `Dockerfile_fsl`: FSL dependency
 - `Dockerfile_ants`: ANTs dependency
 - `Dockerfile_tortoise`: TORTOISE dependency (CreateNonlinearityDisplacementMap, CreateGradientNonlinearityBMatrix — gradient nonlinearity correction binaries)
+- `Dockerfile_synthstrip`: FreeSurfer SynthStrip dependency (mri_synthstrip — skull stripping via -skullstrip_backend synthstrip)
 <br>
 
 All Docker images are tagged with dates in the `YYYY-MM-DD` format.
@@ -74,6 +75,18 @@ Notes:
 - Only two binaries (`CreateNonlinearityDisplacementMap`, `CreateGradientNonlinearityBMatrix`) are extracted from PennLINC's pre-built `pennlinc/qsiprep-drbuddi` image, not the full ~435 MB TORTOISE install — see `docker_deps/Dockerfile_tortoise`'s header comment for why, and PennLINC's [aslprep](https://github.com/PennLINC/aslprep)/[qsiprep](https://github.com/PennLINC/qsiprep) repos for the reference extraction approach this follows.
 - TORTOISE is GPL-3.0 licensed (license files are copied alongside the binaries into `/usr/local/tortoise/licenses`); keep this in mind for DESIGNER's own license/distribution terms.
 - The `26.10.3` tag pins PennLINC's DR-BUDDI base image, not TORTOISE's own version — update it the same way as the other tables whenever that upstream pin changes (edit the `FROM pennlinc/qsiprep-drbuddi:<tag>` line in `Dockerfile_tortoise`).
+
+
+## SynthStrip
+
+[Docker Hub Link](https://hub.docker.com/r/nyudiffusionmri/synthstrip/tags)
+
+| Docker Tag | Commit Hash for Docker File | Dependency Version |
+| :--------: | :-------------------------: | :----------------: |
+| *pending*  |             N/A              |       1.8          |
+
+Notes:
+- `Dockerfile_synthstrip` re-tags the upstream [`freesurfer/synthstrip:1.8`](https://hub.docker.com/r/freesurfer/synthstrip) image as-is. Consuming Dockerfiles only copy its `mri_synthstrip` script and model weights, relying on DESIGNER's own `torch`/`surfa` (`requirements.txt`) instead of the upstream `/freesurfer/env` — so only `FREESURFER_HOME=/freesurfer` and `/freesurfer` on `PATH` are needed, no `PYTHONUSERBASE`.
 
 
 ## Updating Dependencies

@@ -7,6 +7,10 @@ COPY --from=nyudiffusionmri/mrtrix3:2026-01-13 /usr/local/mrtrix3/build /usr/loc
 COPY --from=nyudiffusionmri/ants:2025-06-20 /usr/local/ants /usr/local/ants
 COPY --from=nyudiffusionmri/tortoise:2026-10-21 /usr/local/tortoise /usr/local/tortoise
 
+# python runtime dependencies needed for synthstrip are managed by DESIGNER
+COPY --from=nyudiffusionmri/synthstrip:2026-11-17 /freesurfer/mri_synthstrip /freesurfer/mri_synthstrip
+COPY --from=nyudiffusionmri/synthstrip:2026-11-17 /freesurfer/models /freesurfer/models
+
 # Install common dependencies
 RUN apt-get -qq update \
     && apt-get install -yq --no-install-recommends \
@@ -56,7 +60,9 @@ RUN ldconfig
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt --no-cache-dir
+RUN pip install -r requirements.txt \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    --no-cache-dir
 
 COPY . .
 
@@ -65,7 +71,8 @@ RUN python -m pip install . --no-deps
 
 ENV FSLDIR=/usr/local/fsl
 ENV FSLOUTPUTTYPE=NIFTI_GZ
-ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin:/usr/local/tortoise/bin"
+ENV FREESURFER_HOME=/freesurfer
+ENV PATH="${PATH}:/usr/local/fsl/bin:/usr/local/mrtrix3_build/bin:/usr/local/ants/bin:/usr/local/tortoise/bin:/freesurfer"
 ENV LD_LIBRARY_PATH="/usr/local/mrtrix3_build/src:/usr/local/mrtrix3_build/core:/usr/local/ants/lib:/usr/local/lib"
 ENV PYTHONPATH="/usr/local/mrtrix3_build/lib"
 RUN echo ". /usr/local/fsl/etc/fslconf/fsl.sh" >> /root/.bashrc
@@ -77,7 +84,10 @@ FROM production AS test
 COPY --from=test-context . /app/tests
 COPY requirements.txt .
 
-RUN pip install -r tests/requirements_test.txt --no-cache-dir -c requirements.txt
+RUN pip install -r tests/requirements_test.txt \
+    -c requirements.txt \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    --no-cache-dir
 
 # Also build lib.rpg in-place in case e.g. PYTHONPATH=/app shadows the site-packages install.
 RUN python setup.py build_ext --inplace
