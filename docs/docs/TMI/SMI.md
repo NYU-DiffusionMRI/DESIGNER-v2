@@ -123,7 +123,8 @@ measurements, respectively. If different shells support different orders,
 use automatic orders or fit shell subsets separately at the desired supported
 orders. A requested order that cannot be identified from the directions is
 rejected; an unsupported higher-order invariant should not be interpreted as
-a measured zero.
+a measured zero. A full-rank design can still be poorly conditioned when
+directions are nearly redundant; reducing the fitting order can improve stability.
 
 The saved invariants are in the original signal units. For figures, normalized
 invariants can be computed as `S_l / mean_b0`, using the mean b=0 image at the
