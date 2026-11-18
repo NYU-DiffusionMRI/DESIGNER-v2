@@ -80,6 +80,19 @@ Standard Model parameters (diffusion) + compartmental T2 values (only if multipl
 - Note that compartmental T2 maps will only be outputted if variable TE data was used.
 - Rotational invariants for each diffusion shell will also be an output. To normalize them and remove T2 contrast, simply divide by b0 for fixed TE data or by proton density for variable TE data.
 
+To obtain rotational invariants alone, use `-SH` instead of `-SMI`:
+
+```bash
+tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -lmax 6
+```
+
+This bypasses SMI priors and regression and saves separate `S0.nii`, `S2.nii`,
+`S4.nii`, and `S6.nii` files. Each contains one volume per shell, identified in
+`SH_shells.json`. In this mode `-lmax` sets the SH fitting order itself, rather
+than selecting invariants for model regression. Omit `-RicianSH` for ordinary
+LLS; omit `-lmax` for automatic per-shell orders. See the
+[standalone SH options]({{ site.baseurl }}{% link docs/TMI/usage.md %}#-sh).
+
 ---
 
 ## Parameter estimation

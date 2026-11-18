@@ -1,0 +1,69 @@
+"""Normal tmi entry point for standalone SH, without microstructure maps."""
+import json
+
+import nibabel as nib
+import numpy as np
+import pytest
+
+from tests.test_rician_sh import protocol
+from tests.test_tmi_rician_sh import inputs, run_cli
+
+
+@pytest.mark.parametrize('rician', [False, True])
+def test_single_shell_cli_saves_separate_invariants(inputs, rician):
+    image = nib.load(inputs/'dwi.nii')
+    nib.save(nib.Nifti1Image(image.get_fdata()[..., 6:96], image.affine), inputs/'dwi.nii')
+    b, g = protocol()
+    np.savetxt(inputs/'dwi.bval', [b[6:96]*1000])
+    np.savetxt(inputs/'dwi.bvec', g[6:96].T)
+    options = ['-SH', '-lmax', '6', '-mask', 'mask.nii']
+    if rician:
+        options += ['-RicianSH', '-sigma', 'sigma.nii']
+    result = run_cli(inputs, 'sh', options)
+    assert result.returncode == 0, result.stdout
+    assert 'SMI loading' not in result.stdout
+    assert 'SMI model initialized' not in result.stdout
+    assert 'nonnegative signal constraints' in result.stdout if rician else 'linear least squares' in result.stdout
+    assert {p.name for p in (inputs/'sh').glob('*.nii')} == {'S0.nii', 'S2.nii', 'S4.nii', 'S6.nii'}
+    for name in ['S0', 'S2', 'S4', 'S6']:
+        output = nib.load(inputs/'sh'/f'{name}.nii')
+        assert output.shape == (2, 2, 1, 1)
+        assert np.isfinite(output.get_fdata()).all()
+        np.testing.assert_allclose(output.affine, image.affine)
+    metadata = json.loads((inputs/'sh/SH_shells.json').read_text())
+    assert metadata['estimator'] == ('RicianSH' if rician else 'LLS')
+    assert metadata['shells'] == [dict(volume=0, b_value_s_per_mm2=1000., b_shape=1.,
+                                     echo_time_ms=0., n_measurements=90, lmax=6)]
+
+
+def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
+    image = nib.load(inputs/'dwi.nii')
+    data = np.concatenate([image.get_fdata(), .7*image.get_fdata()], axis=-1)
+    nib.save(nib.Nifti1Image(data, image.affine), inputs/'dwi.nii')
+    b, g = protocol()
+    np.savetxt(inputs/'dwi.bval', [np.tile(b*1000, 2)])
+    np.savetxt(inputs/'dwi.bvec', np.tile(g.T, (1, 2)))
+    np.savetxt(inputs/'dwi.echotime', np.repeat([60, 90], b.size))
+    result = run_cli(inputs, 'sh', ['-SH', '-lmax', '0'])
+    assert result.returncode == 0, result.stdout
+    assert {p.name for p in (inputs/'sh').glob('*.nii')} == {'S0.nii'}
+    metadata = json.loads((inputs/'sh/SH_shells.json').read_text())
+    output = nib.load(inputs/'sh/S0.nii').get_fdata()
+    assert output.shape == (2, 2, 1, 6)
+    for shell in metadata['shells']:
+        ids = np.isclose(np.tile(b*1000, 2), shell['b_value_s_per_mm2']) & (
+            np.repeat([60, 90], b.size) == shell['echo_time_ms'])
+        np.testing.assert_allclose(output[..., shell['volume']], data[..., ids].mean(axis=-1), atol=1e-7)
+
+
+@pytest.mark.parametrize('options,error', [
+    (['-SH', '-SMI'], 'Select either -SH'),
+    (['-SH', '-lmax', '3'], 'nonnegative even integer'),
+    (['-SH', '-lmax', '-2'], 'nonnegative even integer'),
+    (['-SH', '-lmax', 'no'], 'nonnegative even integer'),
+    (['-SH', '-RicianSH'], 'requires an explicit noise map'),
+])
+def test_cli_rejects_invalid_standalone_options(inputs, options, error):
+    result = run_cli(inputs, 'invalid', options)
+    assert result.returncode != 0
+    assert error in result.stdout

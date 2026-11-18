@@ -665,12 +665,13 @@ def save_params(paramDict, niiex, model, outdir, format="nifti"):
     """
     Save fitted parameter volumes as MIF or NIfTI files.
 
+    Pass model=None to use the parameter key without a model-name suffix.
     Existing output files are not overwritten.
     """
     os.makedirs(outdir, exist_ok=True)
 
     for key, volume in paramDict.items():
-        if "L" in key:
+        if "L" in key or model is None:
             outpath = os.path.join(outdir, f"{key}.mif")
         else:
             outpath = os.path.join(outdir, f"{key}_{model}.mif")

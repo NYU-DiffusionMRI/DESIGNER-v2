@@ -67,13 +67,21 @@ By default, if none of the below options are used, TMI will not estimate paramet
 
 ## Options for model estimation
 
+### `-SH`
+- Estimate signal rotational invariants without SMI model fitting or training priors. Use either `-SH` or `-SMI`.
+- Save separate `S0.nii`, `S2.nii`, ..., `S<lmax>.nii` files in original signal units. Each file is 4D, with one volume per acquisition shell, including a singleton volume dimension for a single shell.
+- `SH_shells.json` maps each zero-based volume index to its b-value (s/mm²), b-shape, echo time (ms), number of measurements, and fitted SH order. Shells are ordered by b-value, b-shape, then echo time.
+- `-lmax 6` fits through order 6 and saves S0, S2, S4, and S6. Without `-lmax`, use the existing automatic per-shell orders and save every fitted even order. Higher-order volumes are zero for shells fitted at a lower order; b=0 and isotropic shells retain their arithmetic means and zero higher orders.
+- A single diffusion shell is supported, including acquisitions without b=0. A requested fitting order must have enough independent directions in every directional shell; otherwise reduce `-lmax`.
+- LLS is the default and requires no noise map. Add `-RicianSH -sigma <noisemap>` for the same constrained Rician-expectation fit used by SMI. The existing SH normalization and rank-one processing across shells are retained; no microstructure regression is performed.
+
 ### `-SMI`
 - Perform estimation of the Standard Model of White Matter.
 - Use in conjunction with `-compartments`, `-sigma`, `-bshape`, and `-echo_time` options.
 - We recommend prior estimation of the noise level sigma using `designer` along with the `-denoise` option.
 
 ### `-RicianSH`
-- Use with `-SMI -sigma <noisemap>` to fit the underlying SH signal by nonlinear least squares with a Rician expected-magnitude observation model.
+- Use with either `-SH` or `-SMI`, plus `-sigma <noisemap>`, to fit the underlying SH signal by nonlinear least squares with a Rician expected-magnitude observation model.
 - The fitted signal must be nonnegative at acquired directions and on a 65,536-direction sphere grid. This constrains the signal, not each SH coefficient. Grid feasibility is not a continuous-sphere guarantee.
 - Initialize the nonlinear search from the linear SH fit to `sqrt(max(0, M²−sigma²))`. The nonlinear objective uses the original magnitude data; correction is used only for the starting coefficients.
 - Without this flag, SH estimation remains ordinary linear least squares, including when `-sigma` is supplied.
@@ -98,13 +106,12 @@ By default, if none of the below options are used, TMI will not estimate paramet
 - SMI training data should be [ Ntraining x 9], with each column being a model parameter: [f, Da, Depar, Deperp, fw, T2a, T2e, p2, p4]
 
 ### `-sigma <noisemap>`
-- Path to noise map for SMI parameter estimation. Required with `-RicianSH`; otherwise optional but recommended.
+- Path to noise map. Required with `-RicianSH` in either output mode; optional but recommended for SMI. Standalone `-SH` LLS does not need a noise map.
 - We recommend computing sigma prior to running `tmi` using `designer`.
 
-### `-lmax <lmax (0,2,4,6)>`
-- Value of L-max to use for SMI parameter estimation.
-- Reasonable values of L-max will be computed automatically if this option is not used.
-- L-max should be 0, 2, 4, or 6.
+### `-lmax <lmax>`
+- With `-SH`: a nonnegative even integer specifying the maximum SH fitting and output order, for example `-lmax 6`. The order applies to all directional diffusion shells; `-lmax 0` saves only S0. If omitted, fitting orders are selected automatically per shell.
+- With `-SMI`: the invariant order used for model regression (0, 2, 4, or 6). This retains the existing automatic per-shell SH fitting orders and SMI output format.
 
 ### `-bshape <beta1,beta2,...>`
 - Specify the b-shape used in the acquisition (comma separated list the same length as number of inputs).

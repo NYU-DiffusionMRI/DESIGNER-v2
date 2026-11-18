@@ -69,7 +69,7 @@ def test_cli_both_estimators(inputs, multi_te):
 
 
 @pytest.mark.parametrize('options, error', [
-    (['-RicianSH'], 'requires -SMI'),
+    (['-RicianSH'], 'requires -SH or -SMI'),
     (['-SMI','-RicianSH'], 'requires an explicit noise map'),
     (['-SMI','-RicianSH','-sigma','sigma.nii'], 'nonnegative')])
 def test_cli_errors(inputs, options, error):
@@ -80,9 +80,10 @@ def test_cli_errors(inputs, options, error):
     assert error in result.stdout
 
 
-def test_cli_rejects_misaligned_map(inputs):
+@pytest.mark.parametrize('mode', ['-SMI', '-SH'])
+def test_cli_rejects_misaligned_map(inputs, mode):
     affine=np.eye(4); affine[0,3]=10
     nib.save(nib.Nifti1Image(np.ones((2,2,1)),affine),inputs/'sigma.nii')
-    result=run_cli(inputs,'misaligned',['-SMI','-RicianSH','-sigma','sigma.nii'])
+    result=run_cli(inputs,'misaligned',[mode,'-RicianSH','-sigma','sigma.nii'])
     assert result.returncode != 0
     assert 'aligned to the DWI grid' in result.stdout

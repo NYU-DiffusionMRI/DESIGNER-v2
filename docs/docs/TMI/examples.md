@@ -140,3 +140,30 @@ tmi dwi.nii smi_linear -SMI -sigma sigma.nii -mask brain_mask.nii
 Both commands produce the same named SMI parameter and rotational-invariant maps.
 The flag changes only SMI's SH estimation, including the multi-TE/b-shape path;
 it does not change DTI/DKI fits requested in the same command.
+
+### Rotational invariants without SMI
+
+Fit through SH order 6 using the Rician expected magnitude and nonnegative
+signal constraints, without training or fitting the Standard Model:
+
+```bash
+tmi dwi.nii sh_rician -SH -RicianSH -lmax 6 \
+  -sigma sigma.nii -mask brain_mask.nii
+```
+
+This writes `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`. Each image contains one
+volume per shell; `SH_shells.json` provides the corresponding b-values,
+b-shapes, echo times, measurement counts, and fitted orders. No SMI parameter
+maps or combined `rotinvs_smi.nii` are generated.
+
+For the linear fit, no noise map is required:
+
+```bash
+tmi dwi.nii sh_linear -SH -lmax 6 -mask brain_mask.nii
+```
+
+Omit `-lmax` to use automatic per-shell SH orders, or use `-lmax 0` to save
+only S0. The requested order must be supported by the directions in each
+diffusion shell. A single shell without b=0 is supported. For multi-TE or
+multi-b-shape data, use the same acquisition metadata options as for SMI.
+Choose either `-SH` or `-SMI` in a command.

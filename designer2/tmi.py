@@ -242,12 +242,13 @@ def usage(cmdline): #pylint: disable=unused-variable
     dki_options.add_argument('-thresh_criteria', metavar=('<criteria>'),help='outlier percent improvement iteration threshold, default: 0.05')
 #=======================================tmi d-b0restore======================================
 
-    smi_options = cmdline.add_argument_group('tensor options for the TMI script')
+    smi_options = cmdline.add_argument_group('spherical harmonic and SMI options')
+    smi_options.add_argument('-SH', action='store_true', help='Fit spherical harmonics and save S0.nii, S2.nii, ..., through -lmax, without SMI model fitting. Each file contains one volume per shell; SH_shells.json identifies the volumes. Default estimator: LLS.')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
-    smi_options.add_argument('-RicianSH', action='store_true', help='Fit SMI spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SMI and -sigma). Default: linear least squares.')
-    smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map for SMI parameter estimation')
-    smi_options.add_argument('-lmax', metavar=('<lmax>'),help='lmax for SMI polynomial regression. must be 0,2,4, or 6.')
+    smi_options.add_argument('-RicianSH', action='store_true', help='Fit spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SH or -SMI, and -sigma). Default: linear least squares.')
+    smi_options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH, optional for SMI parameter estimation')
+    smi_options.add_argument('-lmax', metavar=('<lmax>'),help='With -SH: maximum even SH fitting/output order (0,2,4,...); default is automatic per shell. With -SMI: invariant order for polynomial regression (0,2,4,6), retaining automatic SH fitting orders.')
     smi_options.add_argument('-load_prior', metavar=('<prior>'),help='user input training prior for SMI fit')
     smi_options.add_argument('-select_prior', metavar=('<prior>'),help='user wants to specified a training prior for SMI fit (options: SMI_Gaussian_noFWPrior.mat, SMI_Gaussian_wFWPrior.mat, SMI_Uniform_noFWPrior.mat, SMI_Uniform_wFWPrior.mat)')
     smi_options.add_argument('-smi_fw_thres', metavar=(''), type=float, default=0.2, help='Free-water threshold used by the SMI two-step free-water fit. Only used when FW is included in -compartments. Default=0.2.')
@@ -273,15 +274,45 @@ def usage(cmdline): #pylint: disable=unused-variable
 
 logger = None
 
+
+def _load_sigma_map(filename, reference, spatial_shape, rician=False):
+    """Load the shared SH/SMI noise input and check Rician image geometry."""
+    from mrtrix3 import MRtrixError
+    if not filename:
+        return None
+    filename = path.from_user(filename)
+    if not filename.endswith('.mif'):
+        run.command('mrconvert %s sigma.mif -force' % filename, show=False)
+        filename = 'sigma.mif'
+    sigma_image = load_mrtrix(filename)
+    sigma = sigma_image.data
+    if rician:
+        if (not np.allclose(sigma_image.vox[:3], reference.vox[:3], rtol=1e-5, atol=1e-5)
+            or not np.allclose(sigma_image.transform, reference.transform, rtol=1e-5, atol=1e-4)):
+            raise MRtrixError("-RicianSH sigma map must be aligned to the DWI grid")
+        sigma = _ensure_spatial_map_3d(sigma, spatial_shape, name="sigma")
+    return sigma
+
+
 def execute(): #pylint: disable=unused-variable
     from mrtrix3 import app, path, run, MRtrixError #pylint: disable=no-name-in-module, import-outside-toplevel
     import lib.tensor as tensor
     import numpy as np
     import pandas as pd
 
+    if app.ARGS.SH and app.ARGS.SMI:
+        raise MRtrixError("Select either -SH for invariants only or -SMI for model fitting")
+    sh_lmax = None
+    if app.ARGS.SH and app.ARGS.lmax is not None:
+        try:
+            sh_lmax = int(app.ARGS.lmax)
+        except ValueError:
+            raise MRtrixError("SH -lmax must be a nonnegative even integer")
+        if sh_lmax < 0 or sh_lmax % 2:
+            raise MRtrixError("SH -lmax must be a nonnegative even integer")
     if app.ARGS.RicianSH:
-        if not app.ARGS.SMI:
-            raise MRtrixError("-RicianSH requires -SMI")
+        if not (app.ARGS.SMI or app.ARGS.SH):
+            raise MRtrixError("-RicianSH requires -SH or -SMI")
         if not app.ARGS.sigma:
             raise MRtrixError("-RicianSH requires an explicit noise map via -sigma")
 
@@ -1639,6 +1670,30 @@ def execute(): #pylint: disable=unused-variable
     #     params_wmti['axd'] = dki_micro_fit.axonal_diffusivity
     #     save_params(params_wmti, nii, model='wmti', outdir=outdir)
 
+    if app.ARGS.SH:
+        from lib.sh import fit_rotational_invariants
+        logger.info("SH estimator: %s", "Rician expectation NLS with nonnegative signal constraints"
+                    if app.ARGS.RicianSH else "linear least squares")
+        sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, app.ARGS.RicianSH)
+        echo_times = np.array(dwi_metadata['echo_time_per_volume'], dtype=float, copy=True)
+        if 0 < np.min(echo_times) < 1:
+            echo_times *= 1000
+        images, shells = fit_rotational_invariants(
+            dwi_orig if multi_te_beta else dwi,
+            bval_orig if multi_te_beta else bval,
+            bvec_orig if multi_te_beta else bvec,
+            mask=mask, sigma=sigma, lmax=sh_lmax,
+            beta=dwi_metadata['bshape_per_volume'], echo_time=echo_times,
+            rician=app.ARGS.RicianSH)
+        save_params(images, mif, model=None, outdir=outdir)
+        with open(os.path.join(outdir, 'SH_shells.json'), 'w') as stream:
+            json.dump(dict(estimator='RicianSH' if app.ARGS.RicianSH else 'LLS',
+                           normalization='Sl = norm(c_lm) / sqrt((2*l+1)*4*pi); '
+                                         'orthonormal SH, original signal units',
+                           rank_one_processing=True, shells=shells), stream, indent=2)
+        logger.info("SH rotational invariants saved; no SMI model fit requested.",
+                    extra={"outputs": list(images), "shells": shells})
+
     if app.ARGS.SMI:
         from lib.smi import SMI
         import warnings
@@ -1662,21 +1717,7 @@ def execute(): #pylint: disable=unused-variable
 
             if not app.ARGS.sigma:
                 logger.warning("No sigma map provided. SMI may be poorly conditioned.")
-                sigma = None
-            else:
-                if not path.from_user(app.ARGS.sigma).endswith('.mif'):
-                    run.command('mrconvert %s sigma.mif -force' % path.from_user(app.ARGS.sigma), show=False) 
-                    sigma_image = load_mrtrix('sigma.mif')
-                    sigma = sigma_image.data
-                else:
-                    sigma_image = load_mrtrix(path.from_user(app.ARGS.sigma))
-                    sigma = sigma_image.data
-
-            if app.ARGS.RicianSH:
-                if (not np.allclose(sigma_image.vox[:3], mif.vox[:3], rtol=1e-5, atol=1e-5)
-                    or not np.allclose(sigma_image.transform, mif.transform, rtol=1e-5, atol=1e-4)):
-                    raise MRtrixError("-RicianSH sigma map must be aligned to the DWI grid")
-                sigma = _ensure_spatial_map_3d(sigma, mask.shape, name="sigma")
+            sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, app.ARGS.RicianSH)
             logger.info("SMI SH estimator: %s", "Rician expectation NLS with nonnegative signal constraints" if app.ARGS.RicianSH else "linear least squares")
 
             if app.ARGS.compartments:
