@@ -279,27 +279,30 @@ outputs also apply to this mode.
 
 ### Clipped correction for DTI and DKI
 
-`-RicianClip` also corrects the input to `-DTI`, `-DKI` and `-WDKI` using
-`sqrt(max(0, M²−sigma²))` before their existing tensor fits. It requires the
-same aligned noise map and applies once to the selected measurements,
+Either `-RicianClip` or `-RicianSH` corrects the input to `-DTI`, `-DKI` and
+`-WDKI` using `sqrt(max(0, M²−sigma²))` before their existing tensor fits. Both
+require the same aligned noise map. The correction applies once to the selected measurements,
 including b=0, in each echo-time/LTE subset. Tensor fitting constraints and
 GNC handling are unchanged. Clipped zeros use the tensor fitter's existing
 positive floor before taking logarithms; low-SNR estimates can still be biased.
+Measurements clipped to zero can destabilize log-domain fitting and produce
+large parameter outliers, particularly with unconstrained tensor fits.
 
 | Flags | DTI/DKI/WDKI input | SH/SMI estimator |
 |---|---|---|
 | Neither correction flag | Original magnitudes | Ordinary LLS |
 | `-RicianClip` | Clipped-corrected magnitudes | Clipped-corrected LLS with signal nonnegativity |
-| `-RicianSH` | Original magnitudes | Rician expectation with signal nonnegativity |
+| `-RicianSH` | Clipped-corrected magnitudes | Rician expectation with signal nonnegativity, using original magnitudes |
 | Both flags | Clipped-corrected magnitudes | Rician expectation with signal nonnegativity, using original magnitudes |
 
-`-RicianSH` requires `-SH` or `-SMI`. Its precedence applies only to the SH
-stage; it never disables the clipped correction requested for tensor fitting.
-For example:
+`-RicianSH` can also be used with tensor fitting alone, where it is equivalent
+to `-RicianClip`. In a combined tensor/SH or tensor/SMI run, `-RicianSH` selects
+the expected Rician magnitude model for SH and clipped correction for tensors.
+There is no need to specify both flags. For example:
 
 ```bash
 tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii
-tmi dwi.nii combined -DTI -DKI -SH -RicianClip -RicianSH -sigma sigma.nii
+tmi dwi.nii combined -DTI -DKI -SH -RicianSH -sigma sigma.nii
 ```
 
 Tensor inputs are corrected separately so a combined run does not correct

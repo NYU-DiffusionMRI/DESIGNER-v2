@@ -72,7 +72,7 @@ def test_cli_both_estimators(inputs, multi_te):
 
 
 @pytest.mark.parametrize('options, error', [
-    (['-RicianSH'], 'requires -SH or -SMI'),
+    (['-RicianSH'], 'requires -DTI, -DKI, -WDKI, -SH or -SMI'),
     (['-SMI','-RicianSH'], 'requires an explicit noise map'),
     (['-SMI','-RicianSH','-sigma','sigma.nii'], 'nonnegative')])
 def test_cli_errors(inputs, options, error):

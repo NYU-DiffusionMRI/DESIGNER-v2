@@ -187,8 +187,10 @@ are set with `-lmaxSH`, as for the other estimators.
 tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii
 
 # Clipped correction for tensors; Rician expectation + nonnegativity for SH
-tmi dwi.nii combined -DTI -DKI -SH -RicianClip -RicianSH -sigma sigma.nii
+tmi dwi.nii combined -DTI -DKI -SH -RicianSH -sigma sigma.nii
 ```
 
-With both flags, the SH stage uses original magnitudes, so the input is not
-corrected twice. Replace `-SH` with `-SMI` to include Standard Model fitting.
+`-RicianSH` alone enables clipped correction for tensors and keeps original
+magnitudes for the SH expectation fit. Adding `-RicianClip` is unnecessary
+and does not correct the data twice. With tensor fitting alone, the two flags
+are equivalent. Replace `-SH` with `-SMI` to include Standard Model fitting.

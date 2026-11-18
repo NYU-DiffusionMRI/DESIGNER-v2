@@ -21,7 +21,8 @@ def compare_maps(first, second, names=None):
 
 
 @pytest.mark.parametrize('multi_te,gnc', [(False, False), (True, False), (False, True)])
-def test_tensor_clipping_matches_explicitly_corrected_input(inputs, multi_te, gnc):
+@pytest.mark.parametrize('estimator', ['-RicianClip', '-RicianSH'])
+def test_tensor_clipping_matches_explicitly_corrected_input(inputs, multi_te, gnc, estimator):
     image = nib.load(inputs/'dwi.nii')
     data = image.get_fdata()
     if multi_te:
@@ -36,7 +37,7 @@ def test_tensor_clipping_matches_explicitly_corrected_input(inputs, multi_te, gn
         field = np.broadcast_to(np.diag([.95, 1.03, 1.01]).ravel(), (2, 2, 1, 9))
         nib.save(nib.Nifti1Image(field, image.affine), inputs/'gnc.nii')
         options += ['-gnc', 'gnc.nii', '-gnc_format', 'scanner']
-    flagged = run_cli(inputs, 'flagged', options+['-RicianClip', '-sigma', 'sigma.nii'])
+    flagged = run_cli(inputs, 'flagged', options+[estimator, '-sigma', 'sigma.nii'])
     assert flagged.returncode == 0, flagged.stdout
     sigma = nib.load(inputs/'sigma.nii').get_fdata()
     corrected = np.sqrt(np.maximum(0, data**2 - sigma[..., None]**2))
@@ -57,7 +58,12 @@ def test_both_flags_correct_tensors_but_use_raw_rician_sh(inputs):
     tensor_names = [p.name for p in (inputs/'clip').glob('*.nii')
                     if p.name not in ['S0.nii', 'S2.nii', 'S4.nii']]
     compare_maps(inputs/'both', inputs/'clip', tensor_names)
+    compare_maps(inputs/'rician', inputs/'clip', tensor_names)
     compare_maps(inputs/'both', inputs/'rician', ['S0.nii', 'S2.nii', 'S4.nii'])
+    standalone = run_cli(inputs, 'sh_only', ['-SH', '-RicianSH', '-lmaxSH', '0,2,4',
+                                           '-mask', 'mask.nii', '-sigma', 'sigma.nii'])
+    assert standalone.returncode == 0, standalone.stdout
+    compare_maps(inputs/'rician', inputs/'sh_only', ['S0.nii', 'S2.nii', 'S4.nii'])
     assert json.loads((inputs/'both/SH_shells.json').read_text())['estimator'] == 'RicianSH'
     assert not np.allclose(nib.load(inputs/'clip/S0.nii').get_fdata(),
                            nib.load(inputs/'rician/S0.nii').get_fdata())
@@ -98,7 +104,7 @@ def test_clipping_is_not_repeated_after_b0_restoration(inputs, multi_te):
 
 @pytest.mark.parametrize('options,error', [
     (['-DTI', '-RicianClip'], 'requires an explicit noise map'),
-    (['-DKI', '-RicianClip', '-RicianSH', '-sigma', 'sigma.nii'], 'requires -SH or -SMI'),
+    (['-DKI', '-RicianSH'], 'requires an explicit noise map'),
     (['-DTI', '-RicianClip', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '5'], 'with -SH/-SMI'),
 ])
 def test_invalid_tensor_correction_options(inputs, options, error):

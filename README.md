@@ -55,9 +55,11 @@ The noise map must match the DWI grid and intensity scale. Omitting both correct
 Alternatively, `-RicianClip -sigma sigma.nii` fits
 `sqrt(max(0, M²−sigma²))` with the same signal nonnegativity constraint,
 in either `-SH` or `-SMI` mode. It also corrects input magnitudes for
-`-DTI`, `-DKI` and `-WDKI`, including b0. If both flags are given,
-`-RicianSH` takes precedence for SH/SMI only, using original magnitudes;
-tensor fits still receive clipped correction. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
+`-DTI`, `-DKI` and `-WDKI`, including b0. `-RicianSH` automatically applies
+that same clipped correction to tensor inputs, so a combined tensor/SH run
+needs only `-RicianSH`. If both flags are given, `-RicianSH` takes precedence
+for SH/SMI, using original magnitudes; tensor fits receive clipped correction
+once. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
 for assumptions and limitations.
 
 To estimate only signal rotational invariants, without SMI model fitting:

@@ -246,7 +246,7 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-SH', action='store_true', help='Fit spherical harmonics and save S0.nii, S2.nii, ..., through -lmaxSH, without SMI model fitting. Each file contains one volume per shell; SH_shells.json identifies the volumes. Default estimator: LLS.')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
-    smi_options.add_argument('-RicianSH', action='store_true', help='Fit spherical harmonics with the Rician expected magnitude and a nonnegative signal on acquired directions and a dense sphere grid (requires -SH or -SMI, and -sigma). Overrides -RicianClip for SH/SMI only. Default: linear least squares.')
+    smi_options.add_argument('-RicianSH', action='store_true', help='Use Rician expectation with signal nonnegativity for SH/SMI, and clipped magnitude correction for DTI/DKI/WDKI. Requires -sigma and a fitting mode. Overrides -RicianClip for SH/SMI; specifying both flags is unnecessary.')
     options.add_argument('-RicianClip', action='store_true', help='Correct DTI/DKI/WDKI inputs using sqrt(max(0, M^2-sigma^2)); for SH/SMI use clipped corrected LLS with signal nonnegativity. Requires -sigma. -RicianSH overrides this option for SH/SMI only.')
     smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianSH or -RicianClip. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
     options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianSH or -RicianClip, optional for SMI parameter estimation')
@@ -354,10 +354,8 @@ def execute(): #pylint: disable=unused-variable
                       if app.ARGS.RicianSH else
                       'clipped corrected LLS with nonnegative signal constraints'
                       if app.ARGS.RicianClip else 'linear least squares')
-    if app.ARGS.RicianSH and not sh_requested:
-        raise MRtrixError("-RicianSH requires -SH or -SMI")
-    if app.ARGS.RicianClip and not (tensor_requested or sh_requested):
-        raise MRtrixError("-RicianClip requires -DTI, -DKI, -WDKI, -SH or -SMI")
+    if constrained_sh and not (tensor_requested or sh_requested):
+        raise MRtrixError(f"-{sh_estimator} requires -DTI, -DKI, -WDKI, -SH or -SMI")
     if constrained_sh:
         if not app.ARGS.sigma:
             raise MRtrixError(f"-{sh_estimator} requires an explicit noise map via -sigma")
@@ -539,13 +537,13 @@ def execute(): #pylint: disable=unused-variable
             "mask_shape": mask.shape})
 
     clip_sigma = None
-    if app.ARGS.RicianClip:
+    if constrained_sh:
         from lib.rician_sh import clipped_magnitude
         clip_sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, rician=True)
         if not np.all(np.isfinite(clip_sigma[mask])) or np.any(clip_sigma[mask] < 0):
-            raise MRtrixError("-RicianClip sigma must be finite and nonnegative inside the mask")
+            raise MRtrixError(f"-{sh_estimator} sigma must be finite and nonnegative inside the mask")
         if not np.all(np.isfinite(dwi[mask])):
-            raise MRtrixError("-RicianClip requires finite magnitude DWI inside the mask")
+            raise MRtrixError(f"-{sh_estimator} requires finite magnitude DWI inside the mask")
         if tensor_requested:
             logger.info("DTI/DKI input correction: sqrt(max(0, M^2-sigma^2)), "
                         "including b0; existing tensor fit constraints are unchanged.")

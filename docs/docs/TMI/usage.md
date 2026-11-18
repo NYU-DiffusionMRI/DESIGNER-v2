@@ -97,7 +97,9 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - We recommend prior estimation of the noise level sigma using `designer` along with the `-denoise` option.
 
 ### `-RicianSH`
-- Use with either `-SH` or `-SMI`, plus `-sigma <noisemap>`, to fit the underlying SH signal by nonlinear least squares with a Rician expected-magnitude observation model. This overrides `-RicianClip` for SH/SMI only, using original magnitudes; DTI/DKI still receives clipped correction if requested.
+- Requires `-sigma <noisemap>` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`.
+- With `-SH` or `-SMI`, fit the underlying SH signal by nonlinear least squares with a Rician expected-magnitude observation model. This overrides `-RicianClip` for SH/SMI, using original magnitudes.
+- With `-DTI`, `-DKI` or `-WDKI`, automatically apply the same clipped correction as `-RicianClip`, including b0, before the existing tensor fit. A combined tensor/SH or tensor/SMI run needs only `-RicianSH`; adding `-RicianClip` is redundant and does not correct the data twice. The tensor stage does not fit a Rician-expectation model.
 - The fitted signal must be nonnegative at acquired directions and on a 65,536-direction sphere grid. This constrains the signal, not each SH coefficient. Grid feasibility is not a continuous-sphere guarantee.
 - Initialize the nonlinear search from the linear SH fit to `sqrt(max(0, M²−sigma²))`. The nonlinear objective uses the original magnitude data; correction is used only for the starting coefficients.
 - Without either `-RicianSH` or `-RicianClip`, SH estimation remains ordinary linear least squares, including when `-sigma` is supplied.
@@ -111,11 +113,12 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 
 - Requires `-sigma <noisemap>` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`.
 - For DTI/DKI/WDKI, apply `sqrt(max(0, M²−sigma²))` once to selected measurements, including b0, before the existing tensor fit. Tensor constraints and GNC are unchanged; clipped zeros use the existing positive log floor.
+- Clipped zeros can destabilize the log-domain tensor fit and produce large parameter outliers, particularly without tensor constraints.
 - For SH/SMI, select clipped correction followed by linear least squares with signal nonnegativity.
 - In the SH stage, fit `sqrt(max(0, M²−sigma²))` as the target using constrained linear least squares. This subtracts one `sigma²` and does not evaluate the Rician expectation.
 - SH processing uses the same `-n_cores` workers as `-RicianSH`; tensor fits retain their existing parallel processing.
 - For SH/SMI, enforce the same signal nonnegativity constraint on acquired directions and the 65,536-direction sphere grid. Already feasible clipped-LLS fits are retained exactly.
-- If `-RicianSH` is also supplied, it takes precedence for SH/SMI, using original magnitudes and signal nonnegativity. It does not disable clipped correction for DTI/DKI. Use uncorrected magnitude input and an aligned noise map in matching units.
+- If `-RicianSH` is also supplied, it takes precedence for SH/SMI, using original magnitudes and signal nonnegativity. Either flag enables the same clipped correction for DTI/DKI/WDKI. Use uncorrected magnitude input and an aligned noise map in matching units.
 - In SH/SMI, raw b=0/isotropic means, rank-one processing across shells, and downstream SMI regression are retained. This approximate correction is not an unbiasedness guarantee.
 - `-RicianSH_maxiter N` and its diagnostic outputs apply to SH/SMI constrained refinement with either correction flag; they do not cap DTI/DKI fits. See [clipped correction]({% link docs/TMI/SMI.md %}#clipped-correction-with-a-nonnegative-signal).
 
