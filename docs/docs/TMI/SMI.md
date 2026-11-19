@@ -215,132 +215,99 @@ First, the rotational invariants of the diffusion signal are estimated. By defau
 
 ### Rician bias expectation correction with a nonnegative signal
 
-With `tmi -SMI -RicianExp -sigma sigma.nii`, the SH fit instead minimizes
+Both `-SH -RicianExp` and `-SMI -RicianExp` fit the expected Rician magnitude:
 
-$$\sum_i \left(\mathbb{E}[M_i \mid (Yc)_i,\sigma] - M_i\right)^2,$$
+$$
+\widehat c=\arg\min_c\sum_i
+\left[\mu_R((Yc)_i,\sigma)-M_i\right]^2,
+\qquad Y_{\mathrm{grid}}c\geq0.
+$$
 
-where `Yc` is the underlying SH signal, `M` is the measured magnitude, and `sigma` is the standard deviation of each Gaussian component before magnitude reconstruction. The underlying signal is constrained to be nonnegative at all acquired directions and on a deterministic 65,536-direction sphere grid. These are linear constraints on the SH coefficients, not clipping of measurements or individual coefficients. A finite grid does not certify nonnegativity everywhere on the continuous sphere.
+Here $Yc$ is the underlying SH signal and $\mu_R$ is the Rician mean.
+Nonnegativity is checked at acquired directions and on a deterministic
+65,536-direction sphere grid. The constraint applies to signal values, not
+individual coefficients; a finite grid does not guarantee nonnegativity
+everywhere on the sphere.
 
-Every nonlinear fit starts from the ordinary linear SH fit to `sqrt(max(0, M²−sigma²))`. The clipping sets negative values of the squared difference to zero before taking the square root. This correction is used only to initialize the coefficients; the nonlinear objective still uses the original magnitude measurements. The SH projection of corrected measurements can itself have negative lobes, so the constrained solver accepts an initially infeasible coefficient vector rather than shifting that starting estimate.
+Every nonlinear search starts from ordinary LLS on
+$\sqrt{\max(0,M^2-\sigma^2)}$, including retries. The objective uses original
+observations, preserving negative values after denoising. An initially
+infeasible SH projection is accepted without shifting its starting coefficients.
 
-The Rician mean is evaluated using scaled modified Bessel functions and an analytic Jacobian. A batched Levenberg–Marquardt fit, with SciPy refinement where necessary, is retained when it already satisfies the constraints. Otherwise, SLSQP starts from the same corrected-LLS coefficients. Its objective is multiplied by a positive scalar based on the SH design matrix, with the stopping tolerance scaled consistently; this preserves the fitted objective and reduces overshooting into spurious zero stationary points. Constraint generation adds the worst violated directions until the entire dense grid is feasible. An all-zero stationary solution is retried with a trust-region solver from those same corrected-LLS coefficients, because the Rician derivative vanishes at zero even when that point is not a minimum. If constrained optimization does not converge, a warning is issued and the best grid-feasible coefficients are returned. The constraint applies to the per-shell signal fit; the existing subsequent rank-one processing of higher-order invariants is unchanged and does not alter S0.
+The solver uses an analytic Jacobian, batched fitting and constrained refinement
+when needed. Violated grid directions are added until the full grid is feasible;
+a trust-region restart handles spurious zero stationary solutions. If refinement
+fails, the best grid-feasible estimate is returned with a warning. At
+$\sigma=0$, the fit reduces to constrained LLS.
 
-This extends the Rician-expectation approach from S. Coelho's SHestimation with signal nonnegativity, retaining TMI's SH normalization, phase, shell grouping, and rank-one processing of invariants. The constraint prevents signed angular lobes from fitting positive magnitudes through the even Rician mean function. As in that reference, b=0 and isotropic-shell means remain unchanged. This is a fit of the expected magnitude, not a maximum-likelihood estimator or an unbiasedness guarantee. The downstream SMI regression and its noise training model remain unchanged; their statistical bias may persist, especially at low SNR.
-
-Use a finite, nonnegative noise map aligned to the DWI in the same intensity units. At zero noise, the estimator reduces to linear least squares with the same signal constraints; already feasible linear coefficients are retained exactly. The option is intended for magnitude data that retain a Rician noise floor, not data already corrected with `designer -rician` or complex/phase-unwound denoising. When denoising reduces residual variance but retains the original Rician mean bias, keep the original sigma for this mean model, not the reduced residual SD. Match any signal rescaling and spatial alignment; other preprocessing may change the mean model itself.
-
-The same expectation model, clipped-LLS initialization, and nonnegativity
-constraint are used by `-SH -RicianExp`. In that mode, processing stops after
-the signal rotational invariants have been saved.
-Expectation fitting preserves occasional negative observations after denoising;
-the nonnegativity constraint applies to the fitted signal, not the noisy observations.
-
-For difficult fits, `-RicianSH_maxiter N` optionally caps the cumulative
-constrained-refinement iterations per voxel and shell, including restarts
-and constraint-generation rounds. The fast initial batched fit retains its
-standard limit. Without this option, the existing solver limits are unchanged.
-At the cap, the best grid-feasible coefficients are returned with a warning;
-an early-stopped fit is not a convergence guarantee. Very small limits can
-change the estimates substantially, even with clipped-LLS initialization,
-because the initial SH signal need not satisfy nonnegativity.
-
-When this option is supplied, both `-SH` and `-SMI` also save
-`RicianSH_early_stop.nii`, `RicianSH_iterations.nii`, and
-`RicianSH_nonconverged.nii`. Each volume describes one shell before rank-one
-processing. Zero iterations means no constrained refinement was needed;
-b=0 and isotropic shells also have zero counts. `RicianSH_diagnostics.json`
-identifies the shells, iteration cap, and per-shell counts. The early-stop
-mask marks cap exhaustion; the nonconverged mask also includes other failures
-of constrained refinement. These diagnostics do not describe convergence of
-the initial batched fit, whose existing warnings remain separate.
+Supply an aligned `-sigma` map in matching signal units. Use the original noise
+level responsible for the retained magnitude bias, even after denoising reduces
+variance. See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for assumptions
+and the comparison with clipping. Expectation fitting is a mean fit, not a
+likelihood fit or an unbiasedness guarantee.
 
 ### Clipped correction with a nonnegative signal
 
-Choose `-RicianClipMax` or `-RicianClipAbs`, with `-sigma sigma.nii`, in either
-`-SH` or `-SMI` mode to fit
+Choose either `-RicianClipMax` or `-RicianClipAbs`, with `-sigma`, to fit
 
-$$\min_c \sum_i ((Yc)_i-\widetilde M_i)^2,\qquad
-Y_{\rm grid}c\geq0.$$
+$$
+\widehat c=\arg\min_c\sum_i\left[(Yc)_i-\widetilde M_i\right]^2,
+\qquad Y_{\mathrm{grid}}c\geq0,
+$$
 
-The fitting target is `sqrt(max(0, M²−sigma²))` with `-RicianClipMax`, or
-`sqrt(abs(M²−sigma²))` with `-RicianClipAbs`.
+where the corrected measurements are
 
-The corrected magnitudes are the fitting target, rather than only the
-initialization. This is a convex constrained linear least-squares problem;
-it does not evaluate the expected Rician magnitude. Both formulas subtract
-**one** `sigma²`. Max-zero sets negative squared differences to zero; absolute
-value reflects them upward. Both are approximate corrections, not unbiasedness
-guarantees. SH fitting has no logarithm, so zeros do not have the same numerical
-effect as in log-domain tensor fitting. Users choose the formula explicitly;
-the two clipping flags cannot be combined.
+$$
+\widetilde M_i=
+\begin{cases}
+\sqrt{\max(0,M_i^2-\sigma^2)},&\texttt{-RicianClipMax},\\[6pt]
+\sqrt{\lvert M_i^2-\sigma^2\rvert},&\texttt{-RicianClipAbs}.
+\end{cases}
+$$
 
-The same acquired directions and 65,536-direction sphere grid enforce
-nonnegativity. If the ordinary SH fit to the clipped data is already feasible,
-its coefficients are retained exactly. Otherwise, constrained refinement
-starts from those coefficients. The existing b=0 and isotropic-shell raw
-arithmetic means, SH normalization, cross-shell rank-one processing and SMI
-regression remain unchanged. Nonnegativity is enforced before rank-one
-processing, as for `-RicianExp`.
+This is constrained linear least squares on the corrected data. Feasible LLS
+coefficients are retained exactly; otherwise they initialize refinement on
+the same nonnegativity grid. SH fits in signal space, so corrected zeros do
+not require a logarithm floor.
 
-Use uncorrected magnitude data and a matching noise map; do not apply the
-correction to the input yourself. When `-RicianExp` and either clipping flag
-are supplied, SH/SMI uses Rician-expectation fitting on the original
-magnitudes, with nonnegativity; it does not fit the expectation to
-already-corrected data. Expectation initialization always remains max-zero LLS.
-The optional `-RicianSH_maxiter` cap and its diagnostic outputs apply to both
-clipping choices.
+The clipping flags cannot be combined. `-RicianExp` overrides either and
+always retains max-zero LLS initialization. All corrected SH estimators
+preserve raw b0/isotropic-shell means, basis normalization and SMI regression.
+Nonnegativity is enforced before cross-shell rank-one processing of higher
+orders; $S_0$ is not rank-one processed.
+
+### Iteration limits and diagnostics
+
+`-RicianSH_maxiter N` caps cumulative constrained-refinement iterations per
+voxel and shell, including restarts. The initial batched fit retains its
+standard limit. At the cap, the best grid-feasible fit is returned with a
+warning; very small caps can change estimates substantially.
+
+When a cap is supplied, `-SH` and `-SMI` save:
+
+- `RicianSH_early_stop.nii`: refinement reached the cap.
+- `RicianSH_iterations.nii`: cumulative refinement iterations.
+- `RicianSH_nonconverged.nii`: cap exhaustion or other refinement failure.
+- `RicianSH_diagnostics.json`: shell metadata and counts.
+
+Each image volume describes one shell before rank-one processing. Zero
+iterations means no refinement was needed, including b0/isotropic shells.
+These diagnostics do not describe the initial batched fit's convergence.
 
 ### The same correction choices for DTI and DKI
 
-All three correction flags also apply to `-DTI`, `-DKI` and `-WDKI`, including
-in combined runs. All require an aligned original sigma map in matching signal units.
-
-| Flags | DTI/DKI/WDKI estimator | SH/SMI estimator |
-|---|---|---|
-| None | Existing WLLS on original magnitudes | Ordinary LLS |
-| `-RicianClipMax` | Existing tensor pipeline on max-zero corrected measurements | Max-zero corrected LLS with signal nonnegativity |
-| `-RicianClipAbs` | Existing tensor pipeline on absolute-value corrected measurements | Absolute-value corrected LLS with signal nonnegativity |
-| `-RicianExp` | Unconstrained Rician-mean NLLS on original observations | Rician expectation with signal nonnegativity |
-| `-RicianExp` plus either clipping flag | Same as `-RicianExp` | Same as `-RicianExp` |
-
-Both clipping choices correct selected tensor measurements once, including b0,
-and allow the other tensor settings: constraints, AKC handling, smoothing,
-polynomial regression, b0 restoration and GNC. In particular, `-db0restore`
-and `-akc_outliers` can be used together with either clipping flag. Corrected
-zeros use the existing positive log floor and can destabilize log-domain fits.
-
-`-RicianExp` starts tensor NLLS from clipped ordinary LLS and ignores tensor
-constraints and AKC replacement. It supports GNC and multi-TE subsets.
-Expectation fitting with b0 restoration, fit smoothing, polynomial regression
-or external tensors is deferred and produces an explicit error. These
-restrictions do not apply to either clipping choice.
-
-```bash
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClipMax -sigma sigma.nii
-tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
-tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
-```
-
-The tensor expectation model handles b0 observations through the same Rician
-mean as the other measurements. SH/SMI retain their raw arithmetic
-b0/isotropic-shell mean convention. See [tensor correction details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options)
-for equations, diagnostics and supported combinations.
+All three flags also apply to DTI/DKI/WDKI. Both clipping choices retain
+existing tensor settings, including `-db0restore -akc_outliers` together.
+Tensor expectation fitting is unconstrained, ignores AKC and does not yet
+support b0 restoration or spatial refinements. Unlike SH/SMI, tensor correction
+includes b0. See [tensor details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options).
 
 ### Processing time and parallel workers
 
-All corrected SH estimators use `-n_cores` to fit independent voxel
-blocks in parallel. For example, add `-n_cores 8` to use eight worker processes,
-or `-n_cores 1` for serial fitting. The default follows TMI's available-cores
-minus two convention. Each worker uses one BLAS thread to avoid multiplying
-threads across workers. Parallelization leaves the fitting objective,
-initialization, dense nonnegativity grid and cross-shell rank-one step unchanged.
-
-Clipped correction solves a constrained linear problem and is generally
-faster than Rician-expectation fitting. Runtime depends on voxel count, angular
-order, SNR, active constraints, hardware and competing jobs; a short iteration
-cap is not a substitute for convergence. A full dense-grid feasibility check
-is retained even though each constrained subproblem starts with fewer grid
-rows and adds violated constraints as needed.
+Use `-n_cores` for independent voxel blocks, with one BLAS thread per worker.
+Clipping is generally faster than expectation fitting; runtime depends on voxel
+count, SH order, SNR and active constraints. Parallelization retains the same
+objective, initialization, dense-grid check and rank-one processing.
 
 ### Standard Model parameter fitting
 

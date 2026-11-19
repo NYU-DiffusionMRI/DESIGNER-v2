@@ -52,75 +52,46 @@ KT volumes 12-14: $W_{1123},W_{1223},W_{1233}$.
 
 ### Rician correction options
 
-See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for the rationale and comparison of all alternatives.
-
-All correction choices require an aligned 3D `-sigma` map in matching signal
-units. With no correction flag, TMI retains its existing WLLS tensor fit.
+All options require an aligned `-sigma` map. See [Rician bias]({% link docs/TMI/Rician-bias.md %})
+for noise assumptions and correction tradeoffs. Without a correction flag,
+tensor fitting retains WLLS.
 
 | Option | DTI/DKI/WDKI estimation |
 |---|---|
-| `-RicianClipMax` | Apply `sqrt(max(0, M²−sigma²))` once, including b0, then use the existing tensor pipeline |
-| `-RicianClipAbs` | Apply `sqrt(abs(M²−sigma²))` once, including b0, then use the existing tensor pipeline |
-| `-RicianExp` | Fit the expected Rician magnitude to the original measurements by unconstrained nonlinear least squares |
+| `-RicianClipMax` | Correct with $\sqrt{\max(0,M^2-\sigma^2)}$, then use the existing fit |
+| `-RicianClipAbs` | Correct with $\sqrt{\lvert M^2-\sigma^2\rvert}$, then use the existing fit |
+| `-RicianExp` | Fit the expected Rician magnitude by unconstrained NLLS |
 
-Both clipping choices are input preprocessing and can be combined with the existing
-tensor constraints, AKC handling, fit smoothing, polynomial regression,
-gradient nonlinearity correction, and b0 restoration. Their existing behavior
-is retained. Choose the formula explicitly; there is no model-dependent default.
-`-db0restore` and `-akc_outliers` can be used together with either clipping choice.
-The two clipping flags cannot be combined, and the old `-RicianClip` flag
-produces a migration message.
+Both clipping choices correct measurements once, including b0, and retain
+tensor constraints, AKC, smoothing, polynomial regression, GNC and b0 restoration.
+**`-db0restore -akc_outliers` can be used together with either choice.**
+Corrected zeros use the existing positive log floor and can produce outliers.
 
-Both formulas subtract **one sigma squared**. Max-zero sets negative squared
-differences to zero. Those zeros use the existing positive log floor and can
-produce extreme log-domain tensor fits. Absolute value reflects negative squared
-differences upward; it avoids most such zeros but still gives zero at `M=sigma`.
-It is not monotonic in magnitude below sigma and is not an exact Rician-bias
-inverse. Both are approximate corrections; neither guarantees unbiased parameters.
+For `-RicianExp`, let $X\theta$ be the log signal and $\mu_R$ the Rician mean:
 
-For `-RicianExp`, let `X theta` be the log DTI or DKI signal and let
-`mu_R(s, sigma)` be the expected Rician magnitude. The fit minimizes
+$$
+\widehat\theta=\arg\min_\theta\sum_i
+\left[M_i-\mu_R\!\left(\exp((X\theta)_i),\sigma\right)\right]^2.
+$$
 
-$$\sum_i [M_i-\mu_R(\exp((X\theta)_i),\sigma)]^2.$$
+The coefficients are $\theta=(\log S_0,D_6)$ for DTI and
+$\theta=(\log S_0,D_6,C_{15})$ for DKI, with $C=\mathrm{MD}^2W$.
+Every search starts from ordinary LLS on $\sqrt{\max(0,M^2-\sigma^2)}$.
+The objective uses original observations, preserving negative values after
+denoising. At $\sigma=0$, it reduces to signal-domain NLLS.
 
-The coefficients are `[log S0, D6]` for DTI and `[log S0, D6, C15]` for DKI,
-where `C = MD² W`. Every nonlinear search, including a retry, starts from
-ordinary LLS on `sqrt(max(0, M²−sigma²))`. The objective uses original
-observations, never the clipped measurements. This is a mean-signal fit,
-not Rician maximum likelihood. At sigma=0 it becomes signal-domain NLLS.
-Occasional negative observations after denoising are preserved for this fit;
-they are not folded upward with an absolute value.
-
-**Tensor fitting with `-RicianExp` is unconstrained.** It ignores
-`-fit_constraints` and `-akc_outliers`, reporting this in the log. There are
-no diffusion-eigenvalue, kurtosis, or monotonicity bounds. The exponential
-signal model is positive by construction. This differs from the explicit
-angular signal nonnegativity constraint used by SH/SMI with the same flag.
-
-All choices support separate echo-time/LTE subsets, `-maxb`, `-maxb_dti`,
-`-bmat`, and voxel-specific `-gnc` designs. `-RicianExp` takes precedence
-over either clipping flag for all selected models. Its initialization remains
-max-zero ordinary LLS, even when `-RicianClipAbs` is also supplied.
-
-Use the **original complex-component Gaussian sigma responsible for the
-retained Rician mean bias**. If denoising reduces residual variance but retains
-that mean bias, do not replace sigma by the smaller residual SD. Match any
-signal intensity scaling and spatial alignment. This model is inappropriate
-when the noise floor has already been removed or when preprocessing changes
-the mean in a way not described by the supplied sigma. Correct mean modeling
-does not guarantee unbiased finite-sample MK/RK or other derived parameters.
+**Expectation fitting is unconstrained:** `-fit_constraints` and
+`-akc_outliers` are ignored. Combinations with `-db0restore`,
+`-fit_smoothing`, `-polyreg` or external `-dt` are not yet supported and produce
+an error. All three estimators support multi-TE/LTE subsets, shell selection,
+`-bmat` and `-gnc`. `-RicianExp` overrides either clipping flag and always
+keeps max-zero initialization.
 
 ```bash
-tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii -mask mask.nii
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClipMax -sigma sigma.nii -akc_outliers
-tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii -akc_outliers
-tmi dwi.nii tensor_restore -DKI -RicianClipMax -sigma sigma.nii -db0restore
+tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
+tmi dwi.nii tensor_max -DKI -RicianClipMax -sigma sigma.nii -db0restore -akc_outliers
+tmi dwi.nii tensor_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
 ```
-
-Rician-expectation fitting with `-db0restore`, `-fit_smoothing`, `-polyreg`,
-or external `-dt` is deferred and produces a clear error. Restoration and
-spatial refitting need separate handling of the changed measurements and
-their noise model. These restrictions do **not** apply to either clipping choice.
 
 The expectation solver uses an analytic Jacobian and QR coordinates. It allows
 200 function evaluations, with a 1000-evaluation retry from the same clipped

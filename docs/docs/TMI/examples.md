@@ -177,8 +177,8 @@ tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii -mask brain_mask.nii
 tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii -mask brain_mask.nii
 ```
 
-The fitting target is `sqrt(max(0, M²−sigma²))` for `-RicianClipMax`, or
-`sqrt(abs(M²−sigma²))` for `-RicianClipAbs`, with nonnegativity enforced on the
+The fitting target is $\sqrt{\max(0,M^2-\sigma^2)}$ for `-RicianClipMax`, or
+$\sqrt{\lvert M^2-\sigma^2\rvert}$ for `-RicianClipAbs`, with nonnegativity enforced on the
 underlying SH signal. Choose one clipping flag and supply the original magnitude
 DWI. `-RicianExp` takes precedence over either clipping flag and always uses
 max-zero LLS initialization. Per-shell orders in standalone mode use `-lmaxSH`.

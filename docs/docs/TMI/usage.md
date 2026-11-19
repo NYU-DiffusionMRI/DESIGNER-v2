@@ -103,34 +103,41 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 
 ### `-RicianExp`
 
-- Requires `-sigma <noisemap>` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`. This replaces the former `-RicianSH` correction flag.
-- For every selected model, minimize residuals between the original measurements and the expected Rician magnitude. Every nonlinear fit starts from ordinary LLS on `sqrt(max(0, M²−sigma²))`; that correction supplies only the initialization.
-- Preserve the supplied observations, including occasional negative residuals after denoising, instead of folding them with an absolute value.
-- **DTI/DKI/WDKI:** unconstrained signal-domain NLLS. `-fit_constraints` and `-akc_outliers` are ignored, with a log message. No diffusion-eigenvalue, kurtosis or monotonicity constraints are imposed. GNC, external b-matrices, shell selection and multi-TE fitting are supported. With sigma=0, this becomes ordinary signal-domain NLLS.
-- **SH/SMI:** retain the nonnegative underlying SH signal constraint at acquired directions and on a 65,536-direction sphere grid. This constrains signal values, not individual coefficients; a finite grid is not a continuous-sphere guarantee. Zero sigma gives constrained linear least squares. Raw arithmetic b=0/isotropic means, cross-shell rank-one processing and SMI regression are retained.
-- For tensor fitting, `-db0restore`, `-fit_smoothing`, `-polyreg`, and external `-dt` are not yet supported with this estimator; these combinations produce an explicit error. Both clipping choices retain the existing tensor pipeline and can be combined with those settings.
-- `-RicianExp` takes precedence over either clipping flag for **all** selected models. Input measurements are not corrected twice, and initialization always uses max-zero LLS, even with `-RicianClipAbs`.
-- The noise map must be spatially aligned, finite and nonnegative inside the mask, and in the same intensity units. Supply the **original complex-component Gaussian sigma responsible for the retained Rician mean bias**, not the reduced residual SD after denoising. Rescaling requires matching sigma scaling. Do not use this on data whose noise floor was already removed, such as `designer -rician` output or complex/phase-unwound denoising.
-- Independent blocks use `-n_cores` worker processes with one BLAS thread each. Tensor fits save convergence/evaluation and nonpositive-diffusion-tensor diagnostic maps; see [tensor fitting]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options).
-- This fits a mean, not a Rician likelihood, and does not guarantee unbiased finite-sample tensor parameters, SH invariants or SMI parameters. Without a correction flag, tensor WLLS and SH LLS remain unchanged.
+- Fit the expected Rician magnitude to original observations for DTI/DKI/WDKI/SH/SMI. Requires `-sigma`.
+- Every search starts from ordinary LLS on $\sqrt{\max(0,M^2-\sigma^2)}$. Negative observations after denoising are preserved.
+- **Tensors:** unconstrained signal-domain NLLS; `-fit_constraints` and `-akc_outliers` are ignored. `-db0restore`, `-fit_smoothing`, `-polyreg` and external `-dt` are not yet supported.
+- **SH/SMI:** fitted-signal nonnegativity at acquired directions and on a 65,536-direction sphere grid. Raw b0/isotropic means and rank-one processing remain unchanged.
+- Overrides either clipping flag for all selected models, without changing max-zero initialization.
+- See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for noise assumptions and [tensor details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options) for diagnostics.
 
 ### `-RicianClipMax`
 
-- Select `sqrt(max(0, M²−sigma²))` explicitly. Negative squared differences become zero. The common behavior of both clipping flags is described below.
+Correct measurements using
+
+$$\widetilde M=\sqrt{\max(0,M^2-\sigma^2)}.$$
+
+Negative squared differences become zero.
 
 ### `-RicianClipAbs`
 
-- Select `sqrt(abs(M²−sigma²))` explicitly. Negative squared differences are reflected upward. This avoids most zeros before tensor logarithms, but still gives zero at `M=sigma`; it is not an exact inverse of Rician bias or monotonic below sigma.
+Correct measurements using
 
-The following applies to both clipping flags:
+$$\widetilde M=\sqrt{\lvert M^2-\sigma^2\rvert}.$$
 
-- Requires `-sigma <noisemap>` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`.
-- For DTI/DKI/WDKI, apply the selected formula once to selected measurements, including b0, before the existing tensor fit. Both choices are compatible with the existing constraints, AKC handling, smoothing, polynomial regression, b0 restoration and GNC. Corrected zeros use the existing positive log floor and may produce large parameter outliers.
-- For SH/SMI, fit the clipped measurements using linear least squares with nonnegativity at acquired directions and the same 65,536-direction grid. Already feasible clipped-LLS coefficients are retained. Raw b=0/isotropic means, rank-one processing and SMI regression are unchanged.
-- Both formulas subtract one sigma squared. They are approximate corrections, not unbiasedness guarantees.
-- The user must choose one clipping flag; selecting both is an error. The old `-RicianClip` flag produces a migration message. There is no model-dependent default. A combined run applies the chosen formula to every selected model; use separate calls to choose different formulas for tensors and SH/SMI.
-- Use an aligned original sigma map and input whose magnitude noise floor has not already been corrected. If `-RicianExp` is also supplied, expectation fitting takes precedence for every selected model.
-- `-RicianSH_maxiter N` remains an optional **SH/SMI-only** constrained-refinement cap for all corrected SH estimators; its `RicianSH_*` diagnostics describe the SH stage and do not cap tensor fitting.
+Negative squared differences are reflected upward. This avoids most corrected
+zeros, but remains zero at $M=\sigma$ and is nonmonotonic below it.
+
+For both clipping flags:
+
+- Requires `-sigma` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`. Choose one clipping flag; selecting both is an error.
+- **Tensors:** correct once, including b0, then retain existing constraints, AKC, smoothing, polynomial regression, GNC and b0 restoration. Corrected zeros use the existing positive log floor.
+- **SH/SMI:** corrected LLS with signal nonnegativity on the same grid as expectation fitting. Raw b0/isotropic means, rank-one processing and SMI regression remain unchanged.
+- Supply original data with a retained noise floor and an aligned original sigma map. Both formulas are approximate corrections.
+- A combined run uses the selected formula for every model; use separate calls for different choices. `-RicianExp` takes precedence.
+
+All corrected SH estimators support the optional `-RicianSH_maxiter N` refinement
+cap and [SH diagnostics]({% link docs/TMI/SMI.md %}#iteration-limits-and-diagnostics).
+This cap does not apply to tensor fits.
 
 ### `-WMTI`
 - Include WMTI parameters in output folder (awf,ias_params,eas_params).

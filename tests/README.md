@@ -208,7 +208,7 @@ The tensor tests use an independent hypergeometric Rician mean and a numerical
 Jacobian fit, recover known unconstrained tensors (including negative eigenvalues
 and kurtosis), exercise sigma=0 and voxel-specific gradients, and compare serial
 and parallel voxel ordering. CLI tests cover DTI/DKI/WDKI, combined SH/SMI runs,
-multi-TE and GNC, renamed flags, expectation precedence, ignored constraints/AKC,
+multi-TE and GNC, estimator selection, expectation precedence, ignored constraints/AKC,
 and explicit rejection of deferred expectation-refinement combinations.
 Clipped-input equivalence tests check both `-RicianClipMax` and `-RicianClipAbs`
 against manually corrected input, including constraints, AKC replacement,
@@ -216,8 +216,7 @@ smoothing, and combined b0 restoration with AKC for single- and multi-echo data.
 SH tests compare both correction formulas against an independent constrained
 least-squares solver, check serial/parallel consistency, and verify that
 expectation fitting keeps max-zero initialization even when the absolute-value
-option is supplied. CLI checks reject simultaneous clipping flags and report
-the migration from `-RicianClip` to an explicit choice. The million-sample
+option is supplied. CLI checks reject simultaneous clipping flags. The million-sample
 polynomial-regression training is not run by these small CLI tests; clipping
 continues to feed the existing polynomial-regression path without adding a restriction.
 
@@ -236,7 +235,7 @@ single- and multi-echo data, check input errors, and compare the nonlinear fit
 against an independent SciPy optimizer. The experiment directly integrates
 three Standard Model tissues with Watson orientation distributions, generates
 128 independent Rician noise realizations at each of four b0 SNRs, and runs
-noiseless LLS, noisy LLS, clipped corrected noisy LLS (`sqrt(max(0, S**2 - sigma**2))`),
+noiseless LLS, noisy LLS, clipped corrected noisy LLS ($\sqrt{\max(0,S^2-\sigma^2)}$),
 and noisy RicianExp through `tmi`. RicianExp uses the linear fit to the clipped
 corrected signal as its initialization, then fits the original magnitude data
 with nonnegative signal constraints. It saves all maps,

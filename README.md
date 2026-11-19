@@ -47,32 +47,23 @@ tmi \
 designer2_test.mif designer2_params_test
 ```
 
-For magnitude data with a retained Rician noise floor, `tmi -SMI -RicianExp
--sigma sigma.nii dwi.nii output_dir` enables Rician-expectation SH fitting with
-nonnegative signal constraints at acquired directions and on a dense sphere grid.
-The search starts from LLS on `sqrt(max(0, M²−sigma²))` and fits the original magnitudes.
-The noise map must match the DWI grid and intensity scale. Omitting all correction
-flags keeps ordinary LLS for SH/SMI and the existing WLLS tensor fitting.
-Alternatively, explicitly choose `-RicianClipMax` for `sqrt(max(0, M²−sigma²))`
-or `-RicianClipAbs` for `sqrt(abs(M²−sigma²))`, with `-sigma sigma.nii`.
-Both fit the corrected measurements with the same signal nonnegativity constraint
-in either `-SH` or `-SMI` mode. Both also correct input magnitudes for
-`-DTI`, `-DKI` and `-WDKI`, including b0, before their existing fits and selected
-constraints, AKC handling, smoothing, polynomial regression or b0 restoration.
-For tensors, `-RicianExp` instead fits the expected Rician magnitude by
-unconstrained nonlinear least squares, initialized from clipped ordinary LLS.
-It ignores tensor constraints and AKC replacement. Expectation fitting with
-b0 restoration, fit smoothing, polynomial regression or external tensors is
-deferred; these combinations produce an explicit error. GNC and multi-TE
-tensor fitting are supported. `-RicianExp` takes precedence over either clipping
-flag for every model and always starts from max-zero corrected LLS.
-The two clipping flags cannot be combined. The former `-RicianClip` flag now
-reports a migration error asking users to choose one explicitly. A combined run
-uses the chosen formula for every model; use separate calls for different choices.
-Use the original sigma responsible for the retained Rician mean bias, not the
-smaller residual SD after denoising. See the [TMI options](docs/docs/TMI/usage.md#-ricianexp)
-for assumptions and limitations, or the [Rician bias guide](docs/docs/TMI/Rician-bias.md)
-for a comparison of all alternatives and command examples.
+For data with a retained Rician noise floor, choose `-RicianClipMax`,
+`-RicianClipAbs` or `-RicianExp`, with an aligned `-sigma` map. These options
+apply to DTI/DKI/WDKI and SH/SMI:
+
+- `-RicianClipMax` corrects measurements with $\sqrt{\max(0,M^2-\sigma^2)}$.
+- `-RicianClipAbs` uses $\sqrt{\lvert M^2-\sigma^2\rvert}$.
+- `-RicianExp` fits the expected Rician magnitude, starting from max-zero corrected LLS.
+
+Both clipping choices preserve existing tensor settings, including b0 restoration
+and AKC together. Tensor expectation fitting is unconstrained and ignores AKC;
+b0 restoration and spatial refinements are not yet supported. All corrected
+SH estimators constrain the fitted signal to be nonnegative. Without a correction
+flag, tensors retain WLLS and SH/SMI retain ordinary LLS.
+
+Use the original noise level responsible for the bias, even after denoising
+reduces residual variance. See the [Rician bias guide](docs/docs/TMI/Rician-bias.md)
+for equations, compatibility and examples.
 
 To estimate only signal rotational invariants, without SMI model fitting:
 
