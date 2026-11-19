@@ -554,8 +554,10 @@ class SMI(object):
             sigma_1d = sigma[np.asarray(mask, dtype=bool)] if flag_4D else sigma
             if not np.all(np.isfinite(sigma_1d)) or np.any(sigma_1d < 0):
                 raise ValueError("Rician SH sigma must be finite and nonnegative inside the mask")
-            if not np.all(np.isfinite(dwi_2D)) or np.any(dwi_2D < 0):
-                raise ValueError("Rician SH requires finite, nonnegative magnitude DWI inside the mask")
+            if not np.all(np.isfinite(dwi_2D)):
+                raise ValueError("Rician SH requires finite DWI observations inside the mask")
+            if not self.rician_sh and np.any(dwi_2D < 0):
+                raise ValueError("Clipped SH requires nonnegative magnitude DWI inside the mask")
 
         n_voxels = dwi_2D.shape[1]
         n_meas = dwi_2D.shape[0]

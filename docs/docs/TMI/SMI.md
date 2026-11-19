@@ -228,6 +228,8 @@ Use a finite, nonnegative noise map aligned to the DWI in the same intensity uni
 The same expectation model, clipped-LLS initialization, and nonnegativity
 constraint are used by `-SH -RicianExp`. In that mode, processing stops after
 the signal rotational invariants have been saved.
+Expectation fitting preserves occasional negative observations after denoising;
+the nonnegativity constraint applies to the fitted signal, not the noisy observations.
 
 For difficult fits, `-RicianSH_maxiter N` optionally caps the cumulative
 constrained-refinement iterations per voxel and shell, including restarts

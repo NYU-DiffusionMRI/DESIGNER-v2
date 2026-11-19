@@ -439,7 +439,10 @@ def execute(): #pylint: disable=unused-variable
     # of subsequently loaded spatial maps (including sigma).
     mif.transform = mif.transform.copy()
     dwi = mif.data
-    dwi=abs(dwi)
+    # Denoising can leave signed residuals around the retained Rician mean.
+    # Folding them changes that mean; expectation fitting uses observations as supplied.
+    if not app.ARGS.RicianExp:
+        dwi = abs(dwi)
     # grad_mif = mif.grad
     # bval = grad_mif[:,3]
     # bvec = grad_mif[:,:3].T

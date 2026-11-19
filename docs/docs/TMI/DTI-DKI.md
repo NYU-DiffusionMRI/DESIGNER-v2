@@ -77,6 +77,8 @@ where `C = MD² W`. Every nonlinear search, including a retry, starts from
 ordinary LLS on `sqrt(max(0, M²−sigma²))`. The objective uses original
 observations, never the clipped measurements. This is a mean-signal fit,
 not Rician maximum likelihood. At sigma=0 it becomes signal-domain NLLS.
+Occasional negative observations after denoising are preserved for this fit;
+they are not folded upward with an absolute value.
 
 **Tensor fitting with `-RicianExp` is unconstrained.** It ignores
 `-fit_constraints` and `-akc_outliers`, reporting this in the log. There are

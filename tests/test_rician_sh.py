@@ -185,12 +185,21 @@ def test_no_implicit_sigma_or_double_correction():
         model(True, noise_bias='rician')
 
 
-@pytest.mark.parametrize('value', [-1., np.nan, np.inf])
+@pytest.mark.parametrize('value', [np.nan, np.inf])
 def test_invalid_magnitude_data(value):
     obj=model(True);obj.mask=np.ones((2,2,2),bool)
     dwi=np.ones((2,2,2,186));dwi[0,0,0,8]=value
-    with pytest.raises(ValueError, match='magnitude DWI'):
+    with pytest.raises(ValueError, match='finite DWI'):
         obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi,obj.mask,sigma=np.ones((2,2,2)))
+
+
+def test_clipped_sh_requires_magnitude_observations():
+    b, g = protocol()
+    obj = SMI(b, g, rician_sh_clip=True)
+    obj.mask = np.ones((2, 2, 2), bool)
+    dwi = np.ones((2, 2, 2, 186)); dwi[0, 0, 0, 8] = -1
+    with pytest.raises(ValueError, match='nonnegative magnitude DWI'):
+        obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi, obj.mask, sigma=np.ones((2, 2, 2)))
 
 
 def test_isotropic_shells_and_multiple_echo_times():

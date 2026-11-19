@@ -72,3 +72,32 @@ def test_nonconvergence_is_saved_and_warned_without_aborting(tmp_path, monkeypat
     assert json.loads((tmp_path/'RicianExp_diagnostics_dki.json').read_text())['nonconverged'] == 1
     assert save.call_args.args[0]['RicianExp_nonconverged'][0, 0, 0] == 1
     logger.warning.assert_called_once()
+
+
+def test_cli_preserves_signed_denoised_observations(inputs):
+    from lib.tensor import TensorFitting
+    from lib.sh import fit_rotational_invariants
+    image = nib.load(inputs/'dwi.nii')
+    data = image.get_fdata().copy()
+    data[..., -1] = -.05
+    nib.save(nib.Nifti1Image(data, image.affine), inputs/'dwi.nii')
+    mask = np.ones(data.shape[:3], bool)
+    sigma = nib.load(inputs/'sigma.nii').get_fdata()
+    b, g = protocol()
+    # FSL b-vectors on this positive-determinant NIfTI flip x in scanner axes.
+    g = g.copy()
+    g[:, 0] *= -1
+    result = run_cli(inputs, 'signed', ['-DKI', '-SH', '-lmaxSH', '0,2,4',
+        '-RicianExp', '-sigma', 'sigma.nii', '-mask', 'mask.nii'])
+    assert result.returncode == 0, result.stdout
+    fitter = TensorFitting(np.column_stack([g, b]), 1)
+    dt, _, _ = fitter.dki_fit(data, mask, sigma=sigma)
+    saved = nib.load(inputs/'signed/dt_dki.nii').get_fdata()[mask]*1000
+    np.testing.assert_allclose(saved, dt[[0, 3, 5, 1, 2, 4]].T, atol=1e-5)
+    folded, _, _ = fitter.dki_fit(abs(data), mask, sigma=sigma)
+    assert not np.allclose(dt, folded)
+    expected, _ = fit_rotational_invariants(data, b, g, mask=mask, sigma=sigma,
+        lmax=[0, 2, 4], rician=True, n_jobs=1)
+    for name, values in expected.items():
+        np.testing.assert_allclose(nib.load(inputs/'signed'/(name+'.nii')).get_fdata(),
+                                   values, rtol=1e-5, atol=1e-6)
