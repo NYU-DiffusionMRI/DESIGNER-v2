@@ -7,7 +7,8 @@ from lib.smi import SMI
 def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
                              lmax=None, beta=None, echo_time=None,
                              rician=False, rician_maxiter=None,
-                             diagnostics=None, rician_clip=False, n_jobs=1):
+                             diagnostics=None, rician_clip=False, n_jobs=1,
+                             rician_clip_mode='maxzero'):
     """Return one 4D image per even SH order, plus ordered shell metadata.
 
     ``lmax`` is a common SH fitting order or a sequence with one order per
@@ -20,7 +21,9 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
     rician_maxiter optionally limits constrained optimization. When supplied,
     diagnostics can receive image-grid iteration counts and early-stop masks.
     rician_clip selects clipped-corrected constrained LLS instead of Rician
-    expectation fitting. n_jobs controls process workers for either correction.
+    expectation fitting. rician_clip_mode chooses 'maxzero' or 'abs' for that
+    correction; it never changes Rician-expectation initialization.
+    n_jobs controls process workers for either correction.
     """
     requested = None if lmax is None else np.asarray(lmax)
     if requested is not None and (requested.ndim > 1 or requested.size == 0
@@ -41,7 +44,7 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
     estimator = SMI(np.asarray(bval), np.asarray(bvec), beta=beta,
                     echo_time=echo_time, rician_sh=rician, seed=None,
                     rician_sh_maxiter=rician_maxiter, rician_sh_clip=rician_clip,
-                    sh_n_jobs=n_jobs)
+                    sh_n_jobs=n_jobs, rician_clip_mode=rician_clip_mode)
     automatic = estimator.get_default_lmax()  # Also populates the sorted shell table.
     table = estimator.table_4d
     if requested is None:

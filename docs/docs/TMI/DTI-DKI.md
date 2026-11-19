@@ -52,20 +52,31 @@ KT volumes 12-14: $W_{1123},W_{1223},W_{1233}$.
 
 ### Rician correction options
 
-Both correction choices require an aligned 3D `-sigma` map in matching signal
+See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for the rationale and comparison of all alternatives.
+
+All correction choices require an aligned 3D `-sigma` map in matching signal
 units. With no correction flag, TMI retains its existing WLLS tensor fit.
 
 | Option | DTI/DKI/WDKI estimation |
 |---|---|
-| `-RicianClip` | Apply `sqrt(max(0, M²−sigma²))` once, including b0, then use the existing tensor pipeline |
+| `-RicianClipMax` | Apply `sqrt(max(0, M²−sigma²))` once, including b0, then use the existing tensor pipeline |
+| `-RicianClipAbs` | Apply `sqrt(abs(M²−sigma²))` once, including b0, then use the existing tensor pipeline |
 | `-RicianExp` | Fit the expected Rician magnitude to the original measurements by unconstrained nonlinear least squares |
 
-`-RicianClip` is input preprocessing. It can be combined with the existing
+Both clipping choices are input preprocessing and can be combined with the existing
 tensor constraints, AKC handling, fit smoothing, polynomial regression,
 gradient nonlinearity correction, and b0 restoration. Their existing behavior
-is retained. Zero corrected measurements use the existing positive log floor
-and can produce extreme log-domain fits. The correction subtracts one sigma
-squared; it does not take the absolute value of a negative squared difference.
+is retained. Choose the formula explicitly; there is no model-dependent default.
+`-db0restore` and `-akc_outliers` can be used together with either clipping choice.
+The two clipping flags cannot be combined, and the old `-RicianClip` flag
+produces a migration message.
+
+Both formulas subtract **one sigma squared**. Max-zero sets negative squared
+differences to zero. Those zeros use the existing positive log floor and can
+produce extreme log-domain tensor fits. Absolute value reflects negative squared
+differences upward; it avoids most such zeros but still gives zero at `M=sigma`.
+It is not monotonic in magnitude below sigma and is not an exact Rician-bias
+inverse. Both are approximate corrections; neither guarantees unbiased parameters.
 
 For `-RicianExp`, let `X theta` be the log DTI or DKI signal and let
 `mu_R(s, sigma)` be the expected Rician magnitude. The fit minimizes
@@ -86,9 +97,10 @@ no diffusion-eigenvalue, kurtosis, or monotonicity bounds. The exponential
 signal model is positive by construction. This differs from the explicit
 angular signal nonnegativity constraint used by SH/SMI with the same flag.
 
-Both choices support separate echo-time/LTE subsets, `-maxb`, `-maxb_dti`,
+All choices support separate echo-time/LTE subsets, `-maxb`, `-maxb_dti`,
 `-bmat`, and voxel-specific `-gnc` designs. `-RicianExp` takes precedence
-for all selected models if both correction flags are supplied.
+over either clipping flag for all selected models. Its initialization remains
+max-zero ordinary LLS, even when `-RicianClipAbs` is also supplied.
 
 Use the **original complex-component Gaussian sigma responsible for the
 retained Rician mean bias**. If denoising reduces residual variance but retains
@@ -100,14 +112,15 @@ does not guarantee unbiased finite-sample MK/RK or other derived parameters.
 
 ```bash
 tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii -mask mask.nii
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii -akc_outliers
-tmi dwi.nii tensor_restore -DKI -RicianClip -sigma sigma.nii -db0restore
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClipMax -sigma sigma.nii -akc_outliers
+tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii -akc_outliers
+tmi dwi.nii tensor_restore -DKI -RicianClipMax -sigma sigma.nii -db0restore
 ```
 
 Rician-expectation fitting with `-db0restore`, `-fit_smoothing`, `-polyreg`,
 or external `-dt` is deferred and produces a clear error. Restoration and
 spatial refitting need separate handling of the changed measurements and
-their noise model. These restrictions do **not** apply to `-RicianClip`.
+their noise model. These restrictions do **not** apply to either clipping choice.
 
 The expectation solver uses an analytic Jacobian and QR coordinates. It allows
 200 function evaluations, with a 1000-evaluation retry from the same clipped
@@ -125,7 +138,8 @@ to identify nonpositive diffusion tensors.
 
 The measurement-derived `trace` output is calculated from original magnitudes
 with `-RicianExp`; it is not an expectation-corrected model prediction.
-With `-RicianClip`, trace uses the corrected measurements as before.
+With either clipping choice, trace uses that formula's corrected measurements,
+without correcting restored b0 samples a second time.
 
 ### Tensor parameters
 

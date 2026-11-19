@@ -200,7 +200,8 @@ Run the optional tensor mean-model tests and installed CLI checks in the develop
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 SMI_BLAS_THREADS=1 \
   python -m pytest -q tests/test_rician_tensor.py tests/test_tmi_rician_exp.py \
-  tests/test_tmi_rician_clip.py tests/test_tmi_rician_sh.py tests/test_tmi_sh.py
+  tests/test_tmi_rician_clip.py tests/test_tmi_rician_sh.py tests/test_tmi_sh.py \
+  tests/test_clipped_sh.py tests/test_rician_sh.py
 ```
 
 The tensor tests use an independent hypergeometric Rician mean and a numerical
@@ -209,8 +210,14 @@ and kurtosis), exercise sigma=0 and voxel-specific gradients, and compare serial
 and parallel voxel ordering. CLI tests cover DTI/DKI/WDKI, combined SH/SMI runs,
 multi-TE and GNC, renamed flags, expectation precedence, ignored constraints/AKC,
 and explicit rejection of deferred expectation-refinement combinations.
-Clipped-input equivalence tests exercise constraints, AKC replacement, smoothing
-and b0 restoration against manually corrected input. The million-sample
+Clipped-input equivalence tests check both `-RicianClipMax` and `-RicianClipAbs`
+against manually corrected input, including constraints, AKC replacement,
+smoothing, and combined b0 restoration with AKC for single- and multi-echo data.
+SH tests compare both correction formulas against an independent constrained
+least-squares solver, check serial/parallel consistency, and verify that
+expectation fitting keeps max-zero initialization even when the absolute-value
+option is supplied. CLI checks reject simultaneous clipping flags and report
+the migration from `-RicianClip` to an explicit choice. The million-sample
 polynomial-regression training is not run by these small CLI tests; clipping
 continues to feed the existing polynomial-regression path without adding a restriction.
 

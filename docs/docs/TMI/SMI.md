@@ -27,9 +27,10 @@ rotational invariants, without SMI priors, training, or model regression.
 Both modes use linear least squares for SH fitting by default. Adding
 `-RicianExp -sigma sigma.nii` accounts for Rician bias through the expected
 magnitude observation model and enforces a **nonnegative underlying SH signal**.
-Alternatively, `-RicianClip -sigma sigma.nii` fits clipped-corrected measurements
-with the same nonnegativity constraint. If both flags are present,
-`-RicianExp` takes precedence for SH/SMI fitting.
+Alternatively, choose `-RicianClipMax` or `-RicianClipAbs`, with `-sigma sigma.nii`,
+to fit corrected measurements with the same nonnegativity constraint.
+`-RicianExp` takes precedence over either clipping choice. See
+[Rician bias]({% link docs/TMI/Rician-bias.md %}) for all alternatives and their assumptions.
 
 ### Choosing an estimation mode
 
@@ -37,10 +38,12 @@ with the same nonnegativity constraint. If both flags are present,
 |---|---|
 | SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
 | SMI maps with Rician bias expectation correction and nonnegativity | `tmi dwi.nii smi_rician -SMI -RicianExp -sigma sigma.nii` |
-| SMI maps with clipped correction and signal nonnegativity | `tmi dwi.nii smi_clip -SMI -RicianClip -sigma sigma.nii` |
+| SMI maps with clipped correction and signal nonnegativity | `tmi dwi.nii smi_clip -SMI -RicianClipMax -sigma sigma.nii` |
+| SMI maps with absolute-value correction and signal nonnegativity | `tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii` |
 | Signal rotational invariants only, using default LLS | `tmi dwi.nii sh_output -SH` |
 | Signal rotational invariants only, using Rician expectation and signal nonnegativity | `tmi dwi.nii sh_rician -SH -RicianExp -sigma sigma.nii` |
-| Signal rotational invariants only, using clipped correction and signal nonnegativity | `tmi dwi.nii sh_clip -SH -RicianClip -sigma sigma.nii` |
+| Signal rotational invariants only, using clipped correction and signal nonnegativity | `tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii` |
+| Signal rotational invariants only, using absolute-value correction and signal nonnegativity | `tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii` |
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmaxSH` sets the actual
@@ -138,10 +141,11 @@ for the observation model and initialization.
 For clipped correction followed by a nonnegative linear SH fit, use:
 
 ```bash
-tmi dwi.nii sh_clip -SH -RicianClip -sigma sigma.nii
+tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii
+tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii
 ```
 
-All three commands bypass SMI priors and regression and save separate `S0.nii`,
+All four commands bypass SMI priors and regression and save separate `S0.nii`,
 `S2.nii`, and higher even-order files through the maximum fitted order. Each
 contains one volume per shell, identified in `SH_shells.json`. Add `-lmaxSH 6`
 to fit through order 6 and save `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`.
@@ -153,7 +157,7 @@ In `-SH` mode, `-lmaxSH` sets the SH fitting order itself. See the
 Orders 2, 4, and 6 require at least 6, 15, and 28 independent directional
 measurements, respectively. With `-SH`, **each shell's maximum SH order can be
 specified independently** using a comma-separated list. This works with
-LLS, RicianExp and RicianClip, for example:
+LLS, RicianExp, RicianClipMax and RicianClipAbs, for example:
 
 ```bash
 # Input containing b=0, 1000, 2000, 7000 and 25000 s/mm², at one b-shape and TE:
@@ -252,17 +256,23 @@ the initial batched fit, whose existing warnings remain separate.
 
 ### Clipped correction with a nonnegative signal
 
-Use `-RicianClip -sigma sigma.nii` with either `-SH` or `-SMI` to fit
+Choose `-RicianClipMax` or `-RicianClipAbs`, with `-sigma sigma.nii`, in either
+`-SH` or `-SMI` mode to fit
 
 $$\min_c \sum_i ((Yc)_i-\widetilde M_i)^2,\qquad
-\widetilde M_i=\sqrt{\max(0,M_i^2-\sigma^2)},\qquad Y_{\rm grid}c\geq0.$$
+Y_{\rm grid}c\geq0.$$
+
+The fitting target is `sqrt(max(0, M²−sigma²))` with `-RicianClipMax`, or
+`sqrt(abs(M²−sigma²))` with `-RicianClipAbs`.
 
 The corrected magnitudes are the fitting target, rather than only the
 initialization. This is a convex constrained linear least-squares problem;
-it does not evaluate the expected Rician magnitude. The correction subtracts
-**one** `sigma²`, and negative squared differences are set to zero before
-taking the square root. It is an approximate correction, not an unbiasedness
-guarantee.
+it does not evaluate the expected Rician magnitude. Both formulas subtract
+**one** `sigma²`. Max-zero sets negative squared differences to zero; absolute
+value reflects them upward. Both are approximate corrections, not unbiasedness
+guarantees. SH fitting has no logarithm, so zeros do not have the same numerical
+effect as in log-domain tensor fitting. Users choose the formula explicitly;
+the two clipping flags cannot be combined.
 
 The same acquired directions and 65,536-direction sphere grid enforce
 nonnegativity. If the ordinary SH fit to the clipped data is already feasible,
@@ -273,37 +283,41 @@ regression remain unchanged. Nonnegativity is enforced before rank-one
 processing, as for `-RicianExp`.
 
 Use uncorrected magnitude data and a matching noise map; do not apply the
-clipped correction to the input yourself. When both `-RicianClip` and
-`-RicianExp` are supplied, SH/SMI uses Rician-expectation fitting on the original
+correction to the input yourself. When `-RicianExp` and either clipping flag
+are supplied, SH/SMI uses Rician-expectation fitting on the original
 magnitudes, with nonnegativity; it does not fit the expectation to
-already-corrected data. The optional `-RicianSH_maxiter` cap and its diagnostic
-outputs also apply to this mode.
+already-corrected data. Expectation initialization always remains max-zero LLS.
+The optional `-RicianSH_maxiter` cap and its diagnostic outputs apply to both
+clipping choices.
 
 ### The same correction choices for DTI and DKI
 
-The two flags also apply to `-DTI`, `-DKI` and `-WDKI`, including in combined
-runs. Both require an aligned original sigma map in matching signal units.
+All three correction flags also apply to `-DTI`, `-DKI` and `-WDKI`, including
+in combined runs. All require an aligned original sigma map in matching signal units.
 
 | Flags | DTI/DKI/WDKI estimator | SH/SMI estimator |
 |---|---|---|
-| Neither | Existing WLLS on original magnitudes | Ordinary LLS |
-| `-RicianClip` | Existing tensor pipeline on clipped-corrected measurements | Clipped-corrected LLS with signal nonnegativity |
+| None | Existing WLLS on original magnitudes | Ordinary LLS |
+| `-RicianClipMax` | Existing tensor pipeline on max-zero corrected measurements | Max-zero corrected LLS with signal nonnegativity |
+| `-RicianClipAbs` | Existing tensor pipeline on absolute-value corrected measurements | Absolute-value corrected LLS with signal nonnegativity |
 | `-RicianExp` | Unconstrained Rician-mean NLLS on original observations | Rician expectation with signal nonnegativity |
-| Both | Same as `-RicianExp` | Same as `-RicianExp` |
+| `-RicianExp` plus either clipping flag | Same as `-RicianExp` | Same as `-RicianExp` |
 
-`-RicianClip` corrects selected tensor measurements once, including b0, and
-allows the other tensor settings: constraints, AKC handling, smoothing,
-polynomial regression, b0 restoration and GNC. Clipped zeros use the existing
-positive log floor and can destabilize log-domain fits.
+Both clipping choices correct selected tensor measurements once, including b0,
+and allow the other tensor settings: constraints, AKC handling, smoothing,
+polynomial regression, b0 restoration and GNC. In particular, `-db0restore`
+and `-akc_outliers` can be used together with either clipping flag. Corrected
+zeros use the existing positive log floor and can destabilize log-domain fits.
 
 `-RicianExp` starts tensor NLLS from clipped ordinary LLS and ignores tensor
 constraints and AKC replacement. It supports GNC and multi-TE subsets.
 Expectation fitting with b0 restoration, fit smoothing, polynomial regression
 or external tensors is deferred and produces an explicit error. These
-restrictions do not apply to `-RicianClip`.
+restrictions do not apply to either clipping choice.
 
 ```bash
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClipMax -sigma sigma.nii
+tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
 tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
 ```
 
@@ -314,7 +328,7 @@ for equations, diagnostics and supported combinations.
 
 ### Processing time and parallel workers
 
-Both `-RicianExp` and `-RicianClip` use `-n_cores` to fit independent voxel
+All corrected SH estimators use `-n_cores` to fit independent voxel
 blocks in parallel. For example, add `-n_cores 8` to use eight worker processes,
 or `-n_cores 1` for serial fitting. The default follows TMI's available-cores
 minus two convention. Each worker uses one BLAS thread to avoid multiplying

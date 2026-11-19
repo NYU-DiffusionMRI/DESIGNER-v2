@@ -90,7 +90,7 @@ class SMI(object):
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
         l_max_training=None, seed=42, smi_fw_thres=0.2, rician_sh=False,
-        rician_sh_maxiter=None, rician_sh_clip=False, sh_n_jobs=1):
+        rician_sh_maxiter=None, rician_sh_clip=False, sh_n_jobs=1, rician_clip_mode='maxzero'):
         """
         Setting some default values and initialization required for class functions.
 
@@ -104,13 +104,17 @@ class SMI(object):
             shell. Exhausted fits return their best grid-feasible estimate.
             None retains the standard solver limits.
         rician_sh_clip : bool, optional
-            Fit sqrt(max(0, dwi**2 - sigma**2)) by linear least squares with
+            Fit magnitudes corrected using rician_clip_mode by linear least squares with
             the same signal nonnegativity constraint. Requires sigma and is
             incompatible with noise_bias correction. rician_sh takes
             precedence when both SH estimator switches are enabled.
         sh_n_jobs : int, optional
             Number of process workers for Rician or clipped SH fitting (default
             1); negative values follow joblib conventions. LLS is unchanged.
+        rician_clip_mode : {'maxzero', 'abs'}, optional
+            Correction formula when rician_sh_clip is enabled. 'abs' uses
+            sqrt(abs(dwi**2-sigma**2)). Rician expectation initialization always
+            uses max-zero regardless of this setting.
         """
 
         if not cs_phase:
@@ -130,6 +134,9 @@ class SMI(object):
         self.smi_fw_thres = float(smi_fw_thres)
         self.rician_sh = bool(rician_sh)
         self.rician_sh_clip = bool(rician_sh_clip) and not self.rician_sh
+        if rician_clip_mode not in ('maxzero', 'abs'):
+            raise ValueError("rician_clip_mode must be 'maxzero' or 'abs'")
+        self.rician_clip_mode = rician_clip_mode
         self.sh_n_jobs = sh_n_jobs
         self.constrained_sh = self.rician_sh or self.rician_sh_clip
         self.rician_sh_maxiter = rician_sh_maxiter
@@ -623,6 +630,7 @@ class SMI(object):
                         constraint_basis=nonnegative_basis[:, ids_current_lm],
                         constrained_max_iter=self.rician_sh_maxiter,
                         diagnostics=diagnostics, clipped=self.rician_sh_clip,
+                        clip_mode=self.rician_clip_mode,
                         n_jobs=self.sh_n_jobs)
                     if diagnostics is not None:
                         for key, values in diagnostics.items():

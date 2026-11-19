@@ -2,7 +2,7 @@
 layout: default
 title: examples
 has_children: false
-nav_order: 6
+nav_order: 7
 parent: TMI
 ---
 
@@ -57,7 +57,7 @@ Constraints can be used to bound the kurtosis tensor estimation, an example of r
 ```
 tmi -WDKI -DKI -fit_constraints 0,1,0 dwi.mif parameters
 ```
-- The order of values input to the `-fit_constraints` option is: diffusion tensor > 0, kurtosis tensor > 0, and kurtosis tensor < 10. These settings apply to the existing WLLS fit, including with `-RicianClip`; `-RicianExp` ignores them.
+- The order of values input to the `-fit_constraints` option is: diffusion tensor > 0, kurtosis tensor > 0, and kurtosis tensor < 10. These settings apply to the existing WLLS fit, including with either clipping flag; `-RicianExp` ignores them.
 
 --- 
 
@@ -171,23 +171,27 @@ Choose either `-SH` or `-SMI` in a command.
 ### Clipped-corrected SH fitting with signal nonnegativity
 
 ```bash
-tmi dwi.nii sh_clip -SH -RicianClip -sigma sigma.nii -mask brain_mask.nii
-tmi dwi.nii smi_clip -SMI -RicianClip -sigma sigma.nii -mask brain_mask.nii
+tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii -mask brain_mask.nii
+tmi dwi.nii smi_clip -SMI -RicianClipMax -sigma sigma.nii -mask brain_mask.nii
+tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii -mask brain_mask.nii
+tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii -mask brain_mask.nii
 ```
 
-The fitting target is `sqrt(max(0, M²−sigma²))`, with nonnegativity enforced
-on the underlying SH signal. Supply the original magnitude DWI.
-`-RicianExp` takes precedence if both correction flags are present. Per-shell orders in standalone mode
-are set with `-lmaxSH`, as for the other estimators.
+The fitting target is `sqrt(max(0, M²−sigma²))` for `-RicianClipMax`, or
+`sqrt(abs(M²−sigma²))` for `-RicianClipAbs`, with nonnegativity enforced on the
+underlying SH signal. Choose one clipping flag and supply the original magnitude
+DWI. `-RicianExp` takes precedence over either clipping flag and always uses
+max-zero LLS initialization. Per-shell orders in standalone mode use `-lmaxSH`.
 
 ### Rician correction for tensors and SH/SMI
 
 ```bash
 # Clipped correction, retaining the existing tensor pipeline and settings
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii -akc_outliers
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClipMax -sigma sigma.nii -akc_outliers
 
-# Clipped correction also works with b0 restoration
-tmi dwi.nii tensor_restore -DKI -RicianClip -sigma sigma.nii -db0restore
+# Both clipping choices work with b0 restoration and AKC replacement together
+tmi dwi.nii tensor_restore_max -DKI -RicianClipMax -sigma sigma.nii -db0restore -akc_outliers
+tmi dwi.nii tensor_restore_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
 
 # Unconstrained Rician-mean NLLS for DTI/DKI, starting from clipped ordinary LLS
 tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
@@ -196,13 +200,22 @@ tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
 tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
 ```
 
-Replace `-SH` with `-SMI` to include Standard Model fitting. Both correction
-flags require original magnitude data whose noise floor has not already been
+Replace `-SH` with `-SMI` to include Standard Model fitting. All correction
+flags require data whose noise floor has not already been
 removed. Use original sigma for the retained Rician bias, not the smaller
-residual SD after denoising. `-RicianExp` takes precedence for all models if
-both flags are given; specifying both is unnecessary.
+residual SD after denoising. `-RicianExp` takes precedence over either clipping
+flag for all selected models. The clipping flags cannot be combined.
+
+Use separate calls to choose different formulas for tensor and SH estimation:
+
+```bash
+tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
+tmi dwi.nii sh_max -SH -RicianClipMax -sigma sigma.nii
+```
+
+See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for the rationale and alternatives.
 
 With `-RicianExp`, tensor constraints and AKC replacement are ignored.
 Expectation tensor fits with b0 restoration, fit smoothing, polynomial
 regression or external `-dt` are deferred and rejected explicitly. These
-settings remain available with `-RicianClip`.
+settings remain available with both clipping choices.

@@ -24,17 +24,21 @@ def test_clipped_constrained_known_solution_without_nonlinear_search(monkeypatch
     assert np.min(grid @ fitted) >= -1e-12
 
 
-def test_clipped_fit_matches_independent_quadratic_program():
+@pytest.mark.parametrize('mode', ['maxzero', 'abs'])
+def test_clipped_fit_matches_independent_quadratic_program(mode):
     rng = np.random.default_rng(318)
     dirs = nonnegative_directions(40)
     smi = SMI(np.ones(40), dirs)
     basis = smi.get_even_sh(dirs, 4)
     grid = np.vstack([basis, smi.get_even_sh(nonnegative_directions(512), 4)])
     raw = np.hypot(.2 + .4*rng.normal(size=(40, 3)), .4*rng.normal(size=(40, 3)))
-    corrected = np.sqrt(np.maximum(0, raw**2 - .4**2))
+    if mode == 'abs':
+        raw[0, :] = 4.  # Force an infeasible SH projection even with the raised low-signal floor.
+    difference = raw**2 - .4**2
+    corrected = np.sqrt(abs(difference) if mode == 'abs' else np.maximum(0, difference))
     initial = lstsq(basis, corrected)[0]
     assert np.min(grid @ initial) < -.01
-    fitted = fit_rician_sh(basis, raw, np.full(3, .4), constraint_basis=grid, clipped=True)
+    fitted = fit_rician_sh(basis, raw, np.full(3, .4), constraint_basis=grid, clipped=True, clip_mode=mode)
     for v in range(3):
         def objective(c):
             residual = basis @ c - corrected[:, v]
@@ -63,3 +67,40 @@ def test_smi_rician_precedence_and_rejection_of_noise_bias():
     assert estimator.rician_sh and not estimator.rician_sh_clip
     with pytest.raises(ValueError, match='noise_bias'):
         SMI(np.ones(6), nonnegative_directions(6), rician_sh_clip=True, noise_bias=True)
+
+
+def test_correction_formulas_broadcast_and_preserve_input():
+    from lib.rician_sh import clipped_magnitude
+    raw = np.array([[0., 1., 2.], [0., 2., 4.]])
+    sigma = np.array([[1.], [2.]])
+    original = raw.copy()
+    np.testing.assert_allclose(clipped_magnitude(raw, sigma), [[0, 0, np.sqrt(3)], [0, 0, np.sqrt(12)]])
+    np.testing.assert_allclose(clipped_magnitude(raw, sigma, mode='abs'), [[1, 0, np.sqrt(3)], [2, 0, np.sqrt(12)]])
+    np.testing.assert_array_equal(raw, original)
+    with pytest.raises(ValueError, match='mode'):
+        clipped_magnitude(raw, sigma, mode='invalid')
+
+
+def test_absolute_correction_is_forwarded_to_parallel_workers():
+    rng = np.random.default_rng(813)
+    basis = np.array([[1., -1.], [1., 0.], [1., 1.]])
+    grid = np.array([[1., -2.], [1., 2.]])
+    raw = abs(rng.normal(size=(3, 65)))
+    noise = np.full(65, .5)
+    serial = fit_rician_sh(basis, raw, noise, constraint_basis=grid, clipped=True, clip_mode='abs')
+    parallel = fit_rician_sh(basis, raw, noise, constraint_basis=grid, clipped=True, clip_mode='abs', n_jobs=2)
+    np.testing.assert_allclose(parallel, serial, atol=1e-10)
+    assert np.min(grid @ parallel) >= -1e-12
+
+
+def test_expectation_initialization_ignores_absolute_correction_setting(monkeypatch):
+    import lib.rician_sh as module
+    basis = np.array([[1., -1.], [1., 0.], [1., 1.]])
+    raw = np.array([[.1], [.2], [1.]])
+    noise = np.array([.5])
+    expected = lstsq(basis, np.sqrt(np.maximum(0, raw**2 - noise**2)))[0]
+    def capture(basis, measured, sigma, initial):
+        np.testing.assert_array_equal(initial.T, expected)
+        return initial.copy(), 0
+    monkeypatch.setattr(module, '_fit_batch', capture)
+    fit_rician_sh(basis, raw, noise, clipped=False, clip_mode='abs')

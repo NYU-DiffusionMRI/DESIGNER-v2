@@ -49,17 +49,18 @@ def test_cli_both_estimators(inputs, multi_te):
         np.savetxt(inputs/'dwi.bvec', np.tile(g.T,(1,2)))
         np.savetxt(inputs/'dwi.echotime', np.repeat([60,90], b.size))
     common = ['-SMI','-sigma','sigma.nii','-mask','mask.nii','-load_prior','prior.mat','-lmax','2']
-    for name, extra in [('lls',[]),('rician',['-RicianExp']), ('clip',['-RicianClip'])]:
+    for name, extra in [('lls',[]),('rician',['-RicianExp']), ('clip',['-RicianClipMax']), ('absolute',['-RicianClipAbs'])]:
         result=run_cli(inputs,name,common+extra)
         assert result.returncode == 0, result.stdout
         description = {'lls':'linear least squares', 'rician':'Rician expectation NLS',
-                       'clip':'clipped corrected LLS'}[name]
+                       'clip':'clipped corrected LLS', 'absolute':'clipped corrected LLS'}[name]
         assert description in result.stdout
         if extra:
             assert 'nonnegative signal constraints' in result.stdout
     lls_files=sorted((inputs/'lls').glob('*.nii'))
     assert {p.name for p in lls_files} == {p.name for p in (inputs/'rician').glob('*.nii')}
     assert {p.name for p in lls_files} == {p.name for p in (inputs/'clip').glob('*.nii')}
+    assert {p.name for p in lls_files} == {p.name for p in (inputs/'absolute').glob('*.nii')}
     for p in lls_files:
         x=nib.load(p); y=nib.load(inputs/'rician'/p.name)
         assert x.shape == y.shape
@@ -69,6 +70,10 @@ def test_cli_both_estimators(inputs, multi_te):
     b=nib.load(inputs/'rician/rotinvs_smi.nii').get_fdata()
     assert not np.allclose(a,b)
     np.testing.assert_array_equal(a[...,0],b[...,0])
+    absolute = nib.load(inputs/'absolute/rotinvs_smi.nii').get_fdata()
+    clipped = nib.load(inputs/'clip/rotinvs_smi.nii').get_fdata()
+    assert np.all(np.isfinite(absolute)) and not np.allclose(absolute, clipped)
+    np.testing.assert_array_equal(absolute[...,0], a[...,0])
 
 
 @pytest.mark.parametrize('options, error', [
@@ -84,7 +89,7 @@ def test_cli_errors(inputs, options, error):
 
 
 @pytest.mark.parametrize('mode', ['-SMI', '-SH'])
-@pytest.mark.parametrize('estimator', ['-RicianExp', '-RicianClip'])
+@pytest.mark.parametrize('estimator', ['-RicianExp', '-RicianClipMax', '-RicianClipAbs'])
 def test_cli_rejects_misaligned_map(inputs, mode, estimator):
     affine=np.eye(4); affine[0,3]=10
     nib.save(nib.Nifti1Image(np.ones((2,2,1)),affine),inputs/'sigma.nii')

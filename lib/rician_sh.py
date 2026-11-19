@@ -64,24 +64,29 @@ def rician_mean_and_derivative(signal, sigma):
     return mean, deriv
 
 
-def clipped_magnitude(measurements, sigma):
-    """Return sqrt(max(0, M**2 - sigma**2)), with NumPy broadcasting.
+def clipped_magnitude(measurements, sigma, *, mode='maxzero'):
+    """Correct magnitudes with max-zero or absolute value and NumPy broadcasting.
 
     Sigma is the Gaussian complex-component standard deviation in the same
     units as M. This subtracts one sigma squared, and never mutates the input.
+    mode='maxzero' returns sqrt(max(0, M**2-sigma**2)); mode='abs' returns
+    sqrt(abs(M**2-sigma**2)). Expectation initialization always uses max-zero.
     """
+    if mode not in ('maxzero', 'abs'):
+        raise ValueError("Magnitude correction mode must be 'maxzero' or 'abs'")
     measurements = np.asarray(measurements, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
-    return np.sqrt(np.maximum(0, measurements**2 - sigma**2))
+    difference = measurements**2 - sigma**2
+    return np.sqrt(np.abs(difference) if mode == 'abs' else np.maximum(0, difference))
 
 
 def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
                   constraint_basis=None, constrained_max_iter=None,
-                  diagnostics=None, *, clipped=False, n_jobs=1):
+                  diagnostics=None, *, clipped=False, n_jobs=1, clip_mode='maxzero'):
     """Fit the Rician mean, or clipped magnitudes, starting from corrected LLS.
 
     Shapes: basis (directions, coefficients), measurements (directions, voxels),
-    sigma (voxels,). Always initialize from the linear SH fit to
+    sigma (voxels,). Expectation fitting always initializes from the linear SH fit to
     sqrt(max(0, measurements**2 - sigma**2)). This correction supplies only
     the initial coefficients; the nonlinear objective uses raw measurements.
     With constraint_basis,
@@ -98,6 +103,8 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
     clipped=True instead minimizes linear squared residuals against the
     clipped measurements, with the same nonnegativity constraints. It does
     not evaluate the Rician expectation or perform a nonlinear search.
+    clip_mode selects 'maxzero' or 'abs' when clipped=True. Expectation fitting
+    always starts from max-zero corrected LLS, regardless of clip_mode.
     n_jobs uses joblib's process-count convention; independent voxel blocks
     run with one BLAS thread each. One worker retains the serial path.
     """
@@ -105,6 +112,8 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
             not isinstance(constrained_max_iter, (int, np.integer))
             or constrained_max_iter < 1):
         raise ValueError("Rician SH constrained iteration limit must be a positive integer")
+    if clip_mode not in ('maxzero', 'abs'):
+        raise ValueError("SH clip_mode must be 'maxzero' or 'abs'")
     measurements = np.asarray(measurements, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
     if n_jobs != 1 and measurements.shape[1] > 32:
@@ -117,7 +126,7 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
                 blocks = Parallel(n_jobs=workers)(
                     delayed(_fit_parallel_block)(basis, measurements[:, start:start+block_size],
                         sigma[start:start+block_size], constraint_basis, constrained_max_iter,
-                        diagnostics is not None, clipped)
+                        diagnostics is not None, clipped, clip_mode)
                     for start in range(0, measurements.shape[1], block_size))
             if diagnostics is not None:
                 for key in blocks[0][1]:
@@ -129,7 +138,8 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
         diagnostics['nonconverged'] = np.zeros(measurements.shape[1], dtype=bool)
     indices = np.flatnonzero(sigma > 0)
     corrected = measurements.copy()
-    corrected[:, indices] = clipped_magnitude(measurements[:, indices], sigma[indices])
+    corrected[:, indices] = clipped_magnitude(
+        measurements[:, indices], sigma[indices], mode=clip_mode if clipped else 'maxzero')
     initial = lstsq(basis, corrected)[0]
     result = np.array(initial, dtype=float, copy=True)
     if clipped:
@@ -158,11 +168,12 @@ def fit_rician_sh(basis, measurements, sigma, chunk_size=256,
 
 
 def _fit_parallel_block(basis, measurements, sigma, constraint_basis, max_iter,
-                        collect_diagnostics, clipped):
+                        collect_diagnostics, clipped, clip_mode):
     diagnostics = {} if collect_diagnostics else None
     coefficients = fit_rician_sh(
         basis, measurements, sigma, constraint_basis=constraint_basis,
-        constrained_max_iter=max_iter, diagnostics=diagnostics, clipped=clipped)
+        constrained_max_iter=max_iter, diagnostics=diagnostics, clipped=clipped,
+        clip_mode=clip_mode)
     return coefficients, diagnostics
 
 

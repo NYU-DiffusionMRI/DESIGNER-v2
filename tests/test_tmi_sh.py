@@ -9,7 +9,7 @@ from tests.test_rician_sh import protocol
 from tests.test_tmi_rician_sh import inputs, run_cli
 
 
-@pytest.mark.parametrize('rician', [False, 'RicianExp', 'RicianClip'])
+@pytest.mark.parametrize('rician', [False, 'RicianExp', 'RicianClipMax', 'RicianClipAbs'])
 def test_single_shell_cli_saves_separate_invariants(inputs, rician):
     image = nib.load(inputs/'dwi.nii')
     nib.save(nib.Nifti1Image(image.get_fdata()[..., 6:96], image.affine), inputs/'dwi.nii')
@@ -71,8 +71,8 @@ def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
     (['-SMI', '-lmaxSH', '0,2,4'], '-lmaxSH requires -SH'),
     (['-SMI', '-lmax', '0,2,4'], '-SMI -lmax accepts one invariant order'),
     (['-SH', '-RicianExp'], 'requires an explicit noise map'),
-    (['-SH', '-RicianClip'], 'requires an explicit noise map'),
-    (['-RicianClip'], 'requires -DTI, -DKI, -WDKI, -SH or -SMI'),
+    (['-SH', '-RicianClipMax'], 'requires an explicit noise map'),
+    (['-RicianClipMax'], 'requires -DTI, -DKI, -WDKI, -SH or -SMI'),
     (['-SH', '-RicianSH_maxiter', '2'], 'requires -RicianExp'),
     (['-SH', '-RicianExp', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '0'], 'positive integer'),
 ])
@@ -82,7 +82,7 @@ def test_cli_rejects_invalid_standalone_options(inputs, options, error):
     assert error in result.stdout
 
 
-@pytest.mark.parametrize('rician', [False, 'RicianExp', 'RicianClip'])
+@pytest.mark.parametrize('rician', [False, 'RicianExp', 'RicianClipMax', 'RicianClipAbs'])
 def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
     options = ['-SH', '-lmaxSH', '0,2,4', '-mask', 'mask.nii']
     if rician:
@@ -102,7 +102,7 @@ def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
 
 
 @pytest.mark.parametrize('mode', ['-SH', '-SMI'])
-@pytest.mark.parametrize('estimator', ['-RicianExp', '-RicianClip'])
+@pytest.mark.parametrize('estimator', ['-RicianExp', '-RicianClipMax', '-RicianClipAbs'])
 def test_cli_iteration_cap_saves_aligned_diagnostics(inputs, mode, estimator):
     options = [mode, estimator, '-sigma', 'sigma.nii', '-mask', 'mask.nii',
                '-RicianSH_maxiter', '2', '-lmaxSH' if mode == '-SH' else '-lmax', '4']
