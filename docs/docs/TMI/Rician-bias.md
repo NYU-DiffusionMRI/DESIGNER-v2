@@ -60,6 +60,17 @@ measurements do not create this logarithm problem.
 
 ## Rician expectation fitting
 
+For $\sigma>0$, the expected magnitude is
+
+$$
+\mu_R(s,\sigma)=\sigma\sqrt{\frac{\pi}{2}}\,e^{-z}
+\left[(1+2z)I_0(z)+2zI_1(z)\right],
+\qquad z=\frac{s^2}{4\sigma^2}.
+$$
+
+Here $I_0$ and $I_1$ are modified Bessel functions of the first kind, of
+orders zero and one. At zero noise, $\mu_R(s,0)=s$ for $s\geq0$.
+
 `-RicianExp` fits the original observations using the expected magnitude:
 
 $$
