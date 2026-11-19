@@ -233,8 +233,9 @@ $Y_{\mathrm{grid}}c\geq0$ at acquired directions and on a 65,536-direction spher
 grid, before cross-shell rank-one processing. This constrains signals, not
 individual coefficients. A finite grid does not guarantee positivity everywhere;
 constraining a truncated expansion can introduce bias even for a positive
-physical signal. At $\sigma=0$, fits reduce to ordinary LLS, or constrained LLS
-with `-nonNeg`.
+physical signal. Nonnegativity can substantially reduce variance, so users
+choose this bias–variance tradeoff. At $\sigma=0$, fits reduce to ordinary LLS,
+or constrained LLS with `-nonNeg`.
 
 The solver uses an analytic Jacobian and batched fitting. With `-nonNeg`,
 violated grid directions trigger constrained refinement; failures return the

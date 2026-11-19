@@ -92,7 +92,9 @@ at acquired directions and on a 65,536-direction sphere grid, before cross-shell
 rank-one processing. This constrains the signal, not individual coefficients;
 a finite grid is not a continuous-sphere guarantee. A positive physical signal
 can have a negative truncated SH projection, so this optional constraint can
-introduce truncation bias. `-nonNeg` is not available with either clipping flag.
+introduce truncation bias. Nonnegativity can also substantially reduce the
+variance of `RicianExp` estimates: this bias–variance tradeoff is left to the
+user. `-nonNeg` is not available with either clipping flag.
 
 Expectation fitting models the mean rather than the Rician likelihood. None
 of these methods guarantees unbiased finite-sample parameters.
