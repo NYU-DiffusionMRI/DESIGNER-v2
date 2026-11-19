@@ -20,11 +20,20 @@ def compare_maps(first, second, names=None):
         np.testing.assert_allclose(a.get_fdata(), b.get_fdata(), rtol=2e-5, atol=2e-6)
 
 
-@pytest.mark.parametrize('multi_te,gnc', [(False, False), (True, False), (False, True)])
-@pytest.mark.parametrize('estimator', ['-RicianClip', '-RicianSH'])
-def test_tensor_clipping_matches_explicitly_corrected_input(inputs, multi_te, gnc, estimator):
+@pytest.mark.parametrize('multi_te,gnc,settings', [
+    (False,False,[]), (True,False,[]), (False,True,[]),
+    (False,False,['-fit_constraints','0,1,0']),
+    (False,False,['-akc_outliers']), (True,False,['-akc_outliers']),
+    (False,False,['-fit_smoothing','50']), (True,False,['-fit_smoothing','50'])])
+def test_tensor_clipping_matches_explicitly_corrected_input(inputs, multi_te, gnc, settings):
     image = nib.load(inputs/'dwi.nii')
     data = image.get_fdata()
+    if settings:
+        b,g=protocol()
+        adc=g*g@np.array([.4,.7,1.3])
+        data=np.broadcast_to(np.exp(-b*adc+.7*(b*adc)**2/6),data.shape).copy()
+        nib.save(nib.Nifti1Image(data,image.affine),inputs/'dwi.nii')
+        nib.save(nib.Nifti1Image(np.full(data.shape[:3],.01),image.affine),inputs/'sigma.nii')
     if multi_te:
         data = np.concatenate([data, .7*data], axis=-1)
         nib.save(nib.Nifti1Image(data, image.affine), inputs/'dwi.nii')
@@ -32,45 +41,47 @@ def test_tensor_clipping_matches_explicitly_corrected_input(inputs, multi_te, gn
         np.savetxt(inputs/'dwi.bval', [np.tile(b*1000, 2)])
         np.savetxt(inputs/'dwi.bvec', np.tile(g.T, (1, 2)))
         np.savetxt(inputs/'dwi.echotime', np.repeat([60, 90], len(b)))
-    options = ['-DTI', '-DKI', '-WDKI', '-mask', 'mask.nii']
+    options = ['-DTI', '-DKI', '-WDKI', '-mask', 'mask.nii'] + settings
     if gnc:
         field = np.broadcast_to(np.diag([.95, 1.03, 1.01]).ravel(), (2, 2, 1, 9))
         nib.save(nib.Nifti1Image(field, image.affine), inputs/'gnc.nii')
         options += ['-gnc', 'gnc.nii', '-gnc_format', 'scanner']
-    flagged = run_cli(inputs, 'flagged', options+[estimator, '-sigma', 'sigma.nii'])
+    flagged = run_cli(inputs, 'flagged', options+['-RicianClip', '-sigma', 'sigma.nii'])
     assert flagged.returncode == 0, flagged.stdout
     sigma = nib.load(inputs/'sigma.nii').get_fdata()
     corrected = np.sqrt(np.maximum(0, data**2 - sigma[..., None]**2))
-    assert np.any(corrected == 0)  # Exercises the tensor fitter's existing log floor.
+    if not settings:
+        assert np.any(corrected == 0)  # Exercises the tensor fitter's existing log floor.
     nib.save(nib.Nifti1Image(corrected, image.affine), inputs/'dwi.nii')
     explicit = run_cli(inputs, 'explicit', options)
     assert explicit.returncode == 0, explicit.stdout
     compare_maps(inputs/'flagged', inputs/'explicit')
 
 
-def test_both_flags_correct_tensors_but_use_raw_rician_sh(inputs):
+def test_expectation_takes_precedence_for_both_tensors_and_sh(inputs):
     common = ['-DTI', '-DKI', '-SH', '-lmaxSH', '0,2,4', '-mask', 'mask.nii',
               '-sigma', 'sigma.nii']
-    for name, flags in [('clip', ['-RicianClip']), ('rician', ['-RicianSH']),
-                        ('both', ['-RicianClip', '-RicianSH'])]:
+    for name, flags in [('clip', ['-RicianClip']), ('rician', ['-RicianExp']),
+                        ('both', ['-RicianClip', '-RicianExp'])]:
         result = run_cli(inputs, name, common+flags)
         assert result.returncode == 0, result.stdout
-    tensor_names = [p.name for p in (inputs/'clip').glob('*.nii')
+    tensor_names = [p.name for p in (inputs/'rician').glob('*.nii')
                     if p.name not in ['S0.nii', 'S2.nii', 'S4.nii']]
-    compare_maps(inputs/'both', inputs/'clip', tensor_names)
-    compare_maps(inputs/'rician', inputs/'clip', tensor_names)
+    compare_maps(inputs/'both', inputs/'rician', tensor_names)
+    assert not np.allclose(nib.load(inputs/'rician/mk_dki.nii').get_fdata(),
+                           nib.load(inputs/'clip/mk_dki.nii').get_fdata())
     compare_maps(inputs/'both', inputs/'rician', ['S0.nii', 'S2.nii', 'S4.nii'])
-    standalone = run_cli(inputs, 'sh_only', ['-SH', '-RicianSH', '-lmaxSH', '0,2,4',
+    standalone = run_cli(inputs, 'sh_only', ['-SH', '-RicianExp', '-lmaxSH', '0,2,4',
                                            '-mask', 'mask.nii', '-sigma', 'sigma.nii'])
     assert standalone.returncode == 0, standalone.stdout
     compare_maps(inputs/'rician', inputs/'sh_only', ['S0.nii', 'S2.nii', 'S4.nii'])
-    assert json.loads((inputs/'both/SH_shells.json').read_text())['estimator'] == 'RicianSH'
+    assert json.loads((inputs/'both/SH_shells.json').read_text())['estimator'] == 'RicianExp'
     assert not np.allclose(nib.load(inputs/'clip/S0.nii').get_fdata(),
                            nib.load(inputs/'rician/S0.nii').get_fdata())
 
 
 def test_rician_sh_also_takes_precedence_in_smi(inputs):
-    common = ['-SMI', '-RicianSH', '-sigma', 'sigma.nii', '-mask', 'mask.nii',
+    common = ['-SMI', '-RicianExp', '-sigma', 'sigma.nii', '-mask', 'mask.nii',
               '-load_prior', 'prior.mat', '-lmax', '2']
     for name, flags in [('rician', []), ('both', ['-RicianClip'])]:
         result = run_cli(inputs, name, common+flags)
@@ -104,7 +115,7 @@ def test_clipping_is_not_repeated_after_b0_restoration(inputs, multi_te):
 
 @pytest.mark.parametrize('options,error', [
     (['-DTI', '-RicianClip'], 'requires an explicit noise map'),
-    (['-DKI', '-RicianSH'], 'requires an explicit noise map'),
+    (['-DKI', '-RicianExp'], 'requires an explicit noise map'),
     (['-DTI', '-RicianClip', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '5'], 'with -SH/-SMI'),
 ])
 def test_invalid_tensor_correction_options(inputs, options, error):

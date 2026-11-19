@@ -93,7 +93,7 @@ def experiment(root, repeats=128, reuse=False):
         save(root,f'truth_{key}.nii',np.broadcast_to(np.array(values)[None,:,None],shape))
     (root/'experiment.json').write_text(json.dumps(metadata,indent=2))
     for image,name,extra in [('clean.nii','clean_lls',[]),('noisy.nii','lls',[]),
-                              ('noisy.nii','rician',['-RicianSH']),('corrected.nii','corrected_lls',[])]:
+                              ('noisy.nii','rician',['-RicianExp']),('corrected.nii','corrected_lls',[])]:
         record=root/f'{name}_command.json'
         if reuse and record.exists() and json.loads(record.read_text())['returncode']==0:
             print(f'Reusing completed {name}',flush=True)
@@ -126,7 +126,7 @@ def experiment(root, repeats=128, reuse=False):
     with (root/'metrics.csv').open('w') as f:
         writer=csv.DictWriter(f,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
     methods=[('lls','#d67b22','Uncorrected LLS'),
-             ('corrected_lls','#22875e','Corrected LLS'),('rician','#2679b5','RicianSH')]
+             ('corrected_lls','#22875e','Corrected LLS'),('rician','#2679b5','RicianExp')]
     for metric in ['bias','rmse']:
         fig,axes=plt.subplots(2,4,figsize=(15,7),constrained_layout=True)
         for ax,key in zip(axes.flat,truth):

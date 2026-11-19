@@ -50,6 +50,81 @@ KT volumes 3-8:   $W_{1112},W_{1113},W_{1222},W_{1333},W_{2223},W_{2333}$\
 KT volumes 9-11:  $W_{1122},W_{1133},W_{2233}$\
 KT volumes 12-14: $W_{1123},W_{1223},W_{1233}$.
 
+### Rician correction options
+
+Both correction choices require an aligned 3D `-sigma` map in matching signal
+units. With no correction flag, TMI retains its existing WLLS tensor fit.
+
+| Option | DTI/DKI/WDKI estimation |
+|---|---|
+| `-RicianClip` | Apply `sqrt(max(0, M²−sigma²))` once, including b0, then use the existing tensor pipeline |
+| `-RicianExp` | Fit the expected Rician magnitude to the original measurements by unconstrained nonlinear least squares |
+
+`-RicianClip` is input preprocessing. It can be combined with the existing
+tensor constraints, AKC handling, fit smoothing, polynomial regression,
+gradient nonlinearity correction, and b0 restoration. Their existing behavior
+is retained. Zero corrected measurements use the existing positive log floor
+and can produce extreme log-domain fits. The correction subtracts one sigma
+squared; it does not take the absolute value of a negative squared difference.
+
+For `-RicianExp`, let `X theta` be the log DTI or DKI signal and let
+`mu_R(s, sigma)` be the expected Rician magnitude. The fit minimizes
+
+$$\sum_i [M_i-\mu_R(\exp((X\theta)_i),\sigma)]^2.$$
+
+The coefficients are `[log S0, D6]` for DTI and `[log S0, D6, C15]` for DKI,
+where `C = MD² W`. Every nonlinear search, including a retry, starts from
+ordinary LLS on `sqrt(max(0, M²−sigma²))`. The objective uses original
+observations, never the clipped measurements. This is a mean-signal fit,
+not Rician maximum likelihood. At sigma=0 it becomes signal-domain NLLS.
+
+**Tensor fitting with `-RicianExp` is unconstrained.** It ignores
+`-fit_constraints` and `-akc_outliers`, reporting this in the log. There are
+no diffusion-eigenvalue, kurtosis, or monotonicity bounds. The exponential
+signal model is positive by construction. This differs from the explicit
+angular signal nonnegativity constraint used by SH/SMI with the same flag.
+
+Both choices support separate echo-time/LTE subsets, `-maxb`, `-maxb_dti`,
+`-bmat`, and voxel-specific `-gnc` designs. `-RicianExp` takes precedence
+for all selected models if both correction flags are supplied.
+
+Use the **original complex-component Gaussian sigma responsible for the
+retained Rician mean bias**. If denoising reduces residual variance but retains
+that mean bias, do not replace sigma by the smaller residual SD. Match any
+signal intensity scaling and spatial alignment. This model is inappropriate
+when the noise floor has already been removed or when preprocessing changes
+the mean in a way not described by the supplied sigma. Correct mean modeling
+does not guarantee unbiased finite-sample MK/RK or other derived parameters.
+
+```bash
+tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii -mask mask.nii
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii -akc_outliers
+tmi dwi.nii tensor_restore -DKI -RicianClip -sigma sigma.nii -db0restore
+```
+
+Rician-expectation fitting with `-db0restore`, `-fit_smoothing`, `-polyreg`,
+or external `-dt` is deferred and produces a clear error. Restoration and
+spatial refitting need separate handling of the changed measurements and
+their noise model. These restrictions do **not** apply to `-RicianClip`.
+
+The expectation solver uses an analytic Jacobian and QR coordinates. It allows
+200 function evaluations, with a 1000-evaluation retry from the same clipped
+start if needed, and retains the lower-cost result. Independent blocks use
+`-n_cores` processes and one BLAS thread per worker. For each fitted tensor
+model, output includes `RicianExp_status`, `RicianExp_nfev`, `RicianExp_cost`,
+`RicianExp_initial_cost`, `RicianExp_retried`, `RicianExp_nonconverged`,
+`RicianExp_nonpositive_D`, and `RicianExp_signal_underflow` maps, with the usual
+model/echo suffix (for example `RicianExp_nonconverged_dki.nii`). Evaluation
+counts include retries. `RicianExp_diagnostics_dki.json` summarizes the fit.
+Unconverged and unphysical fits are retained and flagged, not silently replaced
+with a different estimator. Existing scalar-map extraction conventions remain
+unchanged, including absolute diffusion eigenvalues; use the diagnostic map
+to identify nonpositive diffusion tensors.
+
+The measurement-derived `trace` output is calculated from original magnitudes
+with `-RicianExp`; it is not an expectation-corrected model prediction.
+With `-RicianClip`, trace uses the corrected measurements as before.
+
 ### Tensor parameters
 
 The eigenvalues $\lambda_1 \geq \lambda_2 \geq \lambda_3$ of $\mathbf{D}$ represent the shape of the tensor, and the corresponding eigenvectors of $\mathbf{D}$ represent the orientation of the diffusion tensor. To highlight specific features of the tensor we commonly use scalar representations including the trace ${\rm TR}(\mathbf{D}) = \lambda_1 + \lambda_2 + \lambda_3$. 

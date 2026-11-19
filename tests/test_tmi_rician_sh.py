@@ -49,7 +49,7 @@ def test_cli_both_estimators(inputs, multi_te):
         np.savetxt(inputs/'dwi.bvec', np.tile(g.T,(1,2)))
         np.savetxt(inputs/'dwi.echotime', np.repeat([60,90], b.size))
     common = ['-SMI','-sigma','sigma.nii','-mask','mask.nii','-load_prior','prior.mat','-lmax','2']
-    for name, extra in [('lls',[]),('rician',['-RicianSH']), ('clip',['-RicianClip'])]:
+    for name, extra in [('lls',[]),('rician',['-RicianExp']), ('clip',['-RicianClip'])]:
         result=run_cli(inputs,name,common+extra)
         assert result.returncode == 0, result.stdout
         description = {'lls':'linear least squares', 'rician':'Rician expectation NLS',
@@ -72,9 +72,9 @@ def test_cli_both_estimators(inputs, multi_te):
 
 
 @pytest.mark.parametrize('options, error', [
-    (['-RicianSH'], 'requires -DTI, -DKI, -WDKI, -SH or -SMI'),
-    (['-SMI','-RicianSH'], 'requires an explicit noise map'),
-    (['-SMI','-RicianSH','-sigma','sigma.nii'], 'nonnegative')])
+    (['-RicianExp'], 'requires -DTI, -DKI, -WDKI, -SH or -SMI'),
+    (['-SMI','-RicianExp'], 'requires an explicit noise map'),
+    (['-SMI','-RicianExp','-sigma','sigma.nii'], 'nonnegative')])
 def test_cli_errors(inputs, options, error):
     if '-sigma' in options:
         nib.save(nib.Nifti1Image(np.full((2,2,1),-1.),np.eye(4)),inputs/'sigma.nii')
@@ -84,7 +84,7 @@ def test_cli_errors(inputs, options, error):
 
 
 @pytest.mark.parametrize('mode', ['-SMI', '-SH'])
-@pytest.mark.parametrize('estimator', ['-RicianSH', '-RicianClip'])
+@pytest.mark.parametrize('estimator', ['-RicianExp', '-RicianClip'])
 def test_cli_rejects_misaligned_map(inputs, mode, estimator):
     affine=np.eye(4); affine[0,3]=10
     nib.save(nib.Nifti1Image(np.ones((2,2,1)),affine),inputs/'sigma.nii')

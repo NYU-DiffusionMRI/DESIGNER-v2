@@ -193,7 +193,28 @@ Helper scripts in `scripts/` (in the project root):
 - Sythnstrip model (`tests/models/synthstrip_v7.3.2.pt`), which is used for D6 skull stripping, is downloaded by running `bash scripts/download_freesurfer_synthstrip.sh`
 
 
-## Rician SH tests and synthetic experiment
+## Rician tensor and SH tests
+
+Run the optional tensor mean-model tests and installed CLI checks in the development container:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 SMI_BLAS_THREADS=1 \
+  python -m pytest -q tests/test_rician_tensor.py tests/test_tmi_rician_exp.py \
+  tests/test_tmi_rician_clip.py tests/test_tmi_rician_sh.py tests/test_tmi_sh.py
+```
+
+The tensor tests use an independent hypergeometric Rician mean and a numerical
+Jacobian fit, recover known unconstrained tensors (including negative eigenvalues
+and kurtosis), exercise sigma=0 and voxel-specific gradients, and compare serial
+and parallel voxel ordering. CLI tests cover DTI/DKI/WDKI, combined SH/SMI runs,
+multi-TE and GNC, renamed flags, expectation precedence, ignored constraints/AKC,
+and explicit rejection of deferred expectation-refinement combinations.
+Clipped-input equivalence tests exercise constraints, AKC replacement, smoothing
+and b0 restoration against manually corrected input. The million-sample
+polynomial-regression training is not run by these small CLI tests; clipping
+continues to feed the existing polynomial-regression path without adding a restriction.
+
+## Rician SH synthetic experiment
 
 Run inside the dev container from `/workspace`:
 
@@ -209,7 +230,7 @@ against an independent SciPy optimizer. The experiment directly integrates
 three Standard Model tissues with Watson orientation distributions, generates
 128 independent Rician noise realizations at each of four b0 SNRs, and runs
 noiseless LLS, noisy LLS, clipped corrected noisy LLS (`sqrt(max(0, S**2 - sigma**2))`),
-and noisy RicianSH through `tmi`. RicianSH uses the linear fit to the clipped
+and noisy RicianExp through `tmi`. RicianExp uses the linear fit to the clipped
 corrected signal as its initialization, then fits the original magnitude data
 with nonnegative signal constraints. It saves all maps,
 commands, logs, truth maps, per-map bias/RMSE/MAE tables, and figures. The normal
@@ -221,7 +242,7 @@ To compare every map and channel from two real-data runs:
 
 ```bash
 python tests/scripts/compare_rician_sh_maps.py lls_dir rician_dir mask.nii comparison_dir \
-  --label "Clipped corrected LLS" --description "LLS input: sqrt(max(0, S**2 - sigma**2)); RicianSH input: original magnitude."
+  --label "Clipped corrected LLS" --description "LLS input: sqrt(max(0, S**2 - sigma**2)); RicianExp input: original magnitude."
 ```
 
 This saves differences as NIfTI, all-voxel metrics as CSV/JSON, axial and coronal

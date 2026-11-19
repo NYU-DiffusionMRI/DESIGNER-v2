@@ -47,25 +47,32 @@ tmi \
 designer2_test.mif designer2_params_test
 ```
 
-For magnitude data with a retained Rician noise floor, `tmi -SMI -RicianSH
+For magnitude data with a retained Rician noise floor, `tmi -SMI -RicianExp
 -sigma sigma.nii dwi.nii output_dir` enables Rician-expectation SH fitting with
 nonnegative signal constraints at acquired directions and on a dense sphere grid.
 The search starts from LLS on `sqrt(max(0, M²−sigma²))` and fits the original magnitudes.
-The noise map must match the DWI grid and intensity scale. Omitting both correction flags keeps linear least squares.
+The noise map must match the DWI grid and intensity scale. Omitting both correction
+flags keeps ordinary LLS for SH/SMI and the existing WLLS tensor fitting.
 Alternatively, `-RicianClip -sigma sigma.nii` fits
 `sqrt(max(0, M²−sigma²))` with the same signal nonnegativity constraint,
 in either `-SH` or `-SMI` mode. It also corrects input magnitudes for
-`-DTI`, `-DKI` and `-WDKI`, including b0. `-RicianSH` automatically applies
-that same clipped correction to tensor inputs, so a combined tensor/SH run
-needs only `-RicianSH`. If both flags are given, `-RicianSH` takes precedence
-for SH/SMI, using original magnitudes; tensor fits receive clipped correction
-once. See the [TMI options](docs/docs/TMI/usage.md#-riciansh)
+`-DTI`, `-DKI` and `-WDKI`, including b0, before their existing fits and selected
+constraints, AKC handling, smoothing, polynomial regression or b0 restoration.
+For tensors, `-RicianExp` instead fits the expected Rician magnitude by
+unconstrained nonlinear least squares, initialized from clipped ordinary LLS.
+It ignores tensor constraints and AKC replacement. Expectation fitting with
+b0 restoration, fit smoothing, polynomial regression or external tensors is
+deferred; these combinations produce an explicit error. GNC and multi-TE
+tensor fitting are supported. If both flags are given, `-RicianExp` takes
+precedence for every model, using original observations.
+Use the original sigma responsible for the retained Rician mean bias, not the
+smaller residual SD after denoising. See the [TMI options](docs/docs/TMI/usage.md#-ricianexp)
 for assumptions and limitations.
 
 To estimate only signal rotational invariants, without SMI model fitting:
 
 ```bash
-tmi dwi.nii sh_output -SH -RicianSH -sigma sigma.nii -mask brain_mask.nii -lmaxSH 6
+tmi dwi.nii sh_output -SH -RicianExp -sigma sigma.nii -mask brain_mask.nii -lmaxSH 6
 ```
 
 This saves `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`, with one volume per shell

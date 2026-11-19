@@ -73,8 +73,8 @@ def compare(lls, rician, mask_file, output, label="LLS", description=""):
                 extent=max(float(np.percentile(np.abs(d[mask]),99)),1e-12)
                 selected_mask=np.take(mask,index,axis=axis).T
                 for j,(image,cm,lo,hi,title) in enumerate([
-                    (x,'viridis',*limits,label),(y,'viridis',*limits,'RicianSH'),
-                    (d,'coolwarm',-extent,extent,f'RicianSH − {label}')]):
+                    (x,'viridis',*limits,label),(y,'viridis',*limits,'RicianExp'),
+                    (d,'coolwarm',-extent,extent,f'RicianExp − {label}')]):
                     slice_=np.ma.masked_where(~selected_mask,np.take(image,index,axis=axis).T)
                     art=axes[c,j].imshow(slice_,origin='lower',cmap=cm,vmin=lo,vmax=hi)
                     axes[c,j].set_title(f'{title} · channel {c}');axes[c,j].axis('off')
@@ -93,27 +93,27 @@ def compare(lls, rician, mask_file, output, label="LLS", description=""):
         d=b-a;extent=max(float(np.percentile(np.abs(d[mask]),99)),1e-12)
         for col,(v,cm,lo,hi) in enumerate([(a,'viridis',*limits),(b,'viridis',*limits),(d,'coolwarm',-extent,extent)]):
             art=axes[row,col].imshow(np.ma.masked_where(~ms,np.take(v,index,axis=axis).T),origin='lower',cmap=cm,vmin=lo,vmax=hi)
-            axes[row,col].axis('off');axes[row,col].set_title(name if col==0 else ['','RicianSH',f'RicianSH − {label}'][col])
+            axes[row,col].axis('off');axes[row,col].set_title(name if col==0 else ['','RicianExp',f'RicianExp − {label}'][col])
             fig.colorbar(art,ax=axes[row,col],shrink=.8)
-    fig.suptitle(f'Real-data comparison · {label} and RicianSH · identical pair scales')
+    fig.suptitle(f'Real-data comparison · {label} and RicianExp · identical pair scales')
     fig.savefig(output/'scalar_overview.png',dpi=140);plt.close(fig)
-    intro=f"""<h1>Real-data RicianSH comparison</h1>
+    intro=f"""<h1>Real-data RicianExp comparison</h1>
 <p>{html.escape(description)}</p>
 <p>Reference: {html.escape(label)}. Every output map and every 4D channel is included.
-Delta means RicianSH minus the reference. Statistics use all mask voxels; images use native
+Delta means RicianExp minus the reference. Statistics use all mask voxels; images use native
 voxel planes (mask reoriented by exact axis flips/permutations if needed), common 1st–99th percentile limits for each pair, and a separate symmetric
 difference scale. Channel indices start at zero. Rotational invariants are ordered by
 SH band, then shell. No ground truth is available for these real data.</p>
 <p><a href="map_metrics.csv">All numerical metrics (CSV)</a> ·
 <a href="../provenance.json">Input and noise provenance</a></p>"""
-    table='<table><tr>'+''.join(f'<th>{k}</th>' for k in ['Map','Channel',label+' mean','RicianSH mean','Mean delta','RMS delta','Max |delta|'])+'</tr>'
+    table='<table><tr>'+''.join(f'<th>{k}</th>' for k in ['Map','Channel',label+' mean','RicianExp mean','Mean delta','RMS delta','Max |delta|'])+'</tr>'
     for r in rows:
         values=[r['map'],r['channel']]+[f'{r[k]:.6g}' for k in ['lls_mean','rician_mean','mean_delta','rms_delta','max_abs_delta']]
         table+='<tr>'+''.join(f'<td>{html.escape(str(v))}</td>' for v in values)+'</tr>'
     table+='</table>'
     body=intro+table+'<h2>All scalar maps</h2><img src="scalar_overview.png">'
     for figure in figures:body+=f'<details><summary>{html.escape(figure)}</summary><img loading="lazy" src="{figure}"></details>'
-    (output/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>RicianSH map comparison</title><style>body{font:16px system-ui;max-width:1200px;margin:40px auto;padding:0 24px;color:#223}p{line-height:1.5}table{border-collapse:collapse;font-size:13px}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:right}td:first-child{text-align:left}img{width:100%;height:auto}summary{cursor:pointer;padding:14px;background:#eef2f5;margin:10px 0}</style>'+body)
+    (output/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>RicianExp map comparison</title><style>body{font:16px system-ui;max-width:1200px;margin:40px auto;padding:0 24px;color:#223}p{line-height:1.5}table{border-collapse:collapse;font-size:13px}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:right}td:first-child{text-align:left}img{width:100%;height:auto}summary{cursor:pointer;padding:14px;background:#eef2f5;margin:10px 0}</style>'+body)
     print(f'Compared {len(left)} maps / {len(rows)} channels; saved to {output}',flush=True)
 
 

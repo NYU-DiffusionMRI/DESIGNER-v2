@@ -31,13 +31,13 @@ By default, if none of the below options are used, TMI will not estimate paramet
 ## Options for tensor estimation
 
 ### `-DTI`
-- Perform DTI fitting using weighted linear least squares.
+- Perform DTI fitting using weighted linear least squares by default, or unconstrained Rician-mean NLLS with `-RicianExp`.
 - Include diffusion tensor parameters in output folder.
-- Parameters extracted from the kurtosis tensor are labelled as `*_dti.nii` (e.g. ad_dti.nii, fa_dti.nii).
+- Parameters extracted from the diffusion tensor are labelled as `*_dti.nii` (e.g. ad_dti.nii, fa_dti.nii).
 - When the DTI option is used, b-shells greater than 1000 are automatically excluded from tensor estimation.
 
 ### `-DKI`
-- Perform DKI fitting using weighted linear least squares.
+- Perform DKI fitting using weighted linear least squares by default, or unconstrained Rician-mean NLLS with `-RicianExp`.
 - Include diffusion kurtosis parameters in output folder.
 - Parameters extracted from the diffusion tensor are labelled as `*_dki.nii` (e.g. ad_dki.nii, fa_dki.nii, mk_dki.nii).
 - When DKI option is used, b-shells greater than 3000 are automatically excluded from tensor estimation.
@@ -59,12 +59,14 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - For use with `-DKI` or `-WDKI`
 - A comma separated list of either 0 or 1. Each index corresponds to a hard bound on the kurtosis tensor. Index 1 corresponds to diffusion tensor > 0, index 2 corresponds to kurtosis tensor > 0, index 3 corresponds to kurtosis tensor < 10. An input of `1,1,1` will perform a fully constrained DKI fit, and `0,0,0` will perform an unconstrained fit.
 - Default `0,0,0`
+- Ignored with `-RicianExp`; retained with `-RicianClip`.
 
 ## Options for outlier replacement
 
 ### `-akc_outliers`
 - Brute force K tensor outlier detection and filtering. The kurtosis tensor is projected onto a sphere with 10,000 directions. Voxels where mean kurtosis is less than -1 or greater than 10 are labelled as outliers.
 - Outliers are replaced by the median value of neighboring (26 adjacent) non-outlier voxels in all diffusion weighted images and the DKI fit is done again.
+- Ignored with `-RicianExp`; retained with `-RicianClip`.
 
 ### `-fit_smoothing <percentile>`
 - Windowed adaptive nonlocal means filter on the dwi.
@@ -80,47 +82,42 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - Estimate signal rotational invariants without SMI model fitting or training priors. Use either `-SH` or `-SMI`.
 - **`-SH` alone uses ordinary linear least squares (LLS)** with automatic per-shell fitting orders and no signal nonnegativity constraint. No noise map is required.
 - **`-SH -RicianClip -sigma <noisemap>` fits clipped-corrected magnitudes with the same signal nonnegativity constraint.**
-- **`-SH -RicianSH -sigma <noisemap>` fits the expected Rician magnitude signal with a nonnegativity constraint on the underlying SH signal.** Supplying `-sigma` alone does not change the default LLS estimator.
+- **`-SH -RicianExp -sigma <noisemap>` fits the expected Rician magnitude signal with a nonnegativity constraint on the underlying SH signal.** Supplying `-sigma` alone does not change the default LLS estimator.
 - Save separate `S0.nii`, `S2.nii`, ..., `S<maximum_order>.nii` files in original signal units. Each file is 4D, with one volume per acquisition shell, including a singleton volume dimension for a single shell.
 - `SH_shells.json` maps each zero-based volume index to its b-value (s/mm²), b-shape, echo time (ms), number of measurements, and fitted SH order. Shells are ordered by b-value, b-shape, then echo time.
 - `-lmaxSH 6` fits through order 6 and saves S0, S2, S4, and S6. Without `-lmaxSH`, use the existing automatic per-shell orders and save every fitted even order. Higher-order volumes are zero for shells fitted at a lower order; b=0 and isotropic shells retain their arithmetic means and zero higher orders.
-- A comma-separated list sets each shell's fitting order independently for either estimator, for example `-lmaxSH 0,2,4,4,6` for b=0,1000,2000,7000,25000 at one b-shape and TE. Include every shell, sorted by b-value, b-shape, then echo time; `SH_shells.json` records the mapping. See the [per-shell example]({% link docs/TMI/SMI.md %}#choose-a-fitting-order-for-each-shell).
+- A comma-separated list sets each shell's fitting order independently for all estimators, for example `-lmaxSH 0,2,4,4,6` for b=0,1000,2000,7000,25000 at one b-shape and TE. Include every shell, sorted by b-value, b-shape, then echo time; `SH_shells.json` records the mapping. See the [per-shell example]({% link docs/TMI/SMI.md %}#choose-a-fitting-order-for-each-shell).
 - A single diffusion shell is supported, including acquisitions without b=0. A requested fitting order must have enough independent directions in every directional shell; otherwise reduce `-lmaxSH`.
-- Both estimators retain the existing SH normalization and rank-one processing across shells; no microstructure regression is performed.
+- All estimators retain the existing SH normalization and rank-one processing across shells; no microstructure regression is performed.
 
 ### `-SMI`
 
 - Perform estimation of the Standard Model of White Matter.
-- SH fitting uses LLS by default. Use `-RicianClip -sigma <noisemap>` for clipped correction and signal nonnegativity. Add `-RicianSH -sigma <noisemap>` to use the same expected Rician magnitude model and signal nonnegativity constraint as `-SH -RicianSH`.
+- SH fitting uses LLS by default. Use `-RicianClip -sigma <noisemap>` for clipped correction and signal nonnegativity. Add `-RicianExp -sigma <noisemap>` to use the same expected Rician magnitude model and signal nonnegativity constraint as `-SH -RicianExp`.
 - `-lmaxSH` sets standalone SH fitting orders and is supported only with `-SH`. With `-SMI`, a single `-lmax` value selects the invariant order for model regression while SH fitting orders remain automatic per shell.
 - Use in conjunction with `-compartments`, `-sigma`, `-bshape`, and `-echo_time` options.
 - We recommend prior estimation of the noise level sigma using `designer` along with the `-denoise` option.
 
-### `-RicianSH`
-- Requires `-sigma <noisemap>` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`.
-- With `-SH` or `-SMI`, fit the underlying SH signal by nonlinear least squares with a Rician expected-magnitude observation model. This overrides `-RicianClip` for SH/SMI, using original magnitudes.
-- With `-DTI`, `-DKI` or `-WDKI`, automatically apply the same clipped correction as `-RicianClip`, including b0, before the existing tensor fit. A combined tensor/SH or tensor/SMI run needs only `-RicianSH`; adding `-RicianClip` is redundant and does not correct the data twice. The tensor stage does not fit a Rician-expectation model.
-- The fitted signal must be nonnegative at acquired directions and on a 65,536-direction sphere grid. This constrains the signal, not each SH coefficient. Grid feasibility is not a continuous-sphere guarantee.
-- Initialize the nonlinear search from the linear SH fit to `sqrt(max(0, M²−sigma²))`. The nonlinear objective uses the original magnitude data; correction is used only for the starting coefficients.
-- Without either `-RicianSH` or `-RicianClip`, SH estimation remains ordinary linear least squares, including when `-sigma` is supplied.
-- The noise map must be a spatially aligned 3D map of the complex-component Gaussian standard deviation, in the same intensity units as the input DWI. Values inside the fitting mask must be finite and nonnegative; zero uses constrained linear least squares, preserving the linear fit when already feasible.
-- Use magnitude data with a Rician noise model. Do not apply this on top of `designer -rician`, phase-unwound data, or other data whose noise floor has already been removed. After denoising, rescaling or interpolation, the noise map must describe the data actually fitted.
-- The reference estimator retains arithmetic means for b=0 and isotropic encoding shells. The existing SH basis, shell ordering, rank-one invariant processing, regression priors and output map names are retained.
-- Independent voxel blocks use `-n_cores` worker processes (default: available cores minus two), with one BLAS thread per worker. Use `-n_cores 1` for serial fitting.
-- This reduces the modeled magnitude noise-floor bias; finite-sample SH invariants and downstream SMI maps can still be biased. See [SMI estimation]({% link docs/TMI/SMI.md %}#parameter-estimation).
+### `-RicianExp`
+
+- Requires `-sigma <noisemap>` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`. This replaces the former `-RicianSH` correction flag.
+- For every selected model, minimize residuals between the original measurements and the expected Rician magnitude. Every nonlinear fit starts from ordinary LLS on `sqrt(max(0, M²−sigma²))`; that correction supplies only the initialization.
+- **DTI/DKI/WDKI:** unconstrained signal-domain NLLS. `-fit_constraints` and `-akc_outliers` are ignored, with a log message. No diffusion-eigenvalue, kurtosis or monotonicity constraints are imposed. GNC, external b-matrices, shell selection and multi-TE fitting are supported. With sigma=0, this becomes ordinary signal-domain NLLS.
+- **SH/SMI:** retain the nonnegative underlying SH signal constraint at acquired directions and on a 65,536-direction sphere grid. This constrains signal values, not individual coefficients; a finite grid is not a continuous-sphere guarantee. Zero sigma gives constrained linear least squares. Raw arithmetic b=0/isotropic means, cross-shell rank-one processing and SMI regression are retained.
+- For tensor fitting, `-db0restore`, `-fit_smoothing`, `-polyreg`, and external `-dt` are not yet supported with this estimator; these combinations produce an explicit error. `-RicianClip` retains the existing tensor pipeline and can be combined with those settings.
+- If both correction flags are present, `-RicianExp` takes precedence for **all** selected models. Input measurements are not corrected twice.
+- The noise map must be spatially aligned, finite and nonnegative inside the mask, and in the same intensity units. Supply the **original complex-component Gaussian sigma responsible for the retained Rician mean bias**, not the reduced residual SD after denoising. Rescaling requires matching sigma scaling. Do not use this on data whose noise floor was already removed, such as `designer -rician` output or complex/phase-unwound denoising.
+- Independent blocks use `-n_cores` worker processes with one BLAS thread each. Tensor fits save convergence/evaluation and nonpositive-diffusion-tensor diagnostic maps; see [tensor fitting]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options).
+- This fits a mean, not a Rician likelihood, and does not guarantee unbiased finite-sample tensor parameters, SH invariants or SMI parameters. With neither correction flag, tensor WLLS and SH LLS remain unchanged.
 
 ### `-RicianClip`
 
 - Requires `-sigma <noisemap>` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`.
-- For DTI/DKI/WDKI, apply `sqrt(max(0, M²−sigma²))` once to selected measurements, including b0, before the existing tensor fit. Tensor constraints and GNC are unchanged; clipped zeros use the existing positive log floor.
-- Clipped zeros can destabilize the log-domain tensor fit and produce large parameter outliers, particularly without tensor constraints.
-- For SH/SMI, select clipped correction followed by linear least squares with signal nonnegativity.
-- In the SH stage, fit `sqrt(max(0, M²−sigma²))` as the target using constrained linear least squares. This subtracts one `sigma²` and does not evaluate the Rician expectation.
-- SH processing uses the same `-n_cores` workers as `-RicianSH`; tensor fits retain their existing parallel processing.
-- For SH/SMI, enforce the same signal nonnegativity constraint on acquired directions and the 65,536-direction sphere grid. Already feasible clipped-LLS fits are retained exactly.
-- If `-RicianSH` is also supplied, it takes precedence for SH/SMI, using original magnitudes and signal nonnegativity. Either flag enables the same clipped correction for DTI/DKI/WDKI. Use uncorrected magnitude input and an aligned noise map in matching units.
-- In SH/SMI, raw b=0/isotropic means, rank-one processing across shells, and downstream SMI regression are retained. This approximate correction is not an unbiasedness guarantee.
-- `-RicianSH_maxiter N` and its diagnostic outputs apply to SH/SMI constrained refinement with either correction flag; they do not cap DTI/DKI fits. See [clipped correction]({% link docs/TMI/SMI.md %}#clipped-correction-with-a-nonnegative-signal).
+- For DTI/DKI/WDKI, apply `sqrt(max(0, M²−sigma²))` once to selected measurements, including b0, before the existing tensor fit. It is compatible with the existing constraints, AKC handling, smoothing, polynomial regression, b0 restoration and GNC. Clipped zeros use the existing positive log floor and may produce large parameter outliers.
+- For SH/SMI, fit the clipped measurements using linear least squares with nonnegativity at acquired directions and the same 65,536-direction grid. Already feasible clipped-LLS coefficients are retained. Raw b=0/isotropic means, rank-one processing and SMI regression are unchanged.
+- The formula subtracts one sigma squared and sets negative squared differences to zero; it does not apply an absolute value. It is an approximate correction, not an unbiasedness guarantee.
+- Use an aligned original sigma map and input whose magnitude noise floor has not already been corrected. If `-RicianExp` is also supplied, expectation fitting takes precedence for every selected model.
+- `-RicianSH_maxiter N` remains an optional **SH/SMI-only** constrained-refinement cap for either correction flag; its `RicianSH_*` diagnostics describe the SH stage and do not cap tensor fitting.
 
 ### `-WMTI`
 - Include WMTI parameters in output folder (awf,ias_params,eas_params).
@@ -138,12 +135,12 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - SMI training data should be [ Ntraining x 9], with each column being a model parameter: [f, Da, Depar, Deperp, fw, T2a, T2e, p2, p4]
 
 ### `-sigma <noisemap>`
-- Path to noise map. Required with `-RicianSH` or `-RicianClip`, including DTI/DKI/WDKI correction; optional but recommended for SMI. Standalone `-SH` LLS does not need a noise map.
+- Path to noise map. Required with `-RicianExp` or `-RicianClip`, including DTI/DKI/WDKI correction; optional but recommended for SMI. Standalone `-SH` LLS does not need a noise map.
 - We recommend computing sigma prior to running `tmi` using `designer`.
 
 ### `-lmaxSH <orders>`
 
-- Use with `-SH` to set the maximum SH fitting and output order for LLS, RicianSH or RicianClip. A single nonnegative even integer applies to every directional shell: `-lmaxSH 6` saves S0, S2, S4, and S6; `-lmaxSH 0` saves only S0. If omitted, fitting orders are selected automatically per shell.
+- Use with `-SH` to set the maximum SH fitting and output order for LLS, RicianExp or RicianClip. A single nonnegative even integer applies to every directional shell: `-lmaxSH 6` saves S0, S2, S4, and S6; `-lmaxSH 0` saves only S0. If omitted, fitting orders are selected automatically per shell.
 - A comma-separated list specifies each shell's order independently, sorted by b-value, b-shape, then echo time, including b=0/isotropic shells. For example, `-lmaxSH 0,2,4,4,6` assigns orders 0, 2, 4, 4, and 6 to b=0,1000,2000,7000,25000 when these are the input shells at one b-shape and TE. Use nonnegative even integers, no spaces or trailing comma, and exactly one entry per shell.
 - Higher-order volumes for shells fitted at a lower order are zero placeholders, not measurements. `SH_shells.json` records each shell's fitted order.
 - This option is not accepted with `-SMI`. When adapting an earlier standalone SH command, replace `-lmax` with `-lmaxSH`; `-SH -lmax` produces a migration message.

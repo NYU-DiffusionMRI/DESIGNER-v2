@@ -57,7 +57,7 @@ Constraints can be used to bound the kurtosis tensor estimation, an example of r
 ```
 tmi -WDKI -DKI -fit_constraints 0,1,0 dwi.mif parameters
 ```
-- The order of values input to the `-fit_constraints` option is: diffusion tensor > 0, kurtosis tensor > 10, and kurtosis tensor < 10.
+- The order of values input to the `-fit_constraints` option is: diffusion tensor > 0, kurtosis tensor > 0, and kurtosis tensor < 10. These settings apply to the existing WLLS fit, including with `-RicianClip`; `-RicianExp` ignores them.
 
 --- 
 
@@ -127,11 +127,11 @@ For magnitude data with an appropriate noise map and a retained Rician noise flo
 
 ```bash
 tmi dwi.nii smi_rician \
-  -SMI -RicianSH \
+  -SMI -RicianExp \
   -sigma sigma.nii -mask brain_mask.nii
 ```
 
-Omit `-RicianSH` to use the existing linear SH fit:
+Omit `-RicianExp` to use the existing linear SH fit:
 
 ```bash
 tmi dwi.nii smi_linear -SMI -sigma sigma.nii -mask brain_mask.nii
@@ -147,7 +147,7 @@ Fit through SH order 6 using the Rician expected magnitude and nonnegative
 signal constraints, without training or fitting the Standard Model:
 
 ```bash
-tmi dwi.nii sh_rician -SH -RicianSH -lmaxSH 6 \
+tmi dwi.nii sh_rician -SH -RicianExp -lmaxSH 6 \
   -sigma sigma.nii -mask brain_mask.nii
 ```
 
@@ -177,20 +177,32 @@ tmi dwi.nii smi_clip -SMI -RicianClip -sigma sigma.nii -mask brain_mask.nii
 
 The fitting target is `sqrt(max(0, M²−sigma²))`, with nonnegativity enforced
 on the underlying SH signal. Supply the original magnitude DWI.
-`-RicianSH` takes precedence if both correction flags are present. Per-shell orders in standalone mode
+`-RicianExp` takes precedence if both correction flags are present. Per-shell orders in standalone mode
 are set with `-lmaxSH`, as for the other estimators.
 
-### Clipped tensor inputs with an independent SH estimator
+### Rician correction for tensors and SH/SMI
 
 ```bash
-# Clipped correction before the existing DTI and DKI fits
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii
+# Clipped correction, retaining the existing tensor pipeline and settings
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClip -sigma sigma.nii -akc_outliers
 
-# Clipped correction for tensors; Rician expectation + nonnegativity for SH
-tmi dwi.nii combined -DTI -DKI -SH -RicianSH -sigma sigma.nii
+# Clipped correction also works with b0 restoration
+tmi dwi.nii tensor_restore -DKI -RicianClip -sigma sigma.nii -db0restore
+
+# Unconstrained Rician-mean NLLS for DTI/DKI, starting from clipped ordinary LLS
+tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
+
+# The same expectation option for tensors and nonnegative SH fitting
+tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
 ```
 
-`-RicianSH` alone enables clipped correction for tensors and keeps original
-magnitudes for the SH expectation fit. Adding `-RicianClip` is unnecessary
-and does not correct the data twice. With tensor fitting alone, the two flags
-are equivalent. Replace `-SH` with `-SMI` to include Standard Model fitting.
+Replace `-SH` with `-SMI` to include Standard Model fitting. Both correction
+flags require original magnitude data whose noise floor has not already been
+removed. Use original sigma for the retained Rician bias, not the smaller
+residual SD after denoising. `-RicianExp` takes precedence for all models if
+both flags are given; specifying both is unnecessary.
+
+With `-RicianExp`, tensor constraints and AKC replacement are ignored.
+Expectation tensor fits with b0 restoration, fit smoothing, polynomial
+regression or external `-dt` are deferred and rejected explicitly. These
+settings remain available with `-RicianClip`.
