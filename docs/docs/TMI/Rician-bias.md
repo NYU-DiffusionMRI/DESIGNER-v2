@@ -30,9 +30,9 @@ All correction options apply to `-DTI`, `-DKI`, `-WDKI`, `-SH` and `-SMI`.
 | Option | DTI/DKI/WDKI | SH/SMI |
 |---|---|---|
 | No correction flag | Existing WLLS pipeline | Ordinary LLS |
-| `-RicianClipMax` | Max-zero correction, then existing tensor fit | Corrected LLS with signal nonnegativity |
-| `-RicianClipAbs` | Absolute-value correction, then existing tensor fit | Corrected LLS with signal nonnegativity |
-| `-RicianExp` | Unconstrained Rician-mean NLLS | Rician-mean NLLS with signal nonnegativity |
+| `-RicianClipMax` | Max-zero correction, then existing tensor fit | Ordinary corrected LLS |
+| `-RicianClipAbs` | Absolute-value correction, then existing tensor fit | Ordinary corrected LLS |
+| `-RicianExp` | Unconstrained Rician-mean NLLS | Unconstrained Rician-mean NLLS |
 
 Choose one clipping flag. `-RicianExp` overrides either clipping flag for all
 selected models. Use separate calls to choose different methods for tensors
@@ -78,18 +78,21 @@ $$
 \left[M_i-\mu_R\!\left(s_i(\theta),\sigma\right)\right]^2.
 $$
 
-Every search, including retries, starts from **ordinary LLS on max-zero
-corrected measurements**. This remains true if `-RicianClipAbs` is also given.
+Initialization uses ordinary LLS on **absolute-value corrected measurements for
+tensors**, and **max-zero corrected measurements for SH/SMI**, including retries.
 Negative observations after denoising are preserved.
 
 For tensors, $s_i(\theta)=\exp((X\theta)_i)$; diffusion and kurtosis parameters
-are unconstrained. For SH/SMI, $s=Yc$ and all corrected estimators enforce
+are unconstrained. For SH/SMI, $s=Yc$ is unconstrained by default and the
+Rician mean depends on $\lvert Yc\rvert$. Only `-RicianExp -nonNeg` enforces
 
 $$Y_{\mathrm{grid}}c\geq0$$
 
 at acquired directions and on a 65,536-direction sphere grid, before cross-shell
 rank-one processing. This constrains the signal, not individual coefficients;
-a finite grid is not a continuous-sphere guarantee.
+a finite grid is not a continuous-sphere guarantee. A positive physical signal
+can have a negative truncated SH projection, so this optional constraint can
+introduce truncation bias. `-nonNeg` is not available with either clipping flag.
 
 Expectation fitting models the mean rather than the Rician likelihood. None
 of these methods guarantees unbiased finite-sample parameters.
@@ -112,8 +115,12 @@ has already been removed, for example with `designer -rician`.
 | GNC, shell selection, multi-TE subsets | Supported | Supported |
 
 Unsupported expectation combinations produce an error. Tensor clipping includes
-b0 and is applied once. SH/SMI retain raw b0/isotropic-shell means, SH
-normalization, rank-one processing and downstream SMI regression.
+b0 and is applied once. SH/SMI also correct b0 and isotropic (STE) shells:
+clipping precedes averaging; expectation fitting inverts $\mu_R$ at the sample
+mean using the original $\sigma$, with zero amplitude below the Rayleigh floor.
+Higher-order invariants are zero for these shells. Rank-one processing and SMI
+regression are unchanged. In combined corrected tensor/SH runs, b0 restoration
+applies to tensors; SH/SMI use the original observations.
 
 ## Examples
 
@@ -125,6 +132,9 @@ tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii
 # Expected Rician signal for tensors and SH
 tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
 
+# Optional nonnegative SH signal (also available with -SMI)
+tmi dwi.nii sh_positive -SH -RicianExp -sigma sigma.nii -nonNeg
+
 # Either clipping option supports b0 restoration and AKC together
 tmi dwi.nii dki_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
 ```
@@ -132,5 +142,5 @@ tmi dwi.nii dki_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outlie
 Replace `-SH` with `-SMI` to include Standard Model fitting. Add `-lmaxSH`
 to set standalone SH orders independently, for example `0,2,4` for
 b=0,1000,2000 at one b-shape and echo time. See [tensor details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options)
-and [SH details]({% link docs/TMI/SMI.md %}#rician-bias-expectation-correction-with-a-nonnegative-signal)
+and [SH details]({% link docs/TMI/SMI.md %}#rician-bias-expectation-correction)
 for solver diagnostics.

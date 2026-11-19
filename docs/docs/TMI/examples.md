@@ -138,13 +138,13 @@ tmi dwi.nii smi_linear -SMI -sigma sigma.nii -mask brain_mask.nii
 ```
 
 Both commands produce the same named SMI parameter and rotational-invariant maps.
-The flag changes only SMI's SH estimation, including the multi-TE/b-shape path;
-it does not change DTI/DKI fits requested in the same command.
+The correction also applies to DTI/DKI fits requested in the same command.
+SH/SMI fits are unconstrained by default; add `-nonNeg` with `-RicianExp` to
+constrain the fitted SH signal.
 
 ### Rotational invariants without SMI
 
-Fit through SH order 6 using the Rician expected magnitude and nonnegative
-signal constraints, without training or fitting the Standard Model:
+Fit through SH order 6 using the Rician expected magnitude, without training or fitting the Standard Model:
 
 ```bash
 tmi dwi.nii sh_rician -SH -RicianExp -lmaxSH 6 \
@@ -168,7 +168,7 @@ diffusion shell. A single shell without b=0 is supported. For multi-TE or
 multi-b-shape data, use the same acquisition metadata options as for SMI.
 Choose either `-SH` or `-SMI` in a command.
 
-### Clipped-corrected SH fitting with signal nonnegativity
+### Clipped-corrected SH fitting
 
 ```bash
 tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii -mask brain_mask.nii
@@ -178,8 +178,7 @@ tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii -mask brain_mask.nii
 ```
 
 The fitting target is $\sqrt{\max(0,M^2-\sigma^2)}$ for `-RicianClipMax`, or
-$\sqrt{\lvert M^2-\sigma^2\rvert}$ for `-RicianClipAbs`, with nonnegativity enforced on the
-underlying SH signal. Choose one clipping flag and supply the original magnitude
+$\sqrt{\lvert M^2-\sigma^2\rvert}$ for `-RicianClipAbs`, followed by ordinary LLS without signal constraints. Choose one clipping flag and supply the original magnitude
 DWI. `-RicianExp` takes precedence over either clipping flag and always uses
 max-zero LLS initialization. Per-shell orders in standalone mode use `-lmaxSH`.
 
@@ -193,11 +192,14 @@ tmi dwi.nii tensor_clip -DTI -DKI -RicianClipMax -sigma sigma.nii -akc_outliers
 tmi dwi.nii tensor_restore_max -DKI -RicianClipMax -sigma sigma.nii -db0restore -akc_outliers
 tmi dwi.nii tensor_restore_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
 
-# Unconstrained Rician-mean NLLS for DTI/DKI, starting from clipped ordinary LLS
+# Unconstrained Rician-mean NLLS for DTI/DKI, starting from absolute-value corrected ordinary LLS
 tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
 
-# The same expectation option for tensors and nonnegative SH fitting
+# The same expectation option for tensors and SH fitting
 tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
+
+# Optionally constrain the SH signal (tensors remain unconstrained)
+tmi dwi.nii combined_positive -DTI -DKI -SH -RicianExp -sigma sigma.nii -nonNeg
 ```
 
 Replace `-SH` with `-SMI` to include Standard Model fitting. All correction

@@ -70,7 +70,7 @@ def clipped_magnitude(measurements, sigma, *, mode='maxzero'):
     Sigma is the Gaussian complex-component standard deviation in the same
     units as M. This subtracts one sigma squared, and never mutates the input.
     mode='maxzero' returns sqrt(max(0, M**2-sigma**2)); mode='abs' returns
-    sqrt(abs(M**2-sigma**2)). Expectation initialization always uses max-zero.
+    sqrt(abs(M**2-sigma**2)).
     """
     if mode not in ('maxzero', 'abs'):
         raise ValueError("Magnitude correction mode must be 'maxzero' or 'abs'")
@@ -78,6 +78,31 @@ def clipped_magnitude(measurements, sigma, *, mode='maxzero'):
     sigma = np.asarray(sigma, dtype=float)
     difference = measurements**2 - sigma**2
     return np.sqrt(np.abs(difference) if mode == 'abs' else np.maximum(0, difference))
+
+
+def invert_rician_mean(mean, sigma):
+    """Nonnegative scalar amplitude whose Rician expectation matches ``mean``.
+
+    For a constant signal, mean-domain least squares reduces to matching the
+    sample mean. Means at/below the Rayleigh floor give amplitude zero. Sigma
+    is the original per-measurement noise SD, not the SE of the sample mean.
+    Vectorized bisection avoids the zero derivative at amplitude zero.
+    """
+    mean, sigma = np.broadcast_arrays(np.asarray(mean, dtype=float),
+                                      np.asarray(sigma, dtype=float))
+    if not np.all(np.isfinite(mean)) or not np.all(np.isfinite(sigma)) or np.any(sigma < 0):
+        raise ValueError("Rician mean inversion requires finite means and nonnegative finite sigma")
+    lower = np.zeros_like(mean)
+    upper = np.maximum(mean, 0)
+    active = (sigma > 0) & (mean > sigma * np.sqrt(np.pi / 2))
+    lo, hi = lower[active], upper[active]
+    for _ in range(52):
+        mid = (lo + hi) / 2
+        below = rician_mean_and_derivative(mid, sigma[active])[0] < mean[active]
+        lo = np.where(below, mid, lo)
+        hi = np.where(below, hi, mid)
+    lower[active] = (lo + hi) / 2
+    return np.where(sigma == 0, upper, lower)
 
 
 def fit_rician_sh(basis, measurements, sigma, chunk_size=256,

@@ -62,7 +62,7 @@ def test_noisy_objective_matches_independent_numerical_jacobian_fit():
     sigma = 50.
     y = independent_mean(clean, sigma) + sigma/2*np.random.default_rng(728).normal(size=len(b))
     theta, info = _fit_voxel(y, sigma, x, _factor(x))
-    initial = np.linalg.pinv(x)@np.log(np.maximum(np.sqrt(np.maximum(0,y*y-sigma*sigma)),np.finfo(float).eps))
+    initial = np.linalg.pinv(x)@np.log(np.maximum(np.sqrt(np.abs(y*y-sigma*sigma)),np.finfo(float).eps))
     def residual(t):
         return (independent_mean(np.exp(x@t), sigma)-y)/sigma
     reference = least_squares(residual, initial, jac='3-point', max_nfev=2000,

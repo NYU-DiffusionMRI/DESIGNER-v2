@@ -201,7 +201,7 @@ Run the optional tensor mean-model tests and installed CLI checks in the develop
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 SMI_BLAS_THREADS=1 \
   python -m pytest -q tests/test_rician_tensor.py tests/test_tmi_rician_exp.py \
   tests/test_tmi_rician_clip.py tests/test_tmi_rician_sh.py tests/test_tmi_sh.py \
-  tests/test_clipped_sh.py tests/test_rician_sh.py
+  tests/test_clipped_sh.py tests/test_rician_sh.py tests/test_sh_correction_options.py
 ```
 
 The tensor tests use an independent hypergeometric Rician mean and a numerical
@@ -213,10 +213,10 @@ and explicit rejection of deferred expectation-refinement combinations.
 Clipped-input equivalence tests check both `-RicianClipMax` and `-RicianClipAbs`
 against manually corrected input, including constraints, AKC replacement,
 smoothing, and combined b0 restoration with AKC for single- and multi-echo data.
-SH tests compare both correction formulas against an independent constrained
-least-squares solver, check serial/parallel consistency, and verify that
-expectation fitting keeps max-zero initialization even when the absolute-value
-option is supplied. CLI checks reject simultaneous clipping flags. The million-sample
+SH tests check optional grid constraints, unconstrained defaults, b0/STE
+correction, scalar mean inversion, serial/parallel consistency, and max-zero
+SH expectation initialization. Tensor expectation tests use absolute-value
+initialization. The CLI tests cover `-nonNeg` routing and reject invalid combinations. CLI checks reject simultaneous clipping flags. The million-sample
 polynomial-regression training is not run by these small CLI tests; clipping
 continues to feed the existing polynomial-regression path without adding a restriction.
 
@@ -238,7 +238,7 @@ three Standard Model tissues with Watson orientation distributions, generates
 noiseless LLS, noisy LLS, clipped corrected noisy LLS ($\sqrt{\max(0,S^2-\sigma^2)}$),
 and noisy RicianExp through `tmi`. RicianExp uses the linear fit to the clipped
 corrected signal as its initialization, then fits the original magnitude data
-with nonnegative signal constraints. It saves all maps,
+without signal constraints. It saves all maps,
 commands, logs, truth maps, per-map bias/RMSE/MAE tables, and figures. The normal
 SMI training priors and seed are identical across runs. Errors relative to the
 known SM parameters and to noiseless `tmi` are reported separately, since the

@@ -23,7 +23,7 @@ def test_single_shell_cli_saves_separate_invariants(inputs, rician):
     assert result.returncode == 0, result.stdout
     assert 'SMI loading' not in result.stdout
     assert 'SMI model initialized' not in result.stdout
-    assert 'nonnegative signal constraints' in result.stdout if rician else 'linear least squares' in result.stdout
+    assert 'nonnegative signal constraints' not in result.stdout
     assert {p.name for p in (inputs/'sh').glob('*.nii')} == {'S0.nii', 'S2.nii', 'S4.nii', 'S6.nii'}
     for name in ['S0', 'S2', 'S4', 'S6']:
         output = nib.load(inputs/'sh'/f'{name}.nii')
@@ -32,6 +32,7 @@ def test_single_shell_cli_saves_separate_invariants(inputs, rician):
         np.testing.assert_allclose(output.affine, image.affine)
     metadata = json.loads((inputs/'sh/SH_shells.json').read_text())
     assert metadata['estimator'] == (rician if rician else 'LLS')
+    assert metadata['nonnegative'] is False
     assert metadata['shells'] == [dict(volume=0, b_value_s_per_mm2=1000., b_shape=1.,
                                      echo_time_ms=0., n_measurements=90, lmax=6)]
 
@@ -57,6 +58,12 @@ def test_multi_echo_cli_preserves_every_shell_and_zero_order(inputs):
 
 
 @pytest.mark.parametrize('options,error', [
+    (['-SH', '-nonNeg'], '-nonNeg requires -RicianExp'),
+    (['-SMI', '-RicianClipMax', '-nonNeg'], '-nonNeg requires -RicianExp'),
+    (['-SH', '-RicianClipAbs', '-nonNeg'], '-nonNeg requires -RicianExp'),
+    (['-DTI', '-RicianExp', '-nonNeg'], '-nonNeg requires -RicianExp with -SH or -SMI'),
+    (['-SH', '-RicianExp', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '2'], 'requires -RicianExp -nonNeg'),
+    (['-SH', '-RicianExp', '-nonNeg', '-sigma', 'sigma.nii', '-RicianSH_maxiter', '0'], 'positive integer'),
     (['-SH', '-SMI'], 'Select either -SH'),
     (['-SH', '-lmaxSH', '3'], 'nonnegative even integer'),
     (['-SH', '-lmaxSH', '-2'], 'nonnegative even integer'),
@@ -102,9 +109,8 @@ def test_cli_per_shell_orders_preserve_joint_shell_outputs(inputs, rician):
 
 
 @pytest.mark.parametrize('mode', ['-SH', '-SMI'])
-@pytest.mark.parametrize('estimator', ['-RicianExp', '-RicianClipMax', '-RicianClipAbs'])
-def test_cli_iteration_cap_saves_aligned_diagnostics(inputs, mode, estimator):
-    options = [mode, estimator, '-sigma', 'sigma.nii', '-mask', 'mask.nii',
+def test_cli_iteration_cap_saves_aligned_diagnostics(inputs, mode):
+    options = [mode, '-RicianExp', '-nonNeg', '-sigma', 'sigma.nii', '-mask', 'mask.nii',
                '-RicianSH_maxiter', '2', '-lmaxSH' if mode == '-SH' else '-lmax', '4']
     if mode == '-SMI':
         options += ['-load_prior', 'prior.mat']

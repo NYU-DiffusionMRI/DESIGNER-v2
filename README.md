@@ -53,12 +53,13 @@ apply to DTI/DKI/WDKI and SH/SMI:
 
 - `-RicianClipMax` corrects measurements with $\sqrt{\max(0,M^2-\sigma^2)}$.
 - `-RicianClipAbs` uses $\sqrt{\lvert M^2-\sigma^2\rvert}$.
-- `-RicianExp` fits the expected Rician magnitude, starting from max-zero corrected LLS.
+- `-RicianExp` fits the expected Rician magnitude, starting from absolute-value corrected LLS for tensors and max-zero corrected LLS for SH/SMI.
 
 Both clipping choices preserve existing tensor settings, including b0 restoration
 and AKC together. Tensor expectation fitting is unconstrained and ignores AKC;
-b0 restoration and spatial refinements are not yet supported. All corrected
-SH estimators constrain the fitted signal to be nonnegative. Without a correction
+b0 restoration and spatial refinements are not yet supported. SH/SMI fits are
+unconstrained by default; add `-nonNeg` with `-RicianExp` to constrain the fitted
+SH signal. The clipping options use ordinary corrected LLS. Without a correction
 flag, tensors retain WLLS and SH/SMI retain ordinary LLS.
 
 Use the original noise level responsible for the bias, even after denoising

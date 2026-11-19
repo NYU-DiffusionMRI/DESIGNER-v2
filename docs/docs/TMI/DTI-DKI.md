@@ -76,7 +76,8 @@ $$
 
 The coefficients are $\theta=(\log S_0,D_6)$ for DTI and
 $\theta=(\log S_0,D_6,C_{15})$ for DKI, with $C=\mathrm{MD}^2W$.
-Every search starts from ordinary LLS on $\sqrt{\max(0,M^2-\sigma^2)}$.
+Every search starts from ordinary LLS on $\sqrt{\lvert M^2-\sigma^2\rvert}$,
+with a positive numerical floor before logarithms.
 The objective uses original observations, preserving negative values after
 denoising. At $\sigma=0$, it reduces to signal-domain NLLS.
 
@@ -85,7 +86,7 @@ denoising. At $\sigma=0$, it reduces to signal-domain NLLS.
 `-fit_smoothing`, `-polyreg` or external `-dt` are not yet supported and produce
 an error. All three estimators support multi-TE/LTE subsets, shell selection,
 `-bmat` and `-gnc`. `-RicianExp` overrides either clipping flag and always
-keeps max-zero initialization.
+keeps absolute-value initialization for tensors.
 
 ```bash
 tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii

@@ -8,22 +8,23 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
                              lmax=None, beta=None, echo_time=None,
                              rician=False, rician_maxiter=None,
                              diagnostics=None, rician_clip=False, n_jobs=1,
-                             rician_clip_mode='maxzero'):
+                             rician_clip_mode='maxzero', nonnegative=False):
     """Return one 4D image per even SH order, plus ordered shell metadata.
 
     ``lmax`` is a common SH fitting order or a sequence with one order per
     sorted shell (ascending b-value, b-shape, then echo time, including b=0).
     None retains TMI's automatic per-shell orders. b-values are in ms/um^2
-    and echo times in ms. b=0/isotropic shells retain their arithmetic means
-    and have zero higher-order invariants. No SMI priors, noise estimation,
+    and echo times in ms. b=0/isotropic shells use scalar estimation with the
+    selected correction and have zero higher-order invariants. No SMI priors, noise estimation,
     training, or microstructure regression are run. The shared SH backend
     retains SMI's normalization and rank-one processing across shells.
     rician_maxiter optionally limits constrained optimization. When supplied,
     diagnostics can receive image-grid iteration counts and early-stop masks.
-    rician_clip selects clipped-corrected constrained LLS instead of Rician
+    rician_clip selects clipped-corrected ordinary LLS instead of Rician
     expectation fitting. rician_clip_mode chooses 'maxzero' or 'abs' for that
     correction; it never changes Rician-expectation initialization.
     n_jobs controls process workers for either correction.
+    nonnegative optionally constrains the SH signal; only valid with rician=True.
     """
     requested = None if lmax is None else np.asarray(lmax)
     if requested is not None and (requested.ndim > 1 or requested.size == 0
@@ -44,7 +45,8 @@ def fit_rotational_invariants(dwi, bval, bvec, *, mask=None, sigma=None,
     estimator = SMI(np.asarray(bval), np.asarray(bvec), beta=beta,
                     echo_time=echo_time, rician_sh=rician, seed=None,
                     rician_sh_maxiter=rician_maxiter, rician_sh_clip=rician_clip,
-                    sh_n_jobs=n_jobs, rician_clip_mode=rician_clip_mode)
+                    sh_n_jobs=n_jobs, rician_clip_mode=rician_clip_mode,
+                    rician_sh_nonnegative=nonnegative)
     automatic = estimator.get_default_lmax()  # Also populates the sorted shell table.
     table = estimator.table_4d
     if requested is None:

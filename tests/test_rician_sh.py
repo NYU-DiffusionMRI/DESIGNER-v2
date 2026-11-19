@@ -153,11 +153,9 @@ def test_smi_shell_invariants_mask_and_unchanged_zero_noise(shape):
         obj = model(use_rician); obj.mask = mask
         outputs.append(obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(
             measured, mask, rank1sl=False, sigma=sigma))
-    # Reference implementation deliberately preserves b0 shell means.
-    np.testing.assert_array_equal(outputs[0][...,0], outputs[1][...,0])
     clean = model(); clean.mask=mask
     truth = clean.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi, mask, rank1sl=False)
-    np.testing.assert_allclose(outputs[1][...,1:3][mask], truth[...,1:3][mask], atol=1e-7)
+    np.testing.assert_allclose(outputs[1][...,:3][mask], truth[...,:3][mask], atol=1e-7)
     assert np.all(outputs[1][~mask] == 0)
     obj = model(True); obj.mask=mask
     zero = obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(
@@ -216,11 +214,8 @@ def test_isotropic_shells_and_multiple_echo_times():
         outputs.append(obj.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(
             data,obj.mask,rank1sl=False,sigma=np.full((2,2,2),.2)))
     for shell in range(obj.table_4d.shape[1]):
-        if obj.table_4d[0,shell] == 0 or obj.table_4d[1,shell] == 0:
-            np.testing.assert_array_equal(outputs[0][...,shell],outputs[1][...,shell])
-        else:
-            expected=np.exp(-obj.table_4d[0,shell]*.7-obj.table_4d[3,shell]/100)
-            np.testing.assert_allclose(outputs[1][...,shell],expected,atol=1e-7)
+        expected=np.exp(-obj.table_4d[0,shell]*.7-obj.table_4d[3,shell]/100)
+        np.testing.assert_allclose(outputs[1][...,shell],expected,atol=1e-7)
 
 
 
@@ -319,7 +314,7 @@ def test_constrained_iteration_budget_is_cumulative_and_returns_feasible_best(mo
 
 
 def test_smi_uses_nonnegative_signal_constraints_in_forward_projection():
-    obj = model(True)
+    obj = model(True, rician_sh_nonnegative=True)
     obj.mask = np.ones((2,2,1), bool)
     obj.project_forward_SH = True
     rng = np.random.default_rng(31)

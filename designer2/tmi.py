@@ -246,10 +246,11 @@ def usage(cmdline): #pylint: disable=unused-variable
     smi_options.add_argument('-SH', action='store_true', help='Fit spherical harmonics and save S0.nii, S2.nii, ..., through -lmaxSH, without SMI model fitting. Each file contains one volume per shell; SH_shells.json identifies the volumes. Default estimator: LLS.')
     smi_options.add_argument('-SMI', action='store_true',help='Perform estimation of SMI (standard model of Diffusion in White Matter). Please use in conjunction with the -bshape, -echo_time, -sigma, and -compartments options.')  
     smi_options.add_argument('-compartments', metavar=('<compartments>'),help='SMI compartments (IAS, EAS, and FW), default=IAS,EAS')  
-    options.add_argument('-RicianExp', action='store_true', help='Fit the expected Rician magnitude for DTI/DKI/WDKI/SH/SMI, always initialized from max-zero corrected LLS. Tensor fits are unconstrained and ignore -fit_constraints and AKC replacement; SH/SMI retain signal nonnegativity. Requires -sigma. Overrides either clipping flag. Tensor b0 restoration, smoothing, polyreg and external -dt are not yet supported.')
-    options.add_argument('-RicianClipMax', action='store_true', help='Correct DTI/DKI/WDKI/SH/SMI using sqrt(max(0, M^2-sigma^2)). Tensor fitting settings are retained; SH/SMI use corrected LLS with signal nonnegativity. Requires -sigma. Choose either -RicianClipMax or -RicianClipAbs; -RicianExp takes precedence.')
-    options.add_argument('-RicianClipAbs', action='store_true', help='Correct DTI/DKI/WDKI/SH/SMI using sqrt(abs(M^2-sigma^2)). Tensor fitting settings are retained; SH/SMI use corrected LLS with signal nonnegativity. Requires -sigma. Choose either -RicianClipMax or -RicianClipAbs; -RicianExp takes precedence and keeps max-zero initialization.')
-    smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianExp, -RicianClipMax or -RicianClipAbs. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
+    options.add_argument('-RicianExp', action='store_true', help='Fit the expected Rician magnitude for DTI/DKI/WDKI/SH/SMI, initialized from absolute-value corrected LLS for tensors and max-zero corrected LLS for SH/SMI. Fits are unconstrained by default; -nonNeg optionally constrains SH/SMI signals. Tensor fits ignore -fit_constraints and AKC replacement. Requires -sigma. Overrides either clipping flag. Tensor b0 restoration, smoothing, polyreg and external -dt are not yet supported.')
+    options.add_argument('-RicianClipMax', action='store_true', help='Correct DTI/DKI/WDKI/SH/SMI using sqrt(max(0, M^2-sigma^2)). Tensor fitting settings are retained; SH/SMI use ordinary corrected LLS. Requires -sigma. Choose either -RicianClipMax or -RicianClipAbs; -RicianExp takes precedence.')
+    options.add_argument('-RicianClipAbs', action='store_true', help='Correct DTI/DKI/WDKI/SH/SMI using sqrt(abs(M^2-sigma^2)). Tensor fitting settings are retained; SH/SMI use ordinary corrected LLS. Requires -sigma. Choose either -RicianClipMax or -RicianClipAbs; -RicianExp takes precedence.')
+    smi_options.add_argument('-nonNeg', action='store_true', help='Constrain the fitted SH signal to be nonnegative at acquired directions and on a dense sphere grid. Requires -RicianExp with -SH or -SMI; does not constrain tensors. Default: no SH signal constraint.')
+    smi_options.add_argument('-RicianSH_maxiter', type=int, metavar='N', help='Optional cumulative constrained-refinement iteration limit per voxel and shell. Requires -RicianExp -nonNeg with -SH or -SMI. Returns the best grid-feasible fit at the limit and saves diagnostic maps. Default: standard solver limits.')
     options.add_argument('-sigma', metavar=('<noisemap>'),help='path to noise map; required with -RicianExp, -RicianClipMax or -RicianClipAbs, optional for SMI parameter estimation')
     smi_options.add_argument('-lmaxSH', metavar='<orders>', help='With -SH: a common even SH fitting/output order (0,2,4,...) or comma-separated orders for every shell, sorted by b-value, b-shape, then echo time, including b=0. Default: automatic per shell. Applies to all SH estimators.')
     smi_options.add_argument('-lmax', metavar=('<lmax>'), help='With -SMI: one invariant order for polynomial regression (0,2,4,6), retaining automatic SH fitting orders. For standalone SH fitting orders use -SH -lmaxSH instead.')
@@ -384,22 +385,26 @@ def execute(): #pylint: disable=unused-variable
             if getattr(app.ARGS, option):
                 raise MRtrixError(f"-RicianExp tensor fitting does not yet support -{option}; "
                                   "use -RicianClipMax or -RicianClipAbs with the existing tensor pipeline or omit that option")
-    constrained_sh = app.ARGS.RicianExp or clip_requested
+    rician_correction = app.ARGS.RicianExp or clip_requested
     sh_estimator = ('RicianExp' if app.ARGS.RicianExp else
                     'RicianClipAbs' if app.ARGS.RicianClipAbs else
                     'RicianClipMax' if app.ARGS.RicianClipMax else 'LLS')
-    sh_description = ('Rician expectation NLS with nonnegative signal constraints'
+    sh_description = ('Rician expectation NLS'
                       if app.ARGS.RicianExp else
-                      f'clipped corrected LLS with nonnegative signal constraints ({clip_mode})'
+                      f'clipped corrected LLS ({clip_mode})'
                       if clip_requested else 'linear least squares')
-    if constrained_sh and not (tensor_requested or sh_requested):
+    if app.ARGS.nonNeg:
+        if not app.ARGS.RicianExp or not sh_requested:
+            raise MRtrixError('-nonNeg requires -RicianExp with -SH or -SMI')
+        sh_description += ' with nonnegative signal constraints'
+    if rician_correction and not (tensor_requested or sh_requested):
         raise MRtrixError(f"-{sh_estimator} requires -DTI, -DKI, -WDKI, -SH or -SMI")
-    if constrained_sh:
+    if rician_correction:
         if not app.ARGS.sigma:
             raise MRtrixError(f"-{sh_estimator} requires an explicit noise map via -sigma")
     if app.ARGS.RicianSH_maxiter is not None:
-        if not constrained_sh or not sh_requested or app.ARGS.RicianSH_maxiter < 1:
-            raise MRtrixError("-RicianSH_maxiter requires -RicianExp, -RicianClipMax or -RicianClipAbs "
+        if not app.ARGS.nonNeg or not sh_requested or app.ARGS.RicianSH_maxiter < 1:
+            raise MRtrixError("-RicianSH_maxiter requires -RicianExp -nonNeg "
                               "with -SH/-SMI and a positive integer")
     if app.ARGS.gnc_format and not app.ARGS.gnc:
         raise MRtrixError("-gnc_format requires -gnc <field>")
@@ -415,7 +420,7 @@ def execute(): #pylint: disable=unused-variable
 
     logger.info("Starting execution...")
     if app.ARGS.RicianExp and clip_requested:
-        logger.info('-RicianExp overrides the clipping flag for every selected model; initialization remains max-zero corrected LLS.')
+        logger.info('-RicianExp overrides the clipping flag for every selected model; initialization uses absolute-value corrected LLS for tensors and max-zero corrected LLS for SH/SMI.')
     if app.ARGS.RicianExp and tensor_requested:
         if app.ARGS.fit_constraints or app.ARGS.akc_outliers:
             logger.warning('-RicianExp tensor fitting is unconstrained: ignoring -fit_constraints and -akc_outliers.')
@@ -585,7 +590,7 @@ def execute(): #pylint: disable=unused-variable
             "mask_shape": mask.shape})
 
     clip_sigma = None
-    if constrained_sh:
+    if rician_correction:
         from lib.rician_sh import clipped_magnitude
         clip_sigma = _load_sigma_map(app.ARGS.sigma, mif, mask.shape, rician=True)
         if not np.all(np.isfinite(clip_sigma[mask])) or np.any(clip_sigma[mask] < 0):
@@ -596,7 +601,18 @@ def execute(): #pylint: disable=unused-variable
             formula = 'sqrt(abs(M^2-sigma^2))' if clip_mode == 'abs' else 'sqrt(max(0, M^2-sigma^2))'
             logger.info("DTI/DKI input correction: %s, including b0; existing tensor fit constraints are unchanged.", formula)
         elif tensor_requested:
-            logger.info('DTI/DKI estimator: unconstrained Rician expectation NLS on original magnitudes, initialized from clipped ordinary LLS.')
+            logger.info('DTI/DKI estimator: unconstrained Rician expectation NLS on original magnitudes, initialized from absolute-value corrected ordinary LLS.')
+
+    # Tensor b0 restoration acts on already corrected measurements. Keep the
+    # original acquisition for a separate corrected SH/SMI fit, avoiding a
+    # second correction of restored b0 values. Uncorrected SMI keeps the
+    # existing restored-b0 propagation below.
+    sh_b0_indices = np.flatnonzero(bval < .01)
+    sh_original_b0 = (dwi[..., sh_b0_indices].copy()
+                      if sh_requested and rician_correction
+                      and tensor_requested and app.ARGS.db0restore else None)
+    if sh_original_b0 is not None:
+        logger.info('Corrected SH/SMI uses original DWI; b0 restoration applies to tensor fits only.')
 
     tensor_sigma = clip_sigma if app.ARGS.RicianExp else None
     clip_tensor = clip_sigma is not None and not app.ARGS.RicianExp
@@ -1792,11 +1808,15 @@ def execute(): #pylint: disable=unused-variable
     #     params_wmti['axd'] = dki_micro_fit.axonal_diffusivity
     #     save_params(params_wmti, nii, model='wmti', outdir=outdir)
 
+    if sh_original_b0 is not None:
+        sh_input = dwi_orig if multi_te_beta else dwi
+        sh_input[..., sh_b0_indices] = sh_original_b0
+
     if app.ARGS.SH:
         from lib.sh import fit_rotational_invariants
         logger.info("SH estimator: %s", sh_description)
         sigma = clip_sigma if clip_sigma is not None else _load_sigma_map(
-            app.ARGS.sigma, mif, mask.shape, constrained_sh)
+            app.ARGS.sigma, mif, mask.shape, rician_correction)
         echo_times = np.array(dwi_metadata['echo_time_per_volume'], dtype=float, copy=True)
         if 0 < np.min(echo_times) < 1:
             echo_times *= 1000
@@ -1809,14 +1829,14 @@ def execute(): #pylint: disable=unused-variable
             beta=dwi_metadata['bshape_per_volume'], echo_time=echo_times,
             rician=app.ARGS.RicianExp, rician_maxiter=app.ARGS.RicianSH_maxiter,
             diagnostics=diagnostics, rician_clip=clip_requested,
-            rician_clip_mode=clip_mode,
+            rician_clip_mode=clip_mode, nonnegative=app.ARGS.nonNeg,
             n_jobs=app.ARGS.n_cores)
         save_params(images, mif, model=None, outdir=outdir)
         if diagnostics is not None:
             _save_rician_diagnostics(diagnostics, mif, outdir,
                                     app.ARGS.RicianSH_maxiter, shells)
         with open(os.path.join(outdir, 'SH_shells.json'), 'w') as stream:
-            json.dump(dict(estimator=sh_estimator,
+            json.dump(dict(estimator=sh_estimator, nonnegative=app.ARGS.nonNeg,
                            normalization='Sl = norm(c_lm) / sqrt((2*l+1)*4*pi); '
                                          'orthonormal SH, original signal units',
                            rank_one_processing=True, shells=shells), stream, indent=2)
@@ -1847,7 +1867,7 @@ def execute(): #pylint: disable=unused-variable
             if not app.ARGS.sigma:
                 logger.warning("No sigma map provided. SMI may be poorly conditioned.")
             sigma = clip_sigma if clip_sigma is not None else _load_sigma_map(
-                app.ARGS.sigma, mif, mask.shape, constrained_sh)
+                app.ARGS.sigma, mif, mask.shape, rician_correction)
             logger.info("SMI SH estimator: %s", sh_description)
 
             if app.ARGS.compartments:
@@ -1912,6 +1932,7 @@ def execute(): #pylint: disable=unused-variable
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianExp,
                             rician_sh_clip=clip_requested,
+                            rician_sh_nonnegative=app.ARGS.nonNeg,
                             rician_clip_mode=clip_mode,
                             sh_n_jobs=app.ARGS.n_cores,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)
@@ -1958,6 +1979,7 @@ def execute(): #pylint: disable=unused-variable
                             beta=dwi_metadata['bshape_per_volume'],training_prior=prior,smi_fw_thres=float(app.ARGS.smi_fw_thres),
                             rician_sh=app.ARGS.RicianExp,
                             rician_sh_clip=clip_requested,
+                            rician_sh_nonnegative=app.ARGS.nonNeg,
                             rician_clip_mode=clip_mode,
                             sh_n_jobs=app.ARGS.n_cores,
                             rician_sh_maxiter=app.ARGS.RicianSH_maxiter)

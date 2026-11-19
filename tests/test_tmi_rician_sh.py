@@ -55,8 +55,7 @@ def test_cli_both_estimators(inputs, multi_te):
         description = {'lls':'linear least squares', 'rician':'Rician expectation NLS',
                        'clip':'clipped corrected LLS', 'absolute':'clipped corrected LLS'}[name]
         assert description in result.stdout
-        if extra:
-            assert 'nonnegative signal constraints' in result.stdout
+        assert 'nonnegative signal constraints' not in result.stdout
     lls_files=sorted((inputs/'lls').glob('*.nii'))
     assert {p.name for p in lls_files} == {p.name for p in (inputs/'rician').glob('*.nii')}
     assert {p.name for p in lls_files} == {p.name for p in (inputs/'clip').glob('*.nii')}
@@ -69,11 +68,11 @@ def test_cli_both_estimators(inputs, multi_te):
     a=nib.load(inputs/'lls/rotinvs_smi.nii').get_fdata()
     b=nib.load(inputs/'rician/rotinvs_smi.nii').get_fdata()
     assert not np.allclose(a,b)
-    np.testing.assert_array_equal(a[...,0],b[...,0])
+    assert np.all(b[...,0] < a[...,0])
     absolute = nib.load(inputs/'absolute/rotinvs_smi.nii').get_fdata()
     clipped = nib.load(inputs/'clip/rotinvs_smi.nii').get_fdata()
     assert np.all(np.isfinite(absolute)) and not np.allclose(absolute, clipped)
-    np.testing.assert_array_equal(absolute[...,0], a[...,0])
+    assert np.all(absolute[...,0] < a[...,0])
 
 
 @pytest.mark.parametrize('options, error', [

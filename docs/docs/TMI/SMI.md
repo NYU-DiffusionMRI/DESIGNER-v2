@@ -26,9 +26,10 @@ then fits the Standard Model parameters. `-SH` estimates only the signal
 rotational invariants, without SMI priors, training, or model regression.
 Both modes use linear least squares for SH fitting by default. Adding
 `-RicianExp -sigma sigma.nii` accounts for Rician bias through the expected
-magnitude observation model and enforces a **nonnegative underlying SH signal**.
+magnitude observation model. **SH fits are unconstrained by default**; add
+`-nonNeg` with `-RicianExp` to constrain the underlying SH signal.
 Alternatively, choose `-RicianClipMax` or `-RicianClipAbs`, with `-sigma sigma.nii`,
-to fit corrected measurements with the same nonnegativity constraint.
+to fit corrected measurements with ordinary LLS.
 `-RicianExp` takes precedence over either clipping choice. See
 [Rician bias]({% link docs/TMI/Rician-bias.md %}) for all alternatives and their assumptions.
 
@@ -37,13 +38,13 @@ to fit corrected measurements with the same nonnegativity constraint.
 | Requested output | Example command |
 |---|---|
 | SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
-| SMI maps with Rician bias expectation correction and nonnegativity | `tmi dwi.nii smi_rician -SMI -RicianExp -sigma sigma.nii` |
-| SMI maps with clipped correction and signal nonnegativity | `tmi dwi.nii smi_clip -SMI -RicianClipMax -sigma sigma.nii` |
-| SMI maps with absolute-value correction and signal nonnegativity | `tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii` |
+| SMI maps with Rician bias expectation correction | `tmi dwi.nii smi_rician -SMI -RicianExp -sigma sigma.nii` |
+| SMI maps with clipped correction | `tmi dwi.nii smi_clip -SMI -RicianClipMax -sigma sigma.nii` |
+| SMI maps with absolute-value correction | `tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii` |
 | Signal rotational invariants only, using default LLS | `tmi dwi.nii sh_output -SH` |
-| Signal rotational invariants only, using Rician expectation and signal nonnegativity | `tmi dwi.nii sh_rician -SH -RicianExp -sigma sigma.nii` |
-| Signal rotational invariants only, using clipped correction and signal nonnegativity | `tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii` |
-| Signal rotational invariants only, using absolute-value correction and signal nonnegativity | `tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii` |
+| Signal rotational invariants only, using Rician expectation | `tmi dwi.nii sh_rician -SH -RicianExp -sigma sigma.nii` |
+| Signal rotational invariants only, using clipped correction | `tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii` |
+| Signal rotational invariants only, using absolute-value correction | `tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii` |
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmaxSH` sets the actual
@@ -125,20 +126,20 @@ with automatic fitting orders and no noise map required:
 tmi dwi.nii sh_output -SH
 ```
 
-**`-SH -RicianExp` uses the expected Rician magnitude signal and a nonnegativity
-constraint on the underlying SH signal.** Supply a noise map with `-sigma`:
+**`-SH -RicianExp` fits the expected Rician magnitude without a signal
+constraint by default.** Supply a noise map with `-sigma`:
 
 ```bash
 tmi dwi.nii sh_rician -SH -RicianExp -sigma sigma.nii
 ```
 
-The constraint applies at acquired directions and on a dense sphere grid;
-the default LLS fit has no such constraint. Supplying `-sigma` alone does not
+Add `-nonNeg` to constrain the SH signal at acquired directions and on a dense
+sphere grid. This option requires `-RicianExp`. Supplying `-sigma` alone does not
 switch from LLS to Rician fitting. The same estimator choice applies to `-SMI`.
-See [Rician bias expectation correction](#rician-bias-expectation-correction-with-a-nonnegative-signal)
+See [Rician bias expectation correction](#rician-bias-expectation-correction)
 for the observation model and initialization.
 
-For clipped correction followed by a nonnegative linear SH fit, use:
+For clipped correction followed by ordinary LLS, use:
 
 ```bash
 tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii
@@ -176,7 +177,7 @@ tmi dwi.nii sh_rician -SH -RicianExp -sigma sigma.nii -lmaxSH 0,2,4,4,6
 The list must contain one nonnegative even order for **every shell**, including
 b=0 and isotropic shells, in ascending b-value, then b-shape, then echo time.
 `SH_shells.json` records this order and the order actually fitted. Use zero for
-b=0/isotropic shells; these always retain their arithmetic means. A single
+b=0/isotropic shells; these use scalar estimation with the selected correction. A single
 integer applies the same order to all directional shells; omitting `-lmaxSH`
 selects fitting orders automatically. Write the list as one argument, with
 no spaces or trailing comma. If adapting an earlier standalone SH command,
@@ -213,72 +214,52 @@ noise map in their original matching units.
 ## Parameter estimation
 First, the rotational invariants of the diffusion signal are estimated. By default, SH coefficients are fit with ordinary linear least squares. Supplying a noise map alone does not change this estimator.
 
-### Rician bias expectation correction with a nonnegative signal
+### Rician bias expectation correction
 
-Both `-SH -RicianExp` and `-SMI -RicianExp` fit the expected Rician magnitude:
+Both `-SH -RicianExp` and `-SMI -RicianExp` fit
 
 $$
 \widehat c=\arg\min_c\sum_i
-\left[\mu_R((Yc)_i,\sigma)-M_i\right]^2,
-\qquad Y_{\mathrm{grid}}c\geq0.
+\left[\mu_R((Yc)_i,\sigma)-M_i\right]^2.
 $$
-
-Here $Yc$ is the underlying SH signal and $\mu_R$ is the Rician mean.
-Nonnegativity is checked at acquired directions and on a deterministic
-65,536-direction sphere grid. The constraint applies to signal values, not
-individual coefficients; a finite grid does not guarantee nonnegativity
-everywhere on the sphere.
 
 Every nonlinear search starts from ordinary LLS on
 $\sqrt{\max(0,M^2-\sigma^2)}$, including retries. The objective uses original
-observations, preserving negative values after denoising. An initially
-infeasible SH projection is accepted without shifting its starting coefficients.
+observations, preserving negative values after denoising. The Rician mean
+is even in $Yc$, so unconstrained fits can have signed lobes.
 
-The solver uses an analytic Jacobian, batched fitting and constrained refinement
-when needed. Violated grid directions are added until the full grid is feasible;
-a trust-region restart handles spurious zero stationary solutions. If refinement
-fails, the best grid-feasible estimate is returned with a warning. At
-$\sigma=0$, the fit reduces to constrained LLS.
+**Nonnegativity is optional:** add `-nonNeg` to enforce
+$Y_{\mathrm{grid}}c\geq0$ at acquired directions and on a 65,536-direction sphere
+grid, before cross-shell rank-one processing. This constrains signals, not
+individual coefficients. A finite grid does not guarantee positivity everywhere;
+constraining a truncated expansion can introduce bias even for a positive
+physical signal. At $\sigma=0$, fits reduce to ordinary LLS, or constrained LLS
+with `-nonNeg`.
 
-Supply an aligned `-sigma` map in matching signal units. Use the original noise
-level responsible for the retained magnitude bias, even after denoising reduces
-variance. See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for assumptions
-and the comparison with clipping. Expectation fitting is a mean fit, not a
-likelihood fit or an unbiasedness guarantee.
+The solver uses an analytic Jacobian and batched fitting. With `-nonNeg`,
+violated grid directions trigger constrained refinement; failures return the
+best grid-feasible estimate with a warning. Initialization remains max-zero LLS.
 
-### Clipped correction with a nonnegative signal
+### Clipped correction
 
-Choose either `-RicianClipMax` or `-RicianClipAbs`, with `-sigma`, to fit
+Choose `-RicianClipMax` or `-RicianClipAbs` to fit ordinary LLS to
+$\sqrt{\max(0,M^2-\sigma^2)}$ or $\sqrt{\lvert M^2-\sigma^2\rvert}$, respectively.
+These modes have **no signal constraint** and cannot be combined with `-nonNeg`.
+SH fits in signal space, so corrected zeros need no logarithm floor.
+`-RicianExp` overrides either clipping flag and keeps max-zero initialization.
 
-$$
-\widehat c=\arg\min_c\sum_i\left[(Yc)_i-\widetilde M_i\right]^2,
-\qquad Y_{\mathrm{grid}}c\geq0,
-$$
-
-where the corrected measurements are
-
-$$
-\widetilde M_i=
-\begin{cases}
-\sqrt{\max(0,M_i^2-\sigma^2)},&\texttt{-RicianClipMax},\\[6pt]
-\sqrt{\lvert M_i^2-\sigma^2\rvert},&\texttt{-RicianClipAbs}.
-\end{cases}
-$$
-
-This is constrained linear least squares on the corrected data. Feasible LLS
-coefficients are retained exactly; otherwise they initialize refinement on
-the same nonnegativity grid. SH fits in signal space, so corrected zeros do
-not require a logarithm floor.
-
-The clipping flags cannot be combined. `-RicianExp` overrides either and
-always retains max-zero LLS initialization. All corrected SH estimators
-preserve raw b0/isotropic-shell means, basis normalization and SMI regression.
-Nonnegativity is enforced before cross-shell rank-one processing of higher
-orders; $S_0$ is not rank-one processed.
+All corrections require an aligned `-sigma` map in matching signal units. Use
+the original noise level responsible for the retained magnitude bias, even
+after denoising. They also apply to b0 and isotropic (STE) shells: clipping
+precedes averaging; expectation fitting inverts the Rician mean of the sample
+average using the original sigma. Higher-order invariants of these shells are
+zero. Basis normalization, rank-one processing and SMI regression are unchanged;
+$S_0$ is not rank-one processed. See [Rician bias]({% link docs/TMI/Rician-bias.md %})
+for equations and assumptions. No method guarantees unbiased finite-sample estimates.
 
 ### Iteration limits and diagnostics
 
-`-RicianSH_maxiter N` caps cumulative constrained-refinement iterations per
+With `-RicianExp -nonNeg`, `-RicianSH_maxiter N` caps cumulative constrained-refinement iterations per
 voxel and shell, including restarts. The initial batched fit retains its
 standard limit. At the cap, the best grid-feasible fit is returned with a
 warning; very small caps can change estimates substantially.
@@ -299,8 +280,8 @@ These diagnostics do not describe the initial batched fit's convergence.
 All three flags also apply to DTI/DKI/WDKI. Both clipping choices retain
 existing tensor settings, including `-db0restore -akc_outliers` together.
 Tensor expectation fitting is unconstrained, ignores AKC and does not yet
-support b0 restoration or spatial refinements. Unlike SH/SMI, tensor correction
-includes b0. See [tensor details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options).
+support b0 restoration or spatial refinements. Tensor expectation starts from
+absolute-value corrected LLS; SH/SMI retain max-zero initialization. See [tensor details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options).
 
 ### Processing time and parallel workers
 

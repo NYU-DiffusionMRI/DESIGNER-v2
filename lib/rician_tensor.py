@@ -31,9 +31,9 @@ def _factor(design):
 
 
 def _fit_voxel(y, sigma, design, factors):
-    """Always start both the first fit and any retry from clipped ordinary LLS."""
+    """Start both the first fit and any retry from absolute-value-corrected LLS."""
     q, r, inverse = factors
-    initial = inverse @ np.log(np.maximum(clipped_magnitude(y, sigma), np.finfo(float).eps))
+    initial = inverse @ np.log(np.maximum(clipped_magnitude(y, sigma, mode='abs'), np.finfo(float).eps))
     baseline = np.all(design[:, 1:] == 0, axis=1)
     scale = max(float(np.mean(y[baseline])) if np.any(baseline) else float(np.max(y)),
                 float(sigma), np.finfo(float).tiny)

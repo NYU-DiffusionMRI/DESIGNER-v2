@@ -82,7 +82,7 @@ def test_per_shell_orders_recover_analytic_invariants_in_sorted_order(rician):
                     + .06*eval_legendre(4, g[b == 2, 2]))
     measured = clean.copy()
     if rician:
-        measured[b > 0] = rice.mean(clean[b > 0]/.15)*.15
+        measured = rice.mean(clean/.15)*.15
     permutation = np.random.default_rng(13).permutation(b.size)
     orders = np.array([0, 2, 4])
     images, shells = fit_rotational_invariants(

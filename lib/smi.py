@@ -90,13 +90,13 @@ class SMI(object):
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
         l_max_training=None, seed=42, smi_fw_thres=0.2, rician_sh=False,
-        rician_sh_maxiter=None, rician_sh_clip=False, sh_n_jobs=1, rician_clip_mode='maxzero'):
+        rician_sh_maxiter=None, rician_sh_clip=False, sh_n_jobs=1, rician_clip_mode='maxzero',
+        rician_sh_nonnegative=False):
         """
         Setting some default values and initialization required for class functions.
 
         rician_sh : bool, optional
-            Use Rician-expectation nonlinear SH fitting with nonnegative signal
-            constraints on acquired directions and a dense sphere grid (default False). Requires
+            Use unconstrained Rician-expectation nonlinear SH fitting (default False). Requires
             an explicit sigma map in fit(), in the same intensity units as dwi.
             Cannot be combined with the separate noise_bias pre-correction.
         rician_sh_maxiter : positive int, optional
@@ -104,9 +104,8 @@ class SMI(object):
             shell. Exhausted fits return their best grid-feasible estimate.
             None retains the standard solver limits.
         rician_sh_clip : bool, optional
-            Fit magnitudes corrected using rician_clip_mode by linear least squares with
-            the same signal nonnegativity constraint. Requires sigma and is
-            incompatible with noise_bias correction. rician_sh takes
+            Fit magnitudes corrected using rician_clip_mode by ordinary linear least squares.
+            Requires sigma and is incompatible with noise_bias correction. rician_sh takes
             precedence when both SH estimator switches are enabled.
         sh_n_jobs : int, optional
             Number of process workers for Rician or clipped SH fitting (default
@@ -115,6 +114,9 @@ class SMI(object):
             Correction formula when rician_sh_clip is enabled. 'abs' uses
             sqrt(abs(dwi**2-sigma**2)). Rician expectation initialization always
             uses max-zero regardless of this setting.
+        rician_sh_nonnegative : bool, optional
+            Require a nonnegative fitted signal at acquired directions and on
+            a dense sphere grid. Only valid with rician_sh=True; default False.
         """
 
         if not cs_phase:
@@ -138,19 +140,22 @@ class SMI(object):
             raise ValueError("rician_clip_mode must be 'maxzero' or 'abs'")
         self.rician_clip_mode = rician_clip_mode
         self.sh_n_jobs = sh_n_jobs
-        self.constrained_sh = self.rician_sh or self.rician_sh_clip
+        self.corrected_sh = self.rician_sh or self.rician_sh_clip
+        self.constrained_sh = bool(rician_sh_nonnegative)
+        if self.constrained_sh and not self.rician_sh:
+            raise ValueError("rician_sh_nonnegative requires Rician-expectation SH fitting")
         self.rician_sh_maxiter = rician_sh_maxiter
         self.rician_sh_diagnostics = None
         if rician_sh_maxiter is not None and (
                 not self.constrained_sh or not isinstance(rician_sh_maxiter, (int, np.integer))
                 or rician_sh_maxiter < 1):
-            raise ValueError("rician_sh_maxiter requires Rician SH and a positive integer")
-        if self.constrained_sh and noise_bias:
+            raise ValueError("rician_sh_maxiter requires nonnegative Rician SH and a positive integer")
+        if self.corrected_sh and noise_bias:
             raise ValueError("Rician SH fitting cannot be combined with noise_bias correction")
 
         # set up required inputs
         self.set_compartments(compartments)
-        self.set_bvals_bvecs(bval, bvec)
+        self.set_bvals_bvecs(bval, bvec, beta)
         self.set_bshape(beta)
         self.set_echotime(echo_time)
 
@@ -222,12 +227,15 @@ class SMI(object):
             self.sigma = snd.gaussian_filter(std_dev, sigma=1)
             warnings.warn('sigma was not an input (not recommended)')
         
-    def set_bvals_bvecs(self, bval, bvec):
+    def set_bvals_bvecs(self, bval, bvec, beta=None):
         """
         Function to add gradient table to the class. Gradient magnitude and direction
         are required inputs.
         """
-        if not bval.any() or not bvec.any():
+        b0_limit = .05 if np.max(bval, initial=0) < 500 else 50
+        isotropic = ((bval <= b0_limit) | (np.abs(beta) <= .045)
+                     if beta is not None else bval <= b0_limit)
+        if not bval.size or not bvec.size or (not bvec.any() and not np.all(isotropic)):
             raise Exception('b and dirs are compulsory arguments for SMI to run')
         else:
             self.b = bval
@@ -550,8 +558,9 @@ class SMI(object):
         else:
             dwi_2D = dwi
 
-        if self.constrained_sh:
-            from lib.rician_sh import fit_rician_sh, nonnegative_directions
+        if self.corrected_sh:
+            from lib.rician_sh import (fit_rician_sh, nonnegative_directions,
+                                       clipped_magnitude, invert_rician_mean)
             if sigma is None:
                 raise ValueError("Rician SH fitting requires an explicit sigma noise map")
             sigma = np.asarray(sigma, dtype=float)
@@ -622,12 +631,13 @@ class SMI(object):
             if (abs(bb[1,i]) > 0.045) & (bb[0,i] > 0.05):
                 ids_current_lm = np.arange(n_sh_coeffs[i])
                 y_lm_current_cluster = y_lm_matrix[ids_current_cluster,:]
-                if self.constrained_sh:
+                if self.corrected_sh:
                     diagnostics = {} if self.rician_sh_diagnostics is not None else None
                     s_lm_current_cluster = fit_rician_sh(
                         y_lm_current_cluster[:, ids_current_lm],
                         dwi_2D[ids_current_cluster, :], sigma_1d,
-                        constraint_basis=nonnegative_basis[:, ids_current_lm],
+                        constraint_basis=(nonnegative_basis[:, ids_current_lm]
+                                          if self.constrained_sh else None),
                         constrained_max_iter=self.rician_sh_maxiter,
                         diagnostics=diagnostics, clipped=self.rician_sh_clip,
                         clip_mode=self.rician_clip_mode,
@@ -651,9 +661,15 @@ class SMI(object):
             else:
                 s_lm_current_cluster = np.zeros((int(n_sh_coeffs[i]), n_voxels))
                 s_l_current_cluster = np.zeros((int(l_max[i]/2+1), n_voxels))
-                s_lm_current_cluster[0,:] = (np.sqrt(4*np.pi) * 
-                    np.mean(dwi_2D[ids_current_cluster,:], axis=0)
-                    )
+                measured = dwi_2D[ids_current_cluster, :]
+                if self.rician_sh:
+                    scalar = invert_rician_mean(np.mean(measured, axis=0), sigma_1d)
+                elif self.rician_sh_clip:
+                    scalar = np.mean(clipped_magnitude(measured, sigma_1d,
+                                                      mode=self.rician_clip_mode), axis=0)
+                else:
+                    scalar = np.mean(measured, axis=0)
+                s_lm_current_cluster[0,:] = np.sqrt(4*np.pi) * scalar
                 s_l_current_cluster[0,:] = abs(s_lm_current_cluster[0,:])
                
             s_lm_clusters_all[:n_sh_coeffs[i],:,i] = (
@@ -1534,7 +1550,7 @@ class SMI(object):
 
         self.dwishape = dwi.shape
 
-        if self.constrained_sh and sigma is None:
+        if self.corrected_sh and sigma is None:
             raise ValueError("Rician SH fitting requires an explicit sigma noise map")
         self.set_mask(mask)
         self.set_sigma(sigma, dwi)
