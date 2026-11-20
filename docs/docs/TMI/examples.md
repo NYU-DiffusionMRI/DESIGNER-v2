@@ -57,7 +57,7 @@ Constraints can be used to bound the kurtosis tensor estimation, an example of r
 ```
 tmi -WDKI -DKI -fit_constraints 0,1,0 dwi.mif parameters
 ```
-- The order of values input to the `-fit_constraints` option is: diffusion tensor > 0, kurtosis tensor > 0, and kurtosis tensor < 10. These settings apply to the existing WLLS fit, including with either clipping flag; `-RicianExp` ignores them.
+- The order of values input to the `-fit_constraints` option is: diffusion tensor > 0, kurtosis tensor > 0, and kurtosis tensor < 10. These settings are supported by WLLS, including with either clipping flag; they are not yet supported with `-RicianExp`.
 
 --- 
 
@@ -185,8 +185,8 @@ max-zero LLS initialization. Per-shell orders in standalone mode use `-lmaxSH`.
 ### Rician correction for tensors and SH/SMI
 
 ```bash
-# Clipped correction, retaining the existing tensor pipeline and settings
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClipMax -sigma sigma.nii -akc_outliers
+# Recommended tensor correction, followed by WLLS; AKC is supported
+tmi dwi.nii tensor_clip -DTI -DKI -RicianClipAbs -sigma sigma.nii -akc_outliers
 
 # Both clipping choices work with b0 restoration and AKC replacement together
 tmi dwi.nii tensor_restore_max -DKI -RicianClipMax -sigma sigma.nii -db0restore -akc_outliers
@@ -208,16 +208,17 @@ removed. Use original sigma for the retained Rician bias, not the smaller
 residual SD after denoising. `-RicianExp` takes precedence over either clipping
 flag for all selected models. The clipping flags cannot be combined.
 
-Use separate calls to choose different formulas for tensor and SH estimation:
+Use separate calls for the recommended tensor and SH/SMI corrections:
 
 ```bash
 tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
-tmi dwi.nii sh_max -SH -RicianClipMax -sigma sigma.nii
+tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii
 ```
 
 See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for the rationale and alternatives.
 
-With `-RicianExp`, tensor constraints and AKC replacement are ignored.
+With `-RicianExp`, tensor constraints and AKC replacement are not yet supported;
+requesting them produces a warning and the fit proceeds without them.
 Expectation tensor fits with b0 restoration, fit smoothing, polynomial
 regression or external `-dt` are deferred and rejected explicitly. These
 settings remain available with both clipping choices.
