@@ -61,14 +61,14 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 - For use with `-DKI` or `-WDKI`
 - A comma separated list of either 0 or 1. Each index corresponds to a hard bound on the kurtosis tensor. Index 1 corresponds to diffusion tensor > 0, index 2 corresponds to kurtosis tensor > 0, index 3 corresponds to kurtosis tensor < 10. An input of `1,1,1` will perform a fully constrained DKI fit, and `0,0,0` will perform an unconstrained fit.
 - Default `0,0,0`
-- Ignored with `-RicianExp`; retained with `-RicianClipMax` or `-RicianClipAbs`.
+- Supported with `-RicianClipMax` or `-RicianClipAbs`; not yet supported with `-RicianExp` (not applied; a warning is issued).
 
 ## Options for outlier replacement
 
 ### `-akc_outliers`
 - Brute force K tensor outlier detection and filtering. The kurtosis tensor is projected onto a sphere with 10,000 directions. Voxels where mean kurtosis is less than -1 or greater than 10 are labelled as outliers.
 - Outliers are replaced by the median value of neighboring (26 adjacent) non-outlier voxels in all diffusion weighted images and the DKI fit is done again.
-- Ignored with `-RicianExp`; retained with `-RicianClipMax` or `-RicianClipAbs`.
+- Supported with `-RicianClipMax` or `-RicianClipAbs`; not yet supported with `-RicianExp` (not applied; a warning is issued).
 
 ### `-fit_smoothing <percentile>`
 - Windowed adaptive nonlocal means filter on the dwi.
@@ -104,8 +104,9 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 ### `-RicianExp`
 
 - Fit the expected Rician magnitude to original observations for DTI/DKI/WDKI/SH/SMI. Requires `-sigma`.
+- Recommended Rician correction for SH/SMI; use `-RicianClipAbs` for the recommended tensor correction.
 - Initialization: ordinary LLS on absolute-value corrected measurements for tensors, max-zero corrected measurements for SH/SMI. Negative observations after denoising are preserved.
-- **Tensors:** unconstrained signal-domain NLLS; `-fit_constraints` and `-akc_outliers` are ignored. `-db0restore`, `-fit_smoothing`, `-polyreg` and external `-dt` are not yet supported.
+- **Tensors:** unconstrained signal-domain NLLS; `-fit_constraints` and `-akc_outliers` are not yet supported (not applied; a warning is issued). `-db0restore`, `-fit_smoothing`, `-polyreg` and external `-dt` are not yet supported.
 - **SH/SMI:** unconstrained by default; add `-nonNeg` for signal nonnegativity. b0/isotropic shells invert the Rician mean using original sigma; rank-one processing is unchanged.
 - Overrides either clipping flag for all selected models, without changing these initialization choices.
 - See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for noise assumptions and [tensor details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options) for diagnostics.
@@ -120,6 +121,8 @@ Negative squared differences become zero.
 
 ### `-RicianClipAbs`
 
+Recommended Rician correction for DTI/DKI/WDKI, followed by WLLS.
+
 Correct measurements using
 
 $$\widetilde M=\sqrt{\lvert M^2-\sigma^2\rvert}.$$
@@ -130,7 +133,7 @@ zeros, but remains zero at $M=\sigma$ and is nonmonotonic below it.
 For both clipping flags:
 
 - Requires `-sigma` and at least one of `-DTI`, `-DKI`, `-WDKI`, `-SH` or `-SMI`. Choose one clipping flag; selecting both is an error.
-- **Tensors:** correct once, including b0, then retain existing constraints, AKC, smoothing, polynomial regression, GNC and b0 restoration. Corrected zeros use the existing positive log floor.
+- **Tensors:** WLLS on corrected measurements. Correction is applied once, including b0; constraints, AKC, smoothing, polynomial regression, GNC and b0 restoration are supported. Corrected zeros use the existing positive log floor.
 - **SH/SMI:** ordinary corrected LLS, without signal constraints. b0/isotropic shells average individually corrected measurements; rank-one processing and SMI regression are unchanged.
 - Supply original data with a retained noise floor and an aligned original sigma map. Both formulas are approximate corrections.
 - A combined run uses the selected formula for every model; use separate calls for different choices. `-RicianExp` takes precedence.

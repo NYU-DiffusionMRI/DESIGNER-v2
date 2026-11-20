@@ -23,15 +23,20 @@ Here $s$ is the underlying signal and $\sigma$ is the standard deviation of
 each complex Gaussian noise component. Averaging directions reduces variance,
 but retains this bias; high b0 SNR does not guarantee high directional SNR.
 
+## Recommended correction
+
+- **DTI/DKI/WDKI:** `-RicianClipAbs -sigma sigma.nii`, followed by weighted linear least squares (WLLS).
+- **SH/SMI:** `-RicianExp -sigma sigma.nii`, fitting the expected Rician magnitude. Add `-nonNeg` only if a nonnegative SH signal is desired.
+
 ## Choose an estimator
 
 All correction options apply to `-DTI`, `-DKI`, `-WDKI`, `-SH` and `-SMI`.
 
 | Option | DTI/DKI/WDKI | SH/SMI |
 |---|---|---|
-| No correction flag | Existing WLLS pipeline | Ordinary LLS |
-| `-RicianClipMax` | Max-zero correction, then existing tensor fit | Ordinary corrected LLS |
-| `-RicianClipAbs` | Absolute-value correction, then existing tensor fit | Ordinary corrected LLS |
+| No correction flag | WLLS | Ordinary LLS |
+| `-RicianClipMax` | Max-zero correction, then WLLS | Ordinary corrected LLS |
+| `-RicianClipAbs` | Absolute-value correction, then WLLS | Ordinary corrected LLS |
 | `-RicianExp` | Unconstrained Rician-mean NLLS | Unconstrained Rician-mean NLLS |
 
 Choose one clipping flag. `-RicianExp` overrides either clipping flag for all
@@ -111,13 +116,15 @@ has already been removed, for example with `designer -rician`.
 
 | Setting | ClipMax / ClipAbs | RicianExp |
 |---|---|---|
-| Tensor constraints and `-akc_outliers` | Retained | Ignored |
+| Tensor constraints and `-akc_outliers` | Supported | Not yet supported |
 | `-db0restore`, including with AKC | Supported | Not yet supported |
 | `-fit_smoothing`, `-polyreg`, external `-dt` | Supported | Not yet supported |
 | GNC, shell selection, multi-TE subsets | Supported | Supported |
 
-Unsupported expectation combinations produce an error. Tensor clipping includes
-b0 and is applied once. SH/SMI also correct b0 and isotropic (STE) shells:
+With tensor `-RicianExp`, constraints and AKC replacement are not applied;
+requesting them produces a warning. Other unsupported combinations produce an error.
+Tensor clipping includes b0 and is applied once. SH/SMI also correct b0 and
+isotropic (STE) shells:
 clipping precedes averaging; expectation fitting inverts $\mu_R$ at the sample
 mean using the original $\sigma$, with zero amplitude below the Rayleigh floor.
 Higher-order invariants are zero for these shells. Rank-one processing and SMI
@@ -127,12 +134,13 @@ applies to tensors; SH/SMI use the original observations.
 ## Examples
 
 ```bash
+# Recommended corrections: run tensors and SH/SMI separately
+tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
+tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii
+
 # Invariants only; choose either clipping formula
 tmi dwi.nii sh_max -SH -RicianClipMax -sigma sigma.nii
 tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii
-
-# Expected Rician signal for tensors and SH
-tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
 
 # Optional nonnegative SH signal (also available with -SMI)
 tmi dwi.nii sh_positive -SH -RicianExp -sigma sigma.nii -nonNeg

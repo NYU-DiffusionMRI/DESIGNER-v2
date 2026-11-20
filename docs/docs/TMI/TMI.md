@@ -14,7 +14,7 @@ permalink: /docs/TMI
 - [Rician bias and estimator alternatives]({% link docs/TMI/Rician-bias.md %}), using `-RicianClipMax`, `-RicianClipAbs` or `-RicianExp` for DTI/DKI and SH/SMI
 - [W tensor parameter extraction]({% link docs/TMI/DTI-DKI.md %}#tensor-parameters)
 - [DKI outlier replacement]({% link docs/TMI/DTI-DKI.md %}#outlier-replacement)
-- [Standard Model Imaging (SMI)]({% link docs/TMI/SMI.md %}), including optional Rician bias expectation correction with a nonnegative SH signal
-- [Signal rotational invariants without SMI]({% link docs/TMI/SMI.md %}#signal-rotational-invariants-without-smi), using `-SH` with either LLS or constrained Rician fitting
+- [Standard Model Imaging (SMI)]({% link docs/TMI/SMI.md %}), including Rician bias expectation correction with optional SH signal nonnegativity
+- [Signal rotational invariants without SMI]({% link docs/TMI/SMI.md %}#signal-rotational-invariants-without-smi), using `-SH` with LLS, corrected LLS or Rician expectation fitting
 
 

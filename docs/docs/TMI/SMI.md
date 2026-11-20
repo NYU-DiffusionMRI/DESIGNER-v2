@@ -24,8 +24,8 @@ In addition to the python implementation as a part of TMI, SMI is offered as a s
 TMI offers two output modes. `-SMI` estimates signal rotational invariants and
 then fits the Standard Model parameters. `-SH` estimates only the signal
 rotational invariants, without SMI priors, training, or model regression.
-Both modes use linear least squares for SH fitting by default. Adding
-`-RicianExp -sigma sigma.nii` accounts for Rician bias through the expected
+Both modes use linear least squares for SH fitting by default. **We recommend
+`-RicianExp -sigma sigma.nii` for Rician bias correction in SH/SMI**, using the expected
 magnitude observation model. **SH fits are unconstrained by default**; add
 `-nonNeg` with `-RicianExp` to constrain the underlying SH signal.
 Alternatively, choose `-RicianClipMax` or `-RicianClipAbs`, with `-sigma sigma.nii`,
@@ -194,8 +194,8 @@ in other shells through this joint step.
 `-lmaxSH` is supported only with `-SH`. For `-SMI`, the separate `-lmax` option accepts one
 value (0, 2, 4, or 6) specifying the invariant order used for Standard Model
 regression; the SH fitting orders remain automatic per shell. The choice
-between LLS, constrained Rician-expectation fitting and constrained
-clipped-corrected LLS applies to both output modes.
+between ordinary LLS, corrected LLS and Rician-expectation fitting applies to
+both output modes. Only Rician-expectation fitting supports optional `-nonNeg`.
 
 A requested order that cannot be identified from the directions is
 rejected; an unsupported higher-order invariant should not be interpreted as

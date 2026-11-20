@@ -49,18 +49,22 @@ designer2_test.mif designer2_params_test
 
 For data with a retained Rician noise floor, choose `-RicianClipMax`,
 `-RicianClipAbs` or `-RicianExp`, with an aligned `-sigma` map. These options
-apply to DTI/DKI/WDKI and SH/SMI:
+apply to DTI/DKI/WDKI and SH/SMI.
+
+**Recommended:** `-RicianClipAbs` for DTI/DKI/WDKI and `-RicianExp` for SH/SMI.
+Use separate calls to apply these recommendations to tensors and SH/SMI.
 
 - `-RicianClipMax` corrects measurements with $\sqrt{\max(0,M^2-\sigma^2)}$.
 - `-RicianClipAbs` uses $\sqrt{\lvert M^2-\sigma^2\rvert}$.
 - `-RicianExp` fits the expected Rician magnitude, starting from absolute-value corrected LLS for tensors and max-zero corrected LLS for SH/SMI.
 
-Both clipping choices preserve existing tensor settings, including b0 restoration
-and AKC together. Tensor expectation fitting is unconstrained and ignores AKC;
+Both clipping choices support existing tensor settings, including b0 restoration
+and AKC together. Tensor expectation fitting is unconstrained; AKC,
 b0 restoration and spatial refinements are not yet supported. SH/SMI fits are
 unconstrained by default; add `-nonNeg` with `-RicianExp` to constrain the fitted
-SH signal. The clipping options use ordinary corrected LLS. Without a correction
-flag, tensors retain WLLS and SH/SMI retain ordinary LLS.
+SH signal. The clipping options use WLLS for tensors and ordinary LLS for SH/SMI
+on corrected measurements. Without a correction flag, tensors use WLLS and
+SH/SMI use ordinary LLS on the original measurements.
 
 Use the original noise level responsible for the bias, even after denoising
 reduces residual variance. See the [Rician bias guide](docs/docs/TMI/Rician-bias.md)
