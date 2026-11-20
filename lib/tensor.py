@@ -269,9 +269,11 @@ class TensorFitting(object):
 
         return parameters
 
-    def dki_fit(self, dwi, mask, constraints=None, L=None):
+    def dki_fit(self, dwi, mask, constraints=None, L=None, sigma=None):
         """ 
-        Diffusion parameter estimation using weighted linear least squares fitting.
+        Weighted linear least squares, or unconstrained Rician-mean NLS with sigma.
+        When sigma is supplied, constraints are ignored and initialization is
+        ordinary LLS on sqrt(max(0, M**2-sigma**2)).
 
         Outputs
         -------
@@ -283,6 +285,11 @@ class TensorFitting(object):
             Design matrix used for the fit. If L is provided, the design matrix is voxel-dependent,
             so this returns None.
         """
+        if sigma is not None:
+            from lib.rician_tensor import fit_rician_tensor
+            dt, s0, b, self.rician_diagnostics = fit_rician_tensor(
+                dwi, mask, self.grad, sigma, kurtosis=True, L=L, n_jobs=self.n_cores)
+            return dt, s0, b
         warnings.filterwarnings("ignore")
 
         # --- sanitize / normalize input ---
@@ -408,9 +415,9 @@ class TensorFitting(object):
 
         return dt, s0, b
 
-    def dti_fit(self, dwi, mask, L=None):
+    def dti_fit(self, dwi, mask, L=None, sigma=None):
         """
-        Diffusion tensor estimation using weighted linear least squares.
+        Weighted linear least squares, or unconstrained Rician-mean NLS with sigma.
 
         Outputs
         -------
@@ -422,6 +429,11 @@ class TensorFitting(object):
             Design matrix used for the fit. If L is provided, the design matrix is voxel-dependent,
             so this returns None.
         """
+        if sigma is not None:
+            from lib.rician_tensor import fit_rician_tensor
+            dt, s0, b, self.rician_diagnostics = fit_rician_tensor(
+                dwi, mask, self.grad, sigma, L=L, n_jobs=self.n_cores)
+            return dt, s0, b
         # --- sanitize / normalize input ---
         order = np.floor(np.log(np.abs(np.max(self.grad[:, -1]) + 1)) / np.log(10))
         if order >= 2:

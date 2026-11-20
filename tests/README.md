@@ -191,3 +191,68 @@ Helper scripts in `scripts/` (in the project root):
 ## Notes
 
 - Sythnstrip model (`tests/models/synthstrip_v7.3.2.pt`), which is used for D6 skull stripping, is downloaded by running `bash scripts/download_freesurfer_synthstrip.sh`
+
+
+## Rician tensor and SH tests
+
+Run the optional tensor mean-model tests and installed CLI checks in the development container:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 SMI_BLAS_THREADS=1 \
+  python -m pytest -q tests/test_rician_tensor.py tests/test_tmi_rician_exp.py \
+  tests/test_tmi_rician_clip.py tests/test_tmi_rician_sh.py tests/test_tmi_sh.py \
+  tests/test_clipped_sh.py tests/test_rician_sh.py tests/test_sh_correction_options.py
+```
+
+The tensor tests use an independent hypergeometric Rician mean and a numerical
+Jacobian fit, recover known unconstrained tensors (including negative eigenvalues
+and kurtosis), exercise sigma=0 and voxel-specific gradients, and compare serial
+and parallel voxel ordering. CLI tests cover DTI/DKI/WDKI, combined SH/SMI runs,
+multi-TE and GNC, estimator selection, expectation precedence, ignored constraints/AKC,
+and explicit rejection of deferred expectation-refinement combinations.
+Clipped-input equivalence tests check both `-RicianClipMax` and `-RicianClipAbs`
+against manually corrected input, including constraints, AKC replacement,
+smoothing, and combined b0 restoration with AKC for single- and multi-echo data.
+SH tests check optional grid constraints, unconstrained defaults, b0/STE
+correction, scalar mean inversion, serial/parallel consistency, and max-zero
+SH expectation initialization. Tensor expectation tests use absolute-value
+initialization. The CLI tests cover `-nonNeg` routing and reject invalid combinations. CLI checks reject simultaneous clipping flags. The million-sample
+polynomial-regression training is not run by these small CLI tests; clipping
+continues to feed the existing polynomial-regression path without adding a restriction.
+
+## Rician SH synthetic experiment
+
+Run inside the dev container from `/workspace`:
+
+```bash
+OPENBLAS_NUM_THREADS=1 SMI_BLAS_THREADS=1 python -m pytest -q \
+  tests/test_rician_sh.py tests/test_tmi_rician_sh.py
+python tests/scripts/rician_sh_experiment.py /path/to/results
+```
+
+The tests generate their own images, exercise the installed `tmi` command for
+single- and multi-echo data, check input errors, and compare the nonlinear fit
+against an independent SciPy optimizer. The experiment directly integrates
+three Standard Model tissues with Watson orientation distributions, generates
+128 independent Rician noise realizations at each of four b0 SNRs, and runs
+noiseless LLS, noisy LLS, clipped corrected noisy LLS ($\sqrt{\max(0,S^2-\sigma^2)}$),
+and noisy RicianExp through `tmi`. RicianExp uses the linear fit to the clipped
+corrected signal as its initialization, then fits the original magnitude data
+without signal constraints. It saves all maps,
+commands, logs, truth maps, per-map bias/RMSE/MAE tables, and figures. The normal
+SMI training priors and seed are identical across runs. Errors relative to the
+known SM parameters and to noiseless `tmi` are reported separately, since the
+SH correction does not remove regression bias or finite-sample invariant bias.
+
+To compare every map and channel from two real-data runs:
+
+```bash
+python tests/scripts/compare_rician_sh_maps.py lls_dir rician_dir mask.nii comparison_dir \
+  --label "Clipped corrected LLS" --description "LLS input: sqrt(max(0, S**2 - sigma**2)); RicianExp input: original magnitude."
+```
+
+This saves differences as NIfTI, all-voxel metrics as CSV/JSON, axial and coronal
+figures for all channels, and a local HTML report. Both runs and the mask must
+have matching physical grids. A different mask voxel-axis order is aligned by
+exact flips/permutations without interpolation. Test this with
+`python -m pytest -q tests/test_rician_map_comparison.py`.

@@ -647,10 +647,9 @@ def create_shell_table(dwi_metadata):
     bvals = dwi_metadata['grad'][:,-1]
     bvecs = dwi_metadata['grad'][:,:-1]
 
-    smi = SMI(bval=bvals, bvec=bvecs)
-
     bshape = dwi_metadata['bshape_per_volume']
     echo_time = dwi_metadata['echo_time_per_volume']
+    smi = SMI(bval=bvals, bvec=bvecs, beta=bshape)
 
     if max(echo_time) < 1:
         echo_time *= 1000

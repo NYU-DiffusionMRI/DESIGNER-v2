@@ -47,6 +47,37 @@ tmi \
 designer2_test.mif designer2_params_test
 ```
 
+For data with a retained Rician noise floor, choose `-RicianClipMax`,
+`-RicianClipAbs` or `-RicianExp`, with an aligned `-sigma` map. These options
+apply to DTI/DKI/WDKI and SH/SMI:
+
+- `-RicianClipMax` corrects measurements with $\sqrt{\max(0,M^2-\sigma^2)}$.
+- `-RicianClipAbs` uses $\sqrt{\lvert M^2-\sigma^2\rvert}$.
+- `-RicianExp` fits the expected Rician magnitude, starting from absolute-value corrected LLS for tensors and max-zero corrected LLS for SH/SMI.
+
+Both clipping choices preserve existing tensor settings, including b0 restoration
+and AKC together. Tensor expectation fitting is unconstrained and ignores AKC;
+b0 restoration and spatial refinements are not yet supported. SH/SMI fits are
+unconstrained by default; add `-nonNeg` with `-RicianExp` to constrain the fitted
+SH signal. The clipping options use ordinary corrected LLS. Without a correction
+flag, tensors retain WLLS and SH/SMI retain ordinary LLS.
+
+Use the original noise level responsible for the bias, even after denoising
+reduces residual variance. See the [Rician bias guide](docs/docs/TMI/Rician-bias.md)
+for equations, compatibility and examples.
+
+To estimate only signal rotational invariants, without SMI model fitting:
+
+```bash
+tmi dwi.nii sh_output -SH -RicianExp -sigma sigma.nii -mask brain_mask.nii -lmaxSH 6
+```
+
+This saves `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`, with one volume per shell
+in each file. `SH_shells.json` identifies each volume's b-value, b-shape, echo
+time, and fitted order. For `-SH`, `-lmaxSH` sets the SH fitting order; omitting it
+uses automatic per-shell orders. Omit all correction flags for LLS, which needs no noise
+map. `-SH` and `-SMI` are alternative output modes.
+
 ## Development Setup
 
 ### Using Dev Container

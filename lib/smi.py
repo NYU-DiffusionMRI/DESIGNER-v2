@@ -89,9 +89,34 @@ class SMI(object):
     def __init__(self, bval, bvec, beta=None, echo_time=None, merge_distance=None, cs_phase=1, flag_fit_fodf=0, 
         flag_rectify_fodf=0, compartments=None, n_levels=10, l_max=None, rotinv_lmax=None, 
         noise_bias=None, training_bounds=None, training_prior=None, n_training=1e5, 
-        l_max_training=None, seed=42, smi_fw_thres=0.2):
+        l_max_training=None, seed=42, smi_fw_thres=0.2, rician_sh=False,
+        rician_sh_maxiter=None, rician_sh_clip=False, sh_n_jobs=1, rician_clip_mode='maxzero',
+        rician_sh_nonnegative=False):
         """
-        Setting some default values and initialization required for class functions
+        Setting some default values and initialization required for class functions.
+
+        rician_sh : bool, optional
+            Use unconstrained Rician-expectation nonlinear SH fitting (default False). Requires
+            an explicit sigma map in fit(), in the same intensity units as dwi.
+            Cannot be combined with the separate noise_bias pre-correction.
+        rician_sh_maxiter : positive int, optional
+            Limit cumulative constrained-refinement iterations per voxel and
+            shell. Exhausted fits return their best grid-feasible estimate.
+            None retains the standard solver limits.
+        rician_sh_clip : bool, optional
+            Fit magnitudes corrected using rician_clip_mode by ordinary linear least squares.
+            Requires sigma and is incompatible with noise_bias correction. rician_sh takes
+            precedence when both SH estimator switches are enabled.
+        sh_n_jobs : int, optional
+            Number of process workers for Rician or clipped SH fitting (default
+            1); negative values follow joblib conventions. LLS is unchanged.
+        rician_clip_mode : {'maxzero', 'abs'}, optional
+            Correction formula when rician_sh_clip is enabled. 'abs' uses
+            sqrt(abs(dwi**2-sigma**2)). Rician expectation initialization always
+            uses max-zero regardless of this setting.
+        rician_sh_nonnegative : bool, optional
+            Require a nonnegative fitted signal at acquired directions and on
+            a dense sphere grid. Only valid with rician_sh=True; default False.
         """
 
         if not cs_phase:
@@ -109,10 +134,28 @@ class SMI(object):
         self.rotinv_lmax = rotinv_lmax
         self.n_training = int(n_training)
         self.smi_fw_thres = float(smi_fw_thres)
+        self.rician_sh = bool(rician_sh)
+        self.rician_sh_clip = bool(rician_sh_clip) and not self.rician_sh
+        if rician_clip_mode not in ('maxzero', 'abs'):
+            raise ValueError("rician_clip_mode must be 'maxzero' or 'abs'")
+        self.rician_clip_mode = rician_clip_mode
+        self.sh_n_jobs = sh_n_jobs
+        self.corrected_sh = self.rician_sh or self.rician_sh_clip
+        self.constrained_sh = bool(rician_sh_nonnegative)
+        if self.constrained_sh and not self.rician_sh:
+            raise ValueError("rician_sh_nonnegative requires Rician-expectation SH fitting")
+        self.rician_sh_maxiter = rician_sh_maxiter
+        self.rician_sh_diagnostics = None
+        if rician_sh_maxiter is not None and (
+                not self.constrained_sh or not isinstance(rician_sh_maxiter, (int, np.integer))
+                or rician_sh_maxiter < 1):
+            raise ValueError("rician_sh_maxiter requires nonnegative Rician SH and a positive integer")
+        if self.corrected_sh and noise_bias:
+            raise ValueError("Rician SH fitting cannot be combined with noise_bias correction")
 
         # set up required inputs
         self.set_compartments(compartments)
-        self.set_bvals_bvecs(bval, bvec)
+        self.set_bvals_bvecs(bval, bvec, beta)
         self.set_bshape(beta)
         self.set_echotime(echo_time)
 
@@ -184,12 +227,15 @@ class SMI(object):
             self.sigma = snd.gaussian_filter(std_dev, sigma=1)
             warnings.warn('sigma was not an input (not recommended)')
         
-    def set_bvals_bvecs(self, bval, bvec):
+    def set_bvals_bvecs(self, bval, bvec, beta=None):
         """
         Function to add gradient table to the class. Gradient magnitude and direction
         are required inputs.
         """
-        if not bval.any() or not bvec.any():
+        b0_limit = .05 if np.max(bval, initial=0) < 500 else 50
+        isotropic = ((bval <= b0_limit) | (np.abs(beta) <= .045)
+                     if beta is not None else bval <= b0_limit)
+        if not bval.size or not bvec.size or (not bvec.any() and not np.all(isotropic)):
             raise Exception('b and dirs are compulsory arguments for SMI to run')
         else:
             self.b = bval
@@ -472,9 +518,10 @@ class SMI(object):
         return y_lm.T
 
 
-    def fit2D4D_LLS_RealSphHarm_wSorting_norm_var(self, dwi, mask, rank1sl=True):
+    def fit2D4D_LLS_RealSphHarm_wSorting_norm_var(self, dwi, mask, rank1sl=True, sigma=None):
         """
-        This function performs the linear fit of Slm on each shell using real spherical
+        This function fits Slm on each shell (LLS by default, or Rician-expectation
+        NLS when rician_sh=True, with an explicit sigma map) using real spherical
         harmonics as defined in https://cs.dartmouth.edu/~wjarosz/publications/dissertation/appendixB.pdf
         
         The Condon-Shortley phase is used in this definition
@@ -507,9 +554,26 @@ class SMI(object):
             raise Exception('DWI must be a 2D or 4D array')
 
         if flag_4D:
-            dwi_2D = self.vectorize(dwi, mask)
+            dwi_2D = np.asarray(dwi[np.asarray(mask, dtype=bool)].T, dtype=float)
         else:
             dwi_2D = dwi
+
+        if self.corrected_sh:
+            from lib.rician_sh import (fit_rician_sh, nonnegative_directions,
+                                       clipped_magnitude, invert_rician_mean)
+            if sigma is None:
+                raise ValueError("Rician SH fitting requires an explicit sigma noise map")
+            sigma = np.asarray(sigma, dtype=float)
+            expected_shape = dwi.shape[:3] if flag_4D else (dwi.shape[1],)
+            if sigma.shape != expected_shape:
+                raise ValueError(f"sigma shape {sigma.shape} does not match {expected_shape}")
+            sigma_1d = sigma[np.asarray(mask, dtype=bool)] if flag_4D else sigma
+            if not np.all(np.isfinite(sigma_1d)) or np.any(sigma_1d < 0):
+                raise ValueError("Rician SH sigma must be finite and nonnegative inside the mask")
+            if not np.all(np.isfinite(dwi_2D)):
+                raise ValueError("Rician SH requires finite DWI observations inside the mask")
+            if not self.rician_sh and np.any(dwi_2D < 0):
+                raise ValueError("Clipped SH requires nonnegative magnitude DWI inside the mask")
 
         n_voxels = dwi_2D.shape[1]
         n_meas = dwi_2D.shape[0]
@@ -520,6 +584,12 @@ class SMI(object):
         bb = self.table_4d
         l_max = self.l_max
         n_shells = bb.shape[1]
+
+        if self.constrained_sh and self.rician_sh_maxiter is not None:
+            self.rician_sh_diagnostics = {
+                'constrained_iterations':np.zeros((n_voxels, n_shells), dtype=np.int32),
+                'early_stopped':np.zeros((n_voxels, n_shells), dtype=bool),
+                'nonconverged':np.zeros((n_voxels, n_shells), dtype=bool)}
 
         if np.isscalar(l_max):
             l_max = l_max * np.ones(n_shells)
@@ -542,6 +612,8 @@ class SMI(object):
         n_l_unique = np.sqrt((2 * l + 1) * (4 * np.pi))
 
         y_lm_matrix = self.get_even_sh(self.dirs, np.max(l_max))
+        if self.constrained_sh:
+            nonnegative_basis = self.get_even_sh(nonnegative_directions(), np.max(l_max))
 
         s_l_clusters_all = np.zeros((int(np.max(l_max) / 2 + 1), n_voxels, n_shells))
         s_lm_clusters_all = np.zeros((int(np.max(n_sh_coeffs)), n_voxels, n_shells))
@@ -559,10 +631,25 @@ class SMI(object):
             if (abs(bb[1,i]) > 0.045) & (bb[0,i] > 0.05):
                 ids_current_lm = np.arange(n_sh_coeffs[i])
                 y_lm_current_cluster = y_lm_matrix[ids_current_cluster,:]
-                s_lm_current_cluster, _,_,_ = scl.lstsq(
-                    y_lm_current_cluster[:, ids_current_lm], 
-                    dwi_2D[ids_current_cluster,:]
-                    )
+                if self.corrected_sh:
+                    diagnostics = {} if self.rician_sh_diagnostics is not None else None
+                    s_lm_current_cluster = fit_rician_sh(
+                        y_lm_current_cluster[:, ids_current_lm],
+                        dwi_2D[ids_current_cluster, :], sigma_1d,
+                        constraint_basis=(nonnegative_basis[:, ids_current_lm]
+                                          if self.constrained_sh else None),
+                        constrained_max_iter=self.rician_sh_maxiter,
+                        diagnostics=diagnostics, clipped=self.rician_sh_clip,
+                        clip_mode=self.rician_clip_mode,
+                        n_jobs=self.sh_n_jobs)
+                    if diagnostics is not None:
+                        for key, values in diagnostics.items():
+                            self.rician_sh_diagnostics[key][:, i] = values
+                else:
+                    s_lm_current_cluster, _,_,_ = scl.lstsq(
+                        y_lm_current_cluster[:, ids_current_lm],
+                        dwi_2D[ids_current_cluster,:]
+                        )
                 s_l_current_cluster = np.zeros((int(l_max[i]/2+1), n_voxels))
                 s_l_current_cluster[0,:] = abs(s_lm_current_cluster[0,:])
                 for j in range(2, int(l_max[i]) + 2, 2):
@@ -574,9 +661,15 @@ class SMI(object):
             else:
                 s_lm_current_cluster = np.zeros((int(n_sh_coeffs[i]), n_voxels))
                 s_l_current_cluster = np.zeros((int(l_max[i]/2+1), n_voxels))
-                s_lm_current_cluster[0,:] = (np.sqrt(4*np.pi) * 
-                    np.mean(dwi_2D[ids_current_cluster,:], axis=0)
-                    )
+                measured = dwi_2D[ids_current_cluster, :]
+                if self.rician_sh:
+                    scalar = invert_rician_mean(np.mean(measured, axis=0), sigma_1d)
+                elif self.rician_sh_clip:
+                    scalar = np.mean(clipped_magnitude(measured, sigma_1d,
+                                                      mode=self.rician_clip_mode), axis=0)
+                else:
+                    scalar = np.mean(measured, axis=0)
+                s_lm_current_cluster[0,:] = np.sqrt(4*np.pi) * scalar
                 s_l_current_cluster[0,:] = abs(s_lm_current_cluster[0,:])
                
             s_lm_clusters_all[:n_sh_coeffs[i],:,i] = (
@@ -610,19 +703,14 @@ class SMI(object):
             s_l_clusters_all = sl_dn.copy()            
 
         if flag_4D:
-            sl = np.zeros((sz_dwi[0], sz_dwi[1], sz_dwi[2], int(np.max(l_max)/2+1), n_shells))
-            slm = np.zeros((sz_dwi[0], sz_dwi[1], sz_dwi[2], np.max(n_sh_coeffs), n_shells))
-            for i in range(n_shells):
-                try:
-                    sl[:,:,:,:,i] = self.vectorize(s_l_clusters_all[:,:,i], self.mask)
-                    slm[:,:,:,:,i] = self.vectorize(s_lm_clusters_all[:,:,i], self.mask)
-                except:
-                    sl[:,:,:,:,i] = self.vectorize(s_l_clusters_all[:,:,i], self.mask)[...,None]
-                    slm[:,:,:,:,i] = self.vectorize(s_lm_clusters_all[:,:,i], self.mask)[...,None]
+            sl = np.zeros(sz_dwi[:3] + (int(np.max(l_max)/2+1), n_shells))
+            slm = np.zeros(sz_dwi[:3] + (np.max(n_sh_coeffs), n_shells))
+            sl[np.asarray(mask, dtype=bool)] = s_l_clusters_all.transpose(1, 0, 2)
+            slm[np.asarray(mask, dtype=bool)] = s_lm_clusters_all.transpose(1, 0, 2)
         else:
             sl = s_l_clusters_all
             slm = s_lm_clusters_all
-        
+
         ids = np.hstack(ids_current_cluster_all)
 
         if self.project_forward_SH:
@@ -645,7 +733,9 @@ class SMI(object):
         else:
             num_elements = self.rotinv_lmax // 2 + 1
 
-        slices = [np.squeeze(sl[:, :, :, i, :]) for i in range(num_elements)]
+        if not flag_4D:
+            return sl[:num_elements].transpose(0, 2, 1).reshape(-1, n_voxels)
+        slices = [sl[:, :, :, i, :] for i in range(num_elements)]
         sl = np.concatenate(slices, axis=3)
     
         return sl.reshape(sz_dwi[0],sz_dwi[1],sz_dwi[2],-1)
@@ -1218,7 +1308,7 @@ class SMI(object):
                 )
 
         if flag_4d:
-            kernel = self.vectorize(kernel, self.mask)
+            kernel = self.vectorize(kernel, self.mask).reshape(self.mask.shape + (-1,))
 
         return kernel
 
@@ -1460,6 +1550,8 @@ class SMI(object):
 
         self.dwishape = dwi.shape
 
+        if self.corrected_sh and sigma is None:
+            raise ValueError("Rician SH fitting requires an explicit sigma noise map")
         self.set_mask(mask)
         self.set_sigma(sigma, dwi)
 
@@ -1476,7 +1568,7 @@ class SMI(object):
             dwi = np.sqrt(abs(dwi**2 - sigma[..., None]**2))
 
         # Spherical harmonic fit / rotational invariants
-        rot_invs = self.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi, self.mask)
+        rot_invs = self.fit2D4D_LLS_RealSphHarm_wSorting_norm_var(dwi, self.mask, sigma=self.sigma)
 
         # First, run the standard/default SMI fit
         kernel = self.standard_model_mlfit_rot_invs(rot_invs, [0, 0.2])
