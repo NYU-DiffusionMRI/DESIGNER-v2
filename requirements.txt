@@ -42,6 +42,7 @@ setuptools==70.1.0
 setuptools-scm==8.1.0
 six==1.16.0
 statsmodels==0.14.2
+surfa==0.6.3
 tenacity==8.4.1
 threadpoolctl==3.5.0
 tifffile==2024.6.18
@@ -51,3 +52,5 @@ tzdata==2024.1
 webcolors==24.6.0
 colorama==0.4.6
 gradunwarp @ git+https://github.com/Washington-University/gradunwarp.git@da4ceba7c16c8db2b53846bd455b53b24f840447
+torch==2.7.1+cpu
+torchvision==0.22.1+cpu

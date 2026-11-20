@@ -20,7 +20,7 @@ run_normalization:
 import time
 import shutil
 from pathlib import Path
-from lib.utils import run_fsl_eddy, resolve_eddy_executable, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all, force_remove
+from lib.utils import run_fsl_eddy, resolve_eddy_executable, run_topup_and_prepare_for_eddy, write_rpe_all_pe_scheme, compute_jacobian_weight_for_rpe_all, force_remove, run_skullstrip
 
 def run_mppca(args_extent, args_phase, args_shrinkage, args_algorithm,dwi_metadata):
     """
@@ -384,10 +384,7 @@ def group_alignment(group_list):
                     (group_list[i], 
                     'b0_align_series_' + str(i) + '.nii'),
                     show=False)
-        run.command('bet "%s" "%s" -f 0.2 -m' %
-                    ('b0_align_series_' + str(i) + '.nii', 
-                    'b0_align_series_' + str(i) + '_brain'),
-                    show=False)
+        run_skullstrip('b0_align_series_' + str(i) + '.nii', 'b0_align_series_' + str(i) + '_brain', app.ARGS.skullstrip_backend)
 
     # 2) extract b0 images from all other series
     for i in range(len(group_list)):                
@@ -716,12 +713,9 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                         (stride, rpe_pair, 'rpe_b0.nii'))
             
             # extract brain from mean b0
-            run.command('bet "%s" "%s" -f 0.2 -m' %
-                ('pe_original_meanb0.nii', 
-                'pe_original_brain'))
-            
-            run.command('bet "%s" "%s" -f 0.20' % 
-                ('rpe_b0.nii', 'rpe_b0_brain'))
+            run_skullstrip('pe_original_meanb0.nii', 'pe_original_brain', app.ARGS.skullstrip_backend)
+
+            run_skullstrip('rpe_b0.nii', 'rpe_b0_brain', app.ARGS.skullstrip_backend)
 
 
     if app.ARGS.eddy_groups:
@@ -753,7 +747,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
             
             if rpe_pair:
                 run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_pre_eddy.nii" -axis 3')
-                run.command(f'bet "{eddy_proc_dir}/b0_pre_eddy.nii" "{eddy_proc_dir}/b0_pre_eddy_brain" -f 0.2 -m')
+                run_skullstrip(f'{eddy_proc_dir}/b0_pre_eddy.nii', f'{eddy_proc_dir}/b0_pre_eddy_brain', app.ARGS.skullstrip_backend)
 
                 run.command(f'flirt -in "rpe_b0_brain" -ref "{eddy_proc_dir}/b0_pre_eddy_brain" -out "{eddy_proc_dir}/rpe_to_ref" -dof 6')
 
@@ -780,6 +774,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                     f'topup_results_{i}',
                     fsl_suffix,
                     eddy_proc_dir,
+                    app.ARGS.skullstrip_backend,
                     acqp_file=topup_acqp_file
                 )
 
@@ -789,10 +784,10 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
             elif app.ARGS.rpe_none:
                 # Create brain mask from mean b0 for eddy
                 run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrmath - mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
-                run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
-                
+                b0_brain_mask = run_skullstrip(f'{eddy_proc_dir}/b0_mean.nii', f'{eddy_proc_dir}/b0_brain', app.ARGS.skullstrip_backend)
+
                 pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
-                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', f'{eddy_proc_dir}/b0_brain_mask.nii.gz', eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg)
+                run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', b0_brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg)
                 
             elif app.ARGS.rpe_all:
                 ### this needs to be changed for realistic compatiblity to eddy_groups
@@ -805,8 +800,8 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 run.command(f'dwiextract -bzero dwirpe.mif - | mrmath - mean "{eddy_proc_dir}/b0_reverse.nii" -axis 3')
                 
                 # Create brain masks for registration
-                run.command(f'bet "{eddy_proc_dir}/b0_forward.nii" "{eddy_proc_dir}/b0_forward_brain" -f 0.2 -m')
-                run.command(f'bet "{eddy_proc_dir}/b0_reverse.nii" "{eddy_proc_dir}/b0_reverse_brain" -f 0.2 -m')
+                run_skullstrip(f'{eddy_proc_dir}/b0_forward.nii', f'{eddy_proc_dir}/b0_forward_brain', app.ARGS.skullstrip_backend)
+                run_skullstrip(f'{eddy_proc_dir}/b0_reverse.nii', f'{eddy_proc_dir}/b0_reverse_brain', app.ARGS.skullstrip_backend)
                 
                 # Register reverse to forward
                 run.command(f'flirt -in "{eddy_proc_dir}/b0_reverse_brain.nii.gz" -ref "{eddy_proc_dir}/b0_forward_brain.nii.gz" -out "{eddy_proc_dir}/b0_reverse_to_forward" -dof 6')
@@ -821,9 +816,10 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                     pe_dir,
                     f'topup_results_{i}',
                     fsl_suffix,
-                    eddy_proc_dir
+                    eddy_proc_dir,
+                    app.ARGS.skullstrip_backend
                 )
-                
+
                 pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
                 run_fsl_eddy(f'dwi_pre_eddy_{i}.mif', f'dwi_post_eddy_{i}.mif', brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, topup_prefix=topup_prefix)
                 
@@ -839,8 +835,8 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 
                 # Create brain mask from mean b0
                 run.command(f'mrmath "{eddy_proc_dir}/b0_pair_topup.nii" mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
-                run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
-                
+                run_skullstrip(f'{eddy_proc_dir}/b0_mean.nii', f'{eddy_proc_dir}/b0_brain', app.ARGS.skullstrip_backend)
+
                 # Extract PE info for topup from the b0 volumes
                 run.command(f'dwiextract -bzero "dwi_pre_eddy_{i}.mif" - | mrinfo -export_pe_eddy "{eddy_proc_dir}/topup_config.txt" "{eddy_proc_dir}/topup_indices.txt" -')
                 
@@ -852,6 +848,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                     f'topup_results_{i}',
                     fsl_suffix,
                     eddy_proc_dir,
+                    app.ARGS.skullstrip_backend,
                     acqp_file=f'{eddy_proc_dir}/topup_config.txt'
                 )
                 
@@ -1124,6 +1121,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 'topup_results',
                 fsl_suffix,
                 eddy_proc_dir,
+                app.ARGS.skullstrip_backend,
                 acqp_file=f'{eddy_proc_dir}/topup_acqp.txt'
             )
 
@@ -1137,13 +1135,13 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
 
         elif app.ARGS.rpe_none:
             # Create brain mask from mean b0 for eddy
-            run.command(f'dwiextract -bzero working.mif - | mrconvert -coord 3 0 - "{eddy_proc_dir}/b0_mean.nii"')
-            run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
-            
+            run.command(f'dwiextract -bzero working.mif - | mrmath - mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
+            b0_brain_mask = run_skullstrip(f'{eddy_proc_dir}/b0_mean.nii', f'{eddy_proc_dir}/b0_brain', app.ARGS.skullstrip_backend)
+
             # Call eddy
             pe_dir_arg = pe_dir if app.ARGS.pe_dir is not None else None
             fakeb_grad_arg = fakeb_grad_file if app.ARGS.eddy_fakeb is not None else None
-            run_fsl_eddy(f'working.mif', 'dwiec.mif', f'{eddy_proc_dir}/b0_brain_mask{fsl_suffix}', eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
+            run_fsl_eddy(f'working.mif', 'dwiec.mif', b0_brain_mask, eddy_proc_dir, eddy_exe=eddy_exe, eddy_opts=eddyopts, pe_dir=pe_dir_arg, grad_file=fakeb_grad_arg, readout_time=dwi_metadata.get('readout_time'), dfields=gnc_enabled)
 
             if gnc_enabled:
                 finalize_gnc_single_interpolation(eddy_proc_dir, dwi_metadata)
@@ -1316,6 +1314,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 'topup_results',
                 fsl_suffix,
                 eddy_proc_dir,
+                app.ARGS.skullstrip_backend,
                 acqp_file=f'{eddy_proc_dir}/topup_acqp.txt',
                 include_field_map=True
             )
@@ -1376,8 +1375,8 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
             
             # Create brain mask from mean b0
             run.command(f'mrmath "{eddy_proc_dir}/b0_pair_topup.nii" mean "{eddy_proc_dir}/b0_mean.nii" -axis 3')
-            run.command(f'bet "{eddy_proc_dir}/b0_mean.nii" "{eddy_proc_dir}/b0_brain" -f 0.2 -m')
-            
+            run_skullstrip(f'{eddy_proc_dir}/b0_mean.nii', f'{eddy_proc_dir}/b0_brain', app.ARGS.skullstrip_backend)
+
             topupinputfile = 'b0_pair_topup.nii'
 
             # Extract PE info for topup from the b0 volumes
@@ -1390,6 +1389,7 @@ def run_eddy(shell_table, dwi_metadata, gnc_rpe_pair=None, gnc_enabled=False):
                 'topup_results',
                 fsl_suffix,
                 eddy_proc_dir,
+                app.ARGS.skullstrip_backend,
                 acqp_file=f'{eddy_proc_dir}/topup_config.txt'
             )
             
@@ -1464,7 +1464,7 @@ def run_b1correct(dwi_metadata):
     print(f"Eddy current, EPI, motion correction completed in {int(hours):02} hours, {int(minutes):02} minutes, {int(seconds):02} seconds.")
     print(separator + "\n")
 
-def create_brainmask(fsl_suffix, dwi_metadata):
+def create_brainmask(fsl_suffix, dwi_metadata, skullstrip_backend):
     import os, gzip, shutil
     from mrtrix3 import run
 
@@ -1472,7 +1472,7 @@ def create_brainmask(fsl_suffix, dwi_metadata):
     run.command('dwiextract -bzero working.mif - | mrmath -axis 3 - mean b0bc.nii')
     # run.command('dwi2mask dwibc.mif - | maskfilter - dilate brain_mask.nii')
     # run.command('fslmaths b0bc.nii -mas brain_mask.nii brain')
-    run.command('bet b0bc.nii brain' + fsl_suffix + ' -m -f 0.25')
+    run_skullstrip('b0bc.nii', 'brain', skullstrip_backend, frac=0.25)
     stride=dwi_metadata['stride_3dim']
     if os.path.isfile('brain_mask.nii.gz'):
         with gzip.open('brain_mask' + fsl_suffix, 'rb') as f_in, open('brain_mask.nii', 'wb') as f_out:

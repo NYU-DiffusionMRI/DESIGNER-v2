@@ -274,8 +274,12 @@ The `-rician` method of correcting for bias is specific to data with SNR > 2. If
 
 ### `-mask`
 - Masks the final output image. Has no impact on intermediate masks used to optimize the performance of topup and eddy.
-- Uses FSL bet with `-f .2`.
+- Backend selectable via `-skullstrip_backend`; uses FSL bet with `-f .25` by default.
 - Saves the output mask in the scratch directory as `brain_mask.nii`
+
+### `-skullstrip_backend <bet|synthstrip>`
+- Backend used for every brain extraction step in the pipeline (both internal eddy/topup masks and, if `-mask` is set, the final output mask) — applies regardless of whether `-mask` is passed.
+- `bet` (default) uses FSL's `bet`; `synthstrip` uses FreeSurfer's `mri_synthstrip`.
 
 ### `-datatype <dtype>`
 - Specify the output datatype. Valid options are float32, float32le, float32be, float64, float64le, float64be, int64, uint64, int64le, uint64le, int64be, uint64be, int32, uint32, int32le, uint32le, int32be, uint32be, int16, uint16, int16le, uint16le, int16be, uint16be, cfloat32, cfloat32le, cfloat32be, cfloat64, cfloat64le, cfloat64be, int8, uint8, bit.

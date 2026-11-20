@@ -1,0 +1,11 @@
+# FreeSurfer's standalone SynthStrip (not the full FreeSurfer suite), for
+# skull stripping via -skullstrip_backend synthstrip.
+#
+# Re-tagged from the upstream freesurfer/synthstrip image rather than rebuilt.
+# This image retains the upstream runtime for independent testing.
+# The main DESIGNER image copies only the mri_synthstrip script and model weights,
+# using DESIGNER's own Python environment and dependencies.
+FROM freesurfer/synthstrip:1.8
+
+# Verify the upstream SynthStrip executable is available.
+RUN mri_synthstrip --help 2>&1 | grep -qi "usage"

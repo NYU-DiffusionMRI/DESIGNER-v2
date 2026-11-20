@@ -54,5 +54,5 @@
 		}
 	},
 	// Make sure to open a terminal after the command below has been run. Otherwise, PyPi packages will not be installed, and the "designer" command will be linked to the FSL's "designer" command.
-	"postCreateCommand": "sudo pip install -e . && sudo pip install -r tests/requirements_test.txt -c requirements.txt"
+	"postCreateCommand": "sudo pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu && sudo pip install -r tests/requirements_test.txt -c requirements.txt"
 }

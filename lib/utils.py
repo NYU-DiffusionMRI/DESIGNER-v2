@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 from collections.abc import Sequence
+
 import numpy as np
 
 
@@ -239,6 +240,41 @@ def resolve_eddy_executable(device: str = 'auto') -> str:
     raise MRtrixError(f'Unknown -eddy_device "{device}" (expected auto, cpu or cuda)')
 
 
+def run_skullstrip(
+    input_nii: str | Path,
+    out_prefix: str,
+    backend: str,
+    frac: float = 0.2,
+    border: int = 1,
+) -> str:
+    """
+    Strip the skull from input_nii, writing the extracted brain and its mask.
+
+    Args:
+        input_nii: Path to the input volume to skull-strip.
+        out_prefix: Basename prefix (no extension) to write the skull-stripped
+            brain volume to, e.g. 'brain' (not 'brain.nii.gz').
+        backend: 'bet' (FSL) or 'synthstrip' (FreeSurfer's mri_synthstrip). Pass
+            app.ARGS.skullstrip_backend through from the caller.
+        frac: BET's fractional intensity threshold. Only used when backend='bet'.
+        border: synthstrip's border-exclusion distance. Only used when backend='synthstrip'.
+
+    Returns:
+        Path to the brain mask.
+    """
+    from mrtrix3 import run, fsl
+
+    nifti_ext = fsl.suffix()
+    mask_nii = f'{out_prefix}_mask{nifti_ext}'
+
+    if backend == 'bet':
+        run.command(f'bet "{input_nii}" "{out_prefix}" -f {frac} -m')
+    elif backend == 'synthstrip':
+        run.command(f'mri_synthstrip -i "{input_nii}" -o "{out_prefix}{nifti_ext}" -m "{mask_nii}" -b {border}')
+
+    return mask_nii
+
+
 def run_fsl_eddy(
     mif_input: str | Path,
     mif_output: str | Path,
@@ -303,21 +339,24 @@ def run_topup_and_prepare_for_eddy(
     output_prefix: str,
     fsl_suffix: str,
     scratch_dir: str | Path,
+    skullstrip_backend: str,
     *,
     acqp_file: Optional[str] = None,
     include_field_map: bool = False,
 ) -> tuple[str, str]:
     """
     Run FSL topup and prepare brain mask for eddy.
-    
+
     Args:
         b0_pair_file: Path to concatenated b0 pair for topup
         pe_dir: Phase encoding direction (e.g., 'j', 'j-', 'i', etc.)
         output_prefix: Prefix for output files (e.g., 'topup_results_1')
         fsl_suffix: FSL suffix from fsl.suffix()
         scratch_dir: Directory to store output files (mimics dwifslpreproc scratch dir)
+        skullstrip_backend: 'bet' or 'synthstrip', passed through to run_skullstrip()
+            (i.e. app.ARGS.skullstrip_backend)
         acqp_file: Optional path to existing acquisition parameters file
-        
+
     Returns:
         tuple of (brain_mask_path, topup_prefix) for use with run_fsl_eddy
     """
@@ -360,10 +399,8 @@ def run_topup_and_prepare_for_eddy(
     
     # 4. Create brain mask from topup corrected image
     topup_mean = f'{topup_prefix}_mean.nii'
-    topup_brain_prefix = f'{topup_prefix}_brain'
-    topup_brain_mask = f'{topup_brain_prefix}_mask.nii.gz'
     
     run.command(f'mrmath "{topup_prefix}{fsl_suffix}" mean "{topup_mean}" -axis 3')
-    run.command(f'bet "{topup_mean}" "{topup_brain_prefix}" -f 0.2 -m')
-    
+    topup_brain_mask = run_skullstrip(topup_mean, f'{topup_prefix}_brain', skullstrip_backend)
+
     return topup_brain_mask, str(topup_prefix)
