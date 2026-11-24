@@ -94,6 +94,10 @@ $$
 \left[M_i-\mu_R\!\left(s_i(\theta),\sigma\right)\right]^2.
 $$
 
+For the conditional least-squares framework behind expectation fitting, see
+[Veraart et al., *Comprehensive framework for accurate diffusion MRI parameter estimation*](https://doi.org/10.1002/mrm.24529),
+*Magnetic Resonance in Medicine* **70**(4):972–984 (2013).
+
 Initialization uses ordinary LLS on **absolute-value corrected measurements for
 tensors**, and **max-zero corrected measurements for SH/SMI**, including retries.
 Negative observations after denoising are preserved.

@@ -232,6 +232,9 @@ $$
 \left[\mu_R((Yc)_i,\sigma)-M_i\right]^2.
 $$
 
+For the conditional least-squares framework behind this expectation fit, see
+[Veraart et al. (2013)](https://doi.org/10.1002/mrm.24529).
+
 Every nonlinear search starts from ordinary LLS on
 $\sqrt{\max(0,M^2-\sigma^2)}$, including retries. The objective uses original
 observations, preserving negative values after denoising. The Rician mean

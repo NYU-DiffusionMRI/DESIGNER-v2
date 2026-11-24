@@ -75,6 +75,9 @@ $$
 \left[M_i-\mu_R\!\left(\exp((X\theta)_i),\sigma\right)\right]^2.
 $$
 
+For the conditional least-squares framework behind this expectation fit, see
+[Veraart et al. (2013)](https://doi.org/10.1002/mrm.24529).
+
 The coefficients are $\theta=(\log S_0,D_6)$ for DTI and
 $\theta=(\log S_0,D_6,C_{15})$ for DKI, with $C=\mathrm{MD}^2W$.
 Every search starts from ordinary LLS on $\sqrt{\lvert M^2-\sigma^2\rvert}$,
