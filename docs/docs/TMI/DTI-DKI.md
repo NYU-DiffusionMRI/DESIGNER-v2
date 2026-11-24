@@ -91,9 +91,11 @@ an error. All three estimators support multi-TE/LTE subsets, shell selection,
 keeps absolute-value initialization for tensors.
 
 ```bash
-tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
-tmi dwi.nii tensor_max -DKI -RicianClipMax -sigma sigma.nii -db0restore -akc_outliers
-tmi dwi.nii tensor_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
+# Recommended DTI + DKI correction, followed by WLLS
+tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
+
+# With b0 restoration
+tmi dwi.nii tensor_abs_restore -DTI -DKI -RicianClipAbs -sigma sigma.nii -db0restore
 ```
 
 The expectation solver uses an analytic Jacobian and QR coordinates. It allows

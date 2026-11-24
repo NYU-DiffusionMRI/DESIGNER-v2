@@ -35,16 +35,17 @@ to fit corrected measurements with ordinary LLS.
 
 ### Choosing an estimation mode
 
+Recommended examples for data with a retained Rician noise floor:
+
 | Requested output | Example command |
 |---|---|
-| SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
-| SMI maps with Rician bias expectation correction | `tmi dwi.nii smi_rician -SMI -RicianExp -sigma sigma.nii` |
-| SMI maps with clipped correction | `tmi dwi.nii smi_clip -SMI -RicianClipMax -sigma sigma.nii` |
-| SMI maps with absolute-value correction | `tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii` |
-| Signal rotational invariants only, using default LLS | `tmi dwi.nii sh_output -SH` |
-| Signal rotational invariants only, using Rician expectation | `tmi dwi.nii sh_rician -SH -RicianExp -sigma sigma.nii` |
-| Signal rotational invariants only, using clipped correction | `tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii` |
-| Signal rotational invariants only, using absolute-value correction | `tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii` |
+| SH invariants only | `tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii` |
+| SMI maps and SH invariants | `tmi dwi.nii smi_exp -SMI -RicianExp -sigma sigma.nii` |
+| SMI maps and SH invariants, with nonnegative SH signals | `tmi dwi.nii smi_positive -SMI -RicianExp -sigma sigma.nii -nonNeg` |
+| Separate SH invariant files with the same nonnegativity option | `tmi dwi.nii sh_positive -SH -RicianExp -sigma sigma.nii -nonNeg` |
+
+`-SMI` saves invariants in `rotinvs_smi.nii`. Run the last two commands separately
+for SMI maps plus standalone `S0.nii`, `S2.nii`, … files; do not combine `-SMI` and `-SH`.
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmaxSH` sets the actual

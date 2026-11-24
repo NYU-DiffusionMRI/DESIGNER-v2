@@ -121,104 +121,54 @@ designer2_<tag>.sif tmi \
 ---
 
 
-### Rician-aware SH estimation
+### Recommended Rician corrections
 
-For magnitude data with an appropriate noise map and a retained Rician noise floor:
-
-```bash
-tmi dwi.nii smi_rician \
-  -SMI -RicianExp \
-  -sigma sigma.nii -mask brain_mask.nii
-```
-
-Omit `-RicianExp` to use the existing linear SH fit:
+Use the original DWI with a retained Rician noise floor and an aligned original
+noise map. Add `-mask brain_mask.nii` to restrict fitting to the brain.
 
 ```bash
-tmi dwi.nii smi_linear -SMI -sigma sigma.nii -mask brain_mask.nii
-```
-
-Both commands produce the same named SMI parameter and rotational-invariant maps.
-The correction also applies to DTI/DKI fits requested in the same command.
-SH/SMI fits are unconstrained by default; add `-nonNeg` with `-RicianExp` to
-constrain the fitted SH signal.
-
-### Rotational invariants without SMI
-
-Fit through SH order 6 using the Rician expected magnitude, without training or fitting the Standard Model:
-
-```bash
-tmi dwi.nii sh_rician -SH -RicianExp -lmaxSH 6 \
-  -sigma sigma.nii -mask brain_mask.nii
-```
-
-This writes `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`. Each image contains one
-volume per shell; `SH_shells.json` provides the corresponding b-values,
-b-shapes, echo times, measurement counts, and fitted orders. No SMI parameter
-maps or combined `rotinvs_smi.nii` are generated.
-
-For the linear fit, no noise map is required:
-
-```bash
-tmi dwi.nii sh_linear -SH -lmaxSH 6 -mask brain_mask.nii
-```
-
-Omit `-lmaxSH` to use automatic per-shell SH orders, or use `-lmaxSH 0` to save
-only S0. The requested order must be supported by the directions in each
-diffusion shell. A single shell without b=0 is supported. For multi-TE or
-multi-b-shape data, use the same acquisition metadata options as for SMI.
-Choose either `-SH` or `-SMI` in a command.
-
-### Clipped-corrected SH fitting
-
-```bash
-tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii -mask brain_mask.nii
-tmi dwi.nii smi_clip -SMI -RicianClipMax -sigma sigma.nii -mask brain_mask.nii
-tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii -mask brain_mask.nii
-tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii -mask brain_mask.nii
-```
-
-The fitting target is $\sqrt{\max(0,M^2-\sigma^2)}$ for `-RicianClipMax`, or
-$\sqrt{\lvert M^2-\sigma^2\rvert}$ for `-RicianClipAbs`, followed by ordinary LLS without signal constraints. Choose one clipping flag and supply the original magnitude
-DWI. `-RicianExp` takes precedence over either clipping flag and always uses
-max-zero LLS initialization. Per-shell orders in standalone mode use `-lmaxSH`.
-
-### Rician correction for tensors and SH/SMI
-
-```bash
-# Recommended tensor correction, followed by WLLS; AKC is supported
-tmi dwi.nii tensor_clip -DTI -DKI -RicianClipAbs -sigma sigma.nii -akc_outliers
-
-# Both clipping choices work with b0 restoration and AKC replacement together
-tmi dwi.nii tensor_restore_max -DKI -RicianClipMax -sigma sigma.nii -db0restore -akc_outliers
-tmi dwi.nii tensor_restore_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
-
-# Unconstrained Rician-mean NLLS for DTI/DKI, starting from absolute-value corrected ordinary LLS
-tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
-
-# The same expectation option for tensors and SH fitting
-tmi dwi.nii combined -DTI -DKI -SH -RicianExp -sigma sigma.nii
-
-# Optionally constrain the SH signal (tensors remain unconstrained)
-tmi dwi.nii combined_positive -DTI -DKI -SH -RicianExp -sigma sigma.nii -nonNeg
-```
-
-Replace `-SH` with `-SMI` to include Standard Model fitting. All correction
-flags require data whose noise floor has not already been
-removed. Use original sigma for the retained Rician bias, not the smaller
-residual SD after denoising. `-RicianExp` takes precedence over either clipping
-flag for all selected models. The clipping flags cannot be combined.
-
-Use separate calls for the recommended tensor and SH/SMI corrections:
-
-```bash
+# DTI + DKI with absolute-value correction, followed by WLLS
 tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
+
+# DTI + DKI with absolute-value correction and b0 restoration
+tmi dwi.nii tensor_abs_restore -DTI -DKI -RicianClipAbs -sigma sigma.nii -db0restore
+
+# SH invariants only, using Rician expectation
 tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii
+
+# SMI using Rician expectation
+tmi dwi.nii smi_exp -SMI -RicianExp -sigma sigma.nii
+
+# SMI + separate SH maps with nonnegative fitted SH signals (two calls)
+tmi dwi.nii smi_positive -SMI -RicianExp -sigma sigma.nii -nonNeg
+tmi dwi.nii sh_positive -SH -RicianExp -sigma sigma.nii -nonNeg
 ```
 
-See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for the rationale and alternatives.
+`-SMI` already saves invariants in `rotinvs_smi.nii`. The extra `-SH` call in
+the last workflow saves separate `S0.nii`, `S2.nii`, … files. Choose either
+`-SMI` or `-SH` per call; the flags cannot be combined.
 
-With `-RicianExp`, tensor constraints and AKC replacement are not yet supported;
-requesting them produces a warning and the fit proceeds without them.
-Expectation tensor fits with b0 restoration, fit smoothing, polynomial
-regression or external `-dt` are deferred and rejected explicitly. These
-settings remain available with both clipping choices.
+Tensor clipping uses WLLS. Both clipping choices support b0 restoration and
+AKC replacement; add `-akc_outliers` when needed. SH/SMI expectation fits are
+unconstrained unless `-nonNeg` is supplied. Use separate calls for tensor and
+SH/SMI correction, because `-RicianExp` overrides either clipping flag for
+all selected models. See [Rician bias]({% link docs/TMI/Rician-bias.md %}) for
+alternative estimators and compatibility.
+
+### Standalone SH fitting orders
+
+To fit through SH order 6 with Rician expectation:
+
+```bash
+tmi dwi.nii sh_exp_l6 -SH -RicianExp -lmaxSH 6 \
+  -sigma sigma.nii -mask brain_mask.nii
+```
+
+This writes `S0.nii`, `S2.nii`, `S4.nii`, and `S6.nii`, with one volume per
+shell. `SH_shells.json` records the b-values, b-shapes, echo times,
+measurement counts, and fitted orders.
+
+Omit `-lmaxSH` for automatic per-shell orders, or use a comma-separated list
+including b0, such as `-lmaxSH 0,2,4`. Every requested order must be supported
+by the acquired directions. Use `-lmaxSH 0` for S0 only. For multi-TE or
+multi-b-shape data, supply the same acquisition metadata as for SMI.

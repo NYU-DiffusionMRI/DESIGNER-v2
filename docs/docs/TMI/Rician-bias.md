@@ -134,22 +134,26 @@ applies to tensors; SH/SMI use the original observations.
 ## Examples
 
 ```bash
-# Recommended corrections: run tensors and SH/SMI separately
+# DTI + DKI with absolute-value correction, followed by WLLS
 tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
+
+# DTI + DKI with absolute-value correction and b0 restoration
+tmi dwi.nii tensor_abs_restore -DTI -DKI -RicianClipAbs -sigma sigma.nii -db0restore
+
+# SH invariants only, using Rician expectation
 tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii
 
-# Invariants only; choose either clipping formula
-tmi dwi.nii sh_max -SH -RicianClipMax -sigma sigma.nii
-tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii
+# SMI using Rician expectation
+tmi dwi.nii smi_exp -SMI -RicianExp -sigma sigma.nii
 
-# Optional nonnegative SH signal (also available with -SMI)
+# SMI + separate SH maps with nonnegative fitted SH signals (two calls)
+tmi dwi.nii smi_positive -SMI -RicianExp -sigma sigma.nii -nonNeg
 tmi dwi.nii sh_positive -SH -RicianExp -sigma sigma.nii -nonNeg
-
-# Either clipping option supports b0 restoration and AKC together
-tmi dwi.nii dki_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
 ```
 
-Replace `-SH` with `-SMI` to include Standard Model fitting. Add `-lmaxSH`
+`-SMI` already saves invariants in `rotinvs_smi.nii`; the extra `-SH` call saves
+separate `S0.nii`, `S2.nii`, … files. The two flags cannot be combined in one call.
+Add `-mask brain_mask.nii` to restrict fitting to the brain. Add `-lmaxSH`
 to set standalone SH orders independently, for example `0,2,4` for
 b=0,1000,2000 at one b-shape and echo time. See [tensor details]({% link docs/TMI/DTI-DKI.md %}#rician-correction-options)
 and [SH details]({% link docs/TMI/SMI.md %}#rician-bias-expectation-correction)
