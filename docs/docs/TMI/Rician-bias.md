@@ -26,7 +26,12 @@ but retains this bias; high b0 SNR does not guarantee high directional SNR.
 ## Recommended correction
 
 - **DTI/DKI/WDKI:** `-RicianClipAbs -sigma sigma.nii`, followed by weighted linear least squares (WLLS).
-- **SH/SMI:** `-RicianExp -sigma sigma.nii`, fitting the expected Rician magnitude. Add `-nonNeg` only if a nonnegative SH signal is desired.
+- **SH/SMI with data at $b\geq3000\,\mathrm{s/mm^2}$:** `-RicianExp -sigma sigma.nii`, fitting the expected Rician magnitude. Add `-nonNeg` only if a nonnegative SH signal is desired.
+- **SH/SMI with all shells below $3000\,\mathrm{s/mm^2}$:** `-RicianClipAbs -sigma sigma.nii`, followed by ordinary SH LLS.
+
+One estimator applies to all shells in a call. For mixed-shell data including
+$b\geq3000\,\mathrm{s/mm^2}$, use `-RicianExp` for the whole SH/SMI fit;
+TMI does not automatically switch estimators at this threshold.
 
 ## Choose an estimator
 
@@ -133,12 +138,20 @@ applies to tensors; SH/SMI use the original observations.
 
 ## Examples
 
+The SH/SMI expectation examples below are recommended when the data include
+$b\geq3000\,\mathrm{s/mm^2}$. For data entirely below this threshold, use the
+absolute-value correction examples instead.
+
 ```bash
 # DTI + DKI with absolute-value correction, followed by WLLS
 tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
 
 # DTI + DKI with absolute-value correction and b0 restoration
 tmi dwi.nii tensor_abs_restore -DTI -DKI -RicianClipAbs -sigma sigma.nii -db0restore
+
+# SH/SMI with all shells below 3000 s/mm^2 (choose the desired output)
+tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii
+tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii
 
 # SH invariants only, using Rician expectation
 tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii

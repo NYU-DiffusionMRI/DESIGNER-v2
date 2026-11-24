@@ -104,7 +104,7 @@ Choose `tortoise` for a TORTOISE graddev, `gradunwarp` for a full Jacobian in FS
 ### `-RicianExp`
 
 - Fit the expected Rician magnitude to original observations for DTI/DKI/WDKI/SH/SMI. Requires `-sigma`.
-- Recommended Rician correction for SH/SMI; use `-RicianClipAbs` for the recommended tensor correction.
+- Recommended for SH/SMI data including $b\geq3000\,\mathrm{s/mm^2}$. Use `-RicianClipAbs` when all shells are below this threshold, and for DTI/DKI/WDKI. The selected estimator applies to every shell in the call; there is no automatic switching by b-value.
 - Initialization: ordinary LLS on absolute-value corrected measurements for tensors, max-zero corrected measurements for SH/SMI. Negative observations after denoising are preserved.
 - **Tensors:** unconstrained signal-domain NLLS; `-fit_constraints` and `-akc_outliers` are not yet supported (not applied; a warning is issued). `-db0restore`, `-fit_smoothing`, `-polyreg` and external `-dt` are not yet supported.
 - **SH/SMI:** unconstrained by default; add `-nonNeg` for signal nonnegativity. b0/isotropic shells invert the Rician mean using original sigma; rank-one processing is unchanged.
@@ -122,6 +122,8 @@ Negative squared differences become zero.
 ### `-RicianClipAbs`
 
 Recommended Rician correction for DTI/DKI/WDKI, followed by WLLS.
+Also recommended for SH/SMI when all shells are below $3000\,\mathrm{s/mm^2}$,
+followed by ordinary SH LLS.
 
 Correct measurements using
 

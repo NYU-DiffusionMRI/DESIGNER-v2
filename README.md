@@ -51,8 +51,11 @@ For data with a retained Rician noise floor, choose `-RicianClipMax`,
 `-RicianClipAbs` or `-RicianExp`, with an aligned `-sigma` map. These options
 apply to DTI/DKI/WDKI and SH/SMI.
 
-**Recommended:** `-RicianClipAbs` for DTI/DKI/WDKI and `-RicianExp` for SH/SMI.
-Use separate calls to apply these recommendations to tensors and SH/SMI.
+**Recommended:** `-RicianClipAbs` for DTI/DKI/WDKI. For SH/SMI, use
+`-RicianExp` when the data include $b\geq3000\,\mathrm{s/mm^2}$; use
+`-RicianClipAbs` when all shells are below this threshold. One estimator
+applies to all shells in a call. Use separate calls when choosing different
+corrections for tensors and SH/SMI.
 
 - `-RicianClipMax` corrects measurements with $\sqrt{\max(0,M^2-\sigma^2)}$.
 - `-RicianClipAbs` uses $\sqrt{\lvert M^2-\sigma^2\rvert}$.

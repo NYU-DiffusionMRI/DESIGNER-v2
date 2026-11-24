@@ -24,9 +24,12 @@ In addition to the python implementation as a part of TMI, SMI is offered as a s
 TMI offers two output modes. `-SMI` estimates signal rotational invariants and
 then fits the Standard Model parameters. `-SH` estimates only the signal
 rotational invariants, without SMI priors, training, or model regression.
-Both modes use linear least squares for SH fitting by default. **We recommend
-`-RicianExp -sigma sigma.nii` for Rician bias correction in SH/SMI**, using the expected
-magnitude observation model. **SH fits are unconstrained by default**; add
+Both modes use linear least squares for SH fitting by default. For Rician bias
+correction, **we recommend `-RicianExp -sigma sigma.nii` when the data include
+$b\geq3000\,\mathrm{s/mm^2}$**, fitting the expected Rician magnitude. **For data
+entirely below this threshold, use `-RicianClipAbs -sigma sigma.nii`.**
+The selected estimator applies to all shells in the call, including in mixed-shell data.
+**SH fits are unconstrained by default**; add
 `-nonNeg` with `-RicianExp` to constrain the underlying SH signal.
 Alternatively, choose `-RicianClipMax` or `-RicianClipAbs`, with `-sigma sigma.nii`,
 to fit corrected measurements with ordinary LLS.
@@ -39,8 +42,10 @@ Recommended examples for data with a retained Rician noise floor:
 
 | Requested output | Example command |
 |---|---|
-| SH invariants only | `tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii` |
-| SMI maps and SH invariants | `tmi dwi.nii smi_exp -SMI -RicianExp -sigma sigma.nii` |
+| SH invariants only, all shells below $3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii` |
+| SMI maps and SH invariants, all shells below $3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii` |
+| SH invariants only, including $b\geq3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii` |
+| SMI maps and SH invariants, including $b\geq3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii smi_exp -SMI -RicianExp -sigma sigma.nii` |
 | SMI maps and SH invariants, with nonnegative SH signals | `tmi dwi.nii smi_positive -SMI -RicianExp -sigma sigma.nii -nonNeg` |
 | Separate SH invariant files with the same nonnegativity option | `tmi dwi.nii sh_positive -SH -RicianExp -sigma sigma.nii -nonNeg` |
 

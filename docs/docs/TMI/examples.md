@@ -125,6 +125,9 @@ designer2_<tag>.sif tmi \
 
 Use the original DWI with a retained Rician noise floor and an aligned original
 noise map. Add `-mask brain_mask.nii` to restrict fitting to the brain.
+For SH/SMI, use `-RicianExp` when the data include
+$b\geq3000\,\mathrm{s/mm^2}$; use `-RicianClipAbs` when all shells are below
+this threshold. The choice applies to the whole fit, including mixed-shell data.
 
 ```bash
 # DTI + DKI with absolute-value correction, followed by WLLS
@@ -132,6 +135,10 @@ tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
 
 # DTI + DKI with absolute-value correction and b0 restoration
 tmi dwi.nii tensor_abs_restore -DTI -DKI -RicianClipAbs -sigma sigma.nii -db0restore
+
+# SH/SMI with all shells below 3000 s/mm^2 (choose the desired output)
+tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii
+tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii
 
 # SH invariants only, using Rician expectation
 tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii
@@ -157,7 +164,8 @@ alternative estimators and compatibility.
 
 ### Standalone SH fitting orders
 
-To fit through SH order 6 with Rician expectation:
+For data including $b\geq3000\,\mathrm{s/mm^2}$, fit through SH order 6 with
+Rician expectation:
 
 ```bash
 tmi dwi.nii sh_exp_l6 -SH -RicianExp -lmaxSH 6 \
