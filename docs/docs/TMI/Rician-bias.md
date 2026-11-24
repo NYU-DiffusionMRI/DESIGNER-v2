@@ -29,6 +29,12 @@ but retains this bias; high b0 SNR does not guarantee high directional SNR.
 - **SH/SMI with data at $b\geq3000\,\mathrm{s/mm^2}$:** `-RicianExp -sigma sigma.nii`, fitting the expected Rician magnitude. Add `-nonNeg` only if a nonnegative SH signal is desired.
 - **SH/SMI with all shells below $3000\,\mathrm{s/mm^2}$:** `-RicianClipAbs -sigma sigma.nii`, followed by ordinary SH LLS.
 
+`-RicianExp` uses iterative nonlinear fitting and is slower than
+`-RicianClipAbs`. For typical SH/SMI data entirely below
+$3000\,\mathrm{s/mm^2}$, the additional benefit generally does not justify the
+extra runtime; we recommend `-RicianClipAbs`. This is a practical guideline:
+the benefit also depends on directional SNR.
+
 One estimator applies to all shells in a call. For mixed-shell data including
 $b\geq3000\,\mathrm{s/mm^2}$, use `-RicianExp` for the whole SH/SMI fit;
 TMI does not automatically switch estimators at this threshold.

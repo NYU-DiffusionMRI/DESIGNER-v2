@@ -28,6 +28,9 @@ Both modes use linear least squares for SH fitting by default. For Rician bias
 correction, **we recommend `-RicianExp -sigma sigma.nii` when the data include
 $b\geq3000\,\mathrm{s/mm^2}$**, fitting the expected Rician magnitude. **For data
 entirely below this threshold, use `-RicianClipAbs -sigma sigma.nii`.**
+Rician expectation fitting is slower because it requires nonlinear optimization;
+below this threshold, its additional benefit generally does not justify the
+extra runtime for typical datasets.
 The selected estimator applies to all shells in the call, including in mixed-shell data.
 **SH fits are unconstrained by default**; add
 `-nonNeg` with `-RicianExp` to constrain the underlying SH signal.

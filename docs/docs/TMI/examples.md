@@ -128,6 +128,8 @@ noise map. Add `-mask brain_mask.nii` to restrict fitting to the brain.
 For SH/SMI, use `-RicianExp` when the data include
 $b\geq3000\,\mathrm{s/mm^2}$; use `-RicianClipAbs` when all shells are below
 this threshold. The choice applies to the whole fit, including mixed-shell data.
+Expectation fitting is slower; for typical datasets below this threshold,
+its additional benefit generally does not justify the extra runtime.
 
 ```bash
 # DTI + DKI with absolute-value correction, followed by WLLS

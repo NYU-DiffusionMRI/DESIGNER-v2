@@ -56,6 +56,9 @@ apply to DTI/DKI/WDKI and SH/SMI.
 `-RicianClipAbs` when all shells are below this threshold. One estimator
 applies to all shells in a call. Use separate calls when choosing different
 corrections for tensors and SH/SMI.
+Rician expectation fitting is slower; for typical SH/SMI datasets below
+$3000\,\mathrm{s/mm^2}$, its additional benefit generally does not justify
+the extra runtime.
 
 - `-RicianClipMax` corrects measurements with $\sqrt{\max(0,M^2-\sigma^2)}$.
 - `-RicianClipAbs` uses $\sqrt{\lvert M^2-\sigma^2\rvert}$.
