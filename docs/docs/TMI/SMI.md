@@ -24,9 +24,15 @@ In addition to the python implementation as a part of TMI, SMI is offered as a s
 TMI offers two output modes. `-SMI` estimates signal rotational invariants and
 then fits the Standard Model parameters. `-SH` estimates only the signal
 rotational invariants, without SMI priors, training, or model regression.
-Both modes use linear least squares for SH fitting by default. Adding
-`-RicianExp -sigma sigma.nii` accounts for Rician bias through the expected
-magnitude observation model. **SH fits are unconstrained by default**; add
+Both modes use linear least squares for SH fitting by default. For Rician bias
+correction, **we recommend `-RicianExp -sigma sigma.nii` when the data include
+$b\geq3000\,\mathrm{s/mm^2}$**, fitting the expected Rician magnitude. **For data
+entirely below this threshold, use `-RicianClipAbs -sigma sigma.nii`.**
+Rician expectation fitting is slower because it requires nonlinear optimization;
+below this threshold, its additional benefit generally does not justify the
+extra runtime for typical datasets.
+The selected estimator applies to all shells in the call, including in mixed-shell data.
+**SH fits are unconstrained by default**; add
 `-nonNeg` with `-RicianExp` to constrain the underlying SH signal.
 Alternatively, choose `-RicianClipMax` or `-RicianClipAbs`, with `-sigma sigma.nii`,
 to fit corrected measurements with ordinary LLS.
@@ -35,16 +41,19 @@ to fit corrected measurements with ordinary LLS.
 
 ### Choosing an estimation mode
 
+Recommended examples for data with a retained Rician noise floor:
+
 | Requested output | Example command |
 |---|---|
-| SMI maps with the default linear SH fit | `tmi dwi.nii smi_output -SMI -sigma sigma.nii` |
-| SMI maps with Rician bias expectation correction | `tmi dwi.nii smi_rician -SMI -RicianExp -sigma sigma.nii` |
-| SMI maps with clipped correction | `tmi dwi.nii smi_clip -SMI -RicianClipMax -sigma sigma.nii` |
-| SMI maps with absolute-value correction | `tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii` |
-| Signal rotational invariants only, using default LLS | `tmi dwi.nii sh_output -SH` |
-| Signal rotational invariants only, using Rician expectation | `tmi dwi.nii sh_rician -SH -RicianExp -sigma sigma.nii` |
-| Signal rotational invariants only, using clipped correction | `tmi dwi.nii sh_clip -SH -RicianClipMax -sigma sigma.nii` |
-| Signal rotational invariants only, using absolute-value correction | `tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii` |
+| SH invariants only, all shells below $3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii sh_abs -SH -RicianClipAbs -sigma sigma.nii` |
+| SMI maps and SH invariants, all shells below $3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii smi_abs -SMI -RicianClipAbs -sigma sigma.nii` |
+| SH invariants only, including $b\geq3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii sh_exp -SH -RicianExp -sigma sigma.nii` |
+| SMI maps and SH invariants, including $b\geq3000\,\mathrm{s/mm^2}$ | `tmi dwi.nii smi_exp -SMI -RicianExp -sigma sigma.nii` |
+| SMI maps and SH invariants, with nonnegative SH signals | `tmi dwi.nii smi_positive -SMI -RicianExp -sigma sigma.nii -nonNeg` |
+| Separate SH invariant files with the same nonnegativity option | `tmi dwi.nii sh_positive -SH -RicianExp -sigma sigma.nii -nonNeg` |
+
+`-SMI` saves invariants in `rotinvs_smi.nii`. Run the last two commands separately
+for SMI maps plus standalone `S0.nii`, `S2.nii`, … files; do not combine `-SMI` and `-SH`.
 
 Add `-mask brain_mask.nii` to restrict fitting to a brain mask. Choose either
 `-SH` or `-SMI`. In standalone `-SH` mode, an explicit `-lmaxSH` sets the actual
@@ -194,8 +203,8 @@ in other shells through this joint step.
 `-lmaxSH` is supported only with `-SH`. For `-SMI`, the separate `-lmax` option accepts one
 value (0, 2, 4, or 6) specifying the invariant order used for Standard Model
 regression; the SH fitting orders remain automatic per shell. The choice
-between LLS, constrained Rician-expectation fitting and constrained
-clipped-corrected LLS applies to both output modes.
+between ordinary LLS, corrected LLS and Rician-expectation fitting applies to
+both output modes. Only Rician-expectation fitting supports optional `-nonNeg`.
 
 A requested order that cannot be identified from the directions is
 rejected; an unsupported higher-order invariant should not be interpreted as
@@ -222,6 +231,9 @@ $$
 \widehat c=\arg\min_c\sum_i
 \left[\mu_R((Yc)_i,\sigma)-M_i\right]^2.
 $$
+
+For the conditional least-squares framework behind this expectation fit, see
+[Veraart et al. (2013)](https://doi.org/10.1002/mrm.24529).
 
 Every nonlinear search starts from ordinary LLS on
 $\sqrt{\max(0,M^2-\sigma^2)}$, including retries. The objective uses original

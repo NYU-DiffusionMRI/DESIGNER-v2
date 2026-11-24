@@ -53,16 +53,17 @@ KT volumes 12-14: $W_{1123},W_{1223},W_{1233}$.
 ### Rician correction options
 
 All options require an aligned `-sigma` map. See [Rician bias]({% link docs/TMI/Rician-bias.md %})
-for noise assumptions and correction tradeoffs. Without a correction flag,
-tensor fitting retains WLLS.
+for noise assumptions and correction tradeoffs. **We recommend `-RicianClipAbs`
+for DTI/DKI/WDKI.** Both clipping options apply WLLS to the corrected measurements;
+without a correction flag, WLLS fits the original measurements.
 
 | Option | DTI/DKI/WDKI estimation |
 |---|---|
-| `-RicianClipMax` | Correct with $\sqrt{\max(0,M^2-\sigma^2)}$, then use the existing fit |
-| `-RicianClipAbs` | Correct with $\sqrt{\lvert M^2-\sigma^2\rvert}$, then use the existing fit |
+| `-RicianClipMax` | Correct with $\sqrt{\max(0,M^2-\sigma^2)}$, then WLLS |
+| `-RicianClipAbs` | Correct with $\sqrt{\lvert M^2-\sigma^2\rvert}$, then WLLS |
 | `-RicianExp` | Fit the expected Rician magnitude by unconstrained NLLS |
 
-Both clipping choices correct measurements once, including b0, and retain
+Both clipping choices correct measurements once, including b0, and support
 tensor constraints, AKC, smoothing, polynomial regression, GNC and b0 restoration.
 **`-db0restore -akc_outliers` can be used together with either choice.**
 Corrected zeros use the existing positive log floor and can produce outliers.
@@ -74,6 +75,9 @@ $$
 \left[M_i-\mu_R\!\left(\exp((X\theta)_i),\sigma\right)\right]^2.
 $$
 
+For the conditional least-squares framework behind this expectation fit, see
+[Veraart et al. (2013)](https://doi.org/10.1002/mrm.24529).
+
 The coefficients are $\theta=(\log S_0,D_6)$ for DTI and
 $\theta=(\log S_0,D_6,C_{15})$ for DKI, with $C=\mathrm{MD}^2W$.
 Every search starts from ordinary LLS on $\sqrt{\lvert M^2-\sigma^2\rvert}$,
@@ -82,16 +86,19 @@ The objective uses original observations, preserving negative values after
 denoising. At $\sigma=0$, it reduces to signal-domain NLLS.
 
 **Expectation fitting is unconstrained:** `-fit_constraints` and
-`-akc_outliers` are ignored. Combinations with `-db0restore`,
+`-akc_outliers` are not yet supported; requesting them produces a warning and
+the fit proceeds without them. Combinations with `-db0restore`,
 `-fit_smoothing`, `-polyreg` or external `-dt` are not yet supported and produce
 an error. All three estimators support multi-TE/LTE subsets, shell selection,
 `-bmat` and `-gnc`. `-RicianExp` overrides either clipping flag and always
 keeps absolute-value initialization for tensors.
 
 ```bash
-tmi dwi.nii tensor_exp -DTI -DKI -RicianExp -sigma sigma.nii
-tmi dwi.nii tensor_max -DKI -RicianClipMax -sigma sigma.nii -db0restore -akc_outliers
-tmi dwi.nii tensor_abs -DKI -RicianClipAbs -sigma sigma.nii -db0restore -akc_outliers
+# Recommended DTI + DKI correction, followed by WLLS
+tmi dwi.nii tensor_abs -DTI -DKI -RicianClipAbs -sigma sigma.nii
+
+# With b0 restoration
+tmi dwi.nii tensor_abs_restore -DTI -DKI -RicianClipAbs -sigma sigma.nii -db0restore
 ```
 
 The expectation solver uses an analytic Jacobian and QR coordinates. It allows
